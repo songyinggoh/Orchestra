@@ -87,10 +87,12 @@ select = [
 ]
 ignore = [
     "UP042",     # keep str enum pattern for Python 3.11 compat
+    "SIM105",    # contextlib.suppress breaks when try assigns a variable
 ]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["RUF012", "B017", "S101"]
+"examples/**" = ["RUF012"]
 
 [tool.mypy]
 python_version = "3.11"
