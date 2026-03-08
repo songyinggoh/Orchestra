@@ -346,7 +346,7 @@
 
 #### Task 2.1: Event-Sourced Persistence Layer
 
-**Description:** Implement the event sourcing infrastructure: `WorkflowEvent` base type with subtypes (NodeStarted, NodeCompleted, StateUpdated, ToolCalled, LLMCalled, ErrorOccurred), an `EventStore` Protocol, event serialization, and state projection (rebuilding current state from event log). This is the storage-agnostic layer that SQLite and PostgreSQL backends will implement.
+**Description:** Implement the event sourcing infrastructure: `WorkflowEvent` base type with subtypes (NodeStarted, NodeCompleted, StateUpdated, ToolCalled, LLMCalled, ErrorOccurred), an `EventStore` Protocol, event serialization, and state projection (rebuilding current state from event log). This is the storage-agnostic layer that SQLite and PostgreSQL backends will implement. Following the ESAA pattern (arXiv:2602.23193), agent outputs must be validated against boundary contracts (JSON Schema) before events are persisted -- cleanly separating probabilistic LLM cognition from deterministic state mutation.
 
 **Dependencies:** Phase 1 complete (state and graph engine stable)
 
@@ -356,14 +356,16 @@
 - `src/orchestra/storage/events.py` -- WorkflowEvent hierarchy, event types
 - `src/orchestra/storage/store.py` -- EventStore Protocol, state projection logic
 - `src/orchestra/storage/serialization.py` -- Event serialization/deserialization
-- Unit tests for event creation, serialization round-trips, and state projection
+- `src/orchestra/storage/contracts.py` -- Boundary contract validation (JSON Schema validation of agent outputs before event persistence)
+- Unit tests for event creation, serialization round-trips, state projection, and contract validation
 
 **Success Criteria / Definition of Done:**
 - All workflow state transitions produce typed, immutable events
 - State can be fully reconstructed from an event sequence (projection)
 - Events serialize to JSON and MessagePack
 - Event ordering is guaranteed (monotonic sequence numbers per workflow)
-- At least 12 unit tests covering event types, serialization, projection, and ordering
+- Agent outputs are validated against boundary contracts before events are appended; invalid outputs emit an `OutputRejected` event instead of corrupting the event log
+- At least 12 unit tests covering event types, serialization, projection, ordering, and boundary contract validation
 
 **Risk Level:** Medium -- Event sourcing adds complexity. The projection logic must be correct and performant. Schema evolution (adding new event types in future versions) must be considered from day one.
 
@@ -449,7 +451,7 @@
 
 #### Task 2.5: Time-Travel Debugging
 
-**Description:** Implement time-travel debugging: the ability to list all checkpoints for a workflow run, inspect the full state at any checkpoint, diff state between two checkpoints, and fork a new execution from any historical checkpoint. Build on the event store's event log and snapshots.
+**Description:** Implement time-travel debugging: the ability to list all checkpoints for a workflow run, inspect the full state at any checkpoint, diff state between two checkpoints, and fork a new execution from any historical checkpoint. Build on the event store's event log and snapshots. Replay must be side-effect-safe: tool calls that invoke external APIs (HTTP requests, database writes, file system changes) must be suppressed during replay and fork operations, using a replay-mode flag that gates all external side effects through a tool gateway wrapper.
 
 **Dependencies:** Task 2.4 (checkpoints must exist)
 
@@ -457,9 +459,10 @@
 
 **Deliverables:**
 - `src/orchestra/debugging/timetravel.py` -- list_checkpoints, get_state_at, diff_states, fork_from
+- `src/orchestra/debugging/replay.py` -- Replay-safe tool gateway: wraps tool execution to suppress external side effects during replay/fork, returning cached results from the event log instead
 - CLI integration: `orchestra debug <run_id>` interactive command
 - State diff rendering (show which fields changed between checkpoints)
-- Unit tests for all time-travel operations
+- Unit tests for all time-travel operations including replay safety
 
 **Success Criteria / Definition of Done:**
 - `list_checkpoints(run_id)` returns all checkpoints with timestamps and node IDs
@@ -467,9 +470,10 @@
 - `diff_states(checkpoint_a, checkpoint_b)` shows added/removed/changed fields
 - `fork_from(run_id, checkpoint_id)` creates a new run that starts from the historical state
 - Forked runs are independent (do not affect the original run's event log)
-- At least 8 tests covering list, inspect, diff, and fork operations
+- Tools with external side effects are not re-executed during replay; cached results from the event log are returned instead
+- At least 10 tests covering list, inspect, diff, fork operations, and replay-safe tool suppression
 
-**Risk Level:** Medium -- Forking from a historical checkpoint while preserving correct event log lineage requires careful design.
+**Risk Level:** Medium -- Forking from a historical checkpoint while preserving correct event log lineage requires careful design. Replay safety requires that all tool results are captured in events at write time so they can be replayed without re-execution.
 
 ---
 
@@ -504,25 +508,27 @@
 
 #### Task 2.7: Handoff Protocol as First-Class Edge Type
 
-**Description:** Implement Swarm-style agent handoffs as a first-class graph edge type. `add_handoff(from_agent, to_agent, condition)` creates an edge that transfers execution with full context preservation. Handoffs carry a typed payload (context, reason, conversation history). Unlike Swarm, handoffs are persistent (event-sourced) and observable (traced).
+**Description:** Implement Swarm-style agent handoffs as a first-class graph edge type. `add_handoff(from_agent, to_agent, condition)` creates an edge that transfers execution with context distillation. Handoffs carry a typed payload (context, reason, conversation history). Unlike Swarm, handoffs are persistent (event-sourced) and observable (traced). Context is distilled using a three-zone model: stable prefixes (system instructions, objective, agent identities), compacted middleware (summarized intermediate reasoning and tool history), and variable suffixes (latest turn, current tool outputs). This prevents context bloat when chaining multiple handoffs while preserving the information the target agent needs.
 
 **Dependencies:** Phase 1 graph engine, Task 2.1 (events)
 
 **Estimated Effort:** 4 days
 
 **Deliverables:**
-- `src/orchestra/core/handoff.py` -- HandoffEdge, HandoffPayload, add_handoff on WorkflowGraph
+- `src/orchestra/core/handoff.py` -- HandoffEdge, HandoffPayload, HandoffSnapshot, add_handoff on WorkflowGraph
+- `src/orchestra/core/context_distill.py` -- Context distillation logic: three-zone partitioning (stable prefix / compacted middleware / variable suffix) for handoff snapshots
 - Event types: HandoffInitiated, HandoffCompleted
-- Context preservation across handoff (conversation history, metadata)
-- Unit tests for handoff behavior
+- Context preservation across handoff (conversation history, metadata) with optional distillation for token efficiency
+- Unit tests for handoff behavior including distillation
 
 **Success Criteria / Definition of Done:**
 - `graph.add_handoff("triage", "specialist", condition=needs_expert)` creates a valid handoff edge
-- Handoff transfers the full conversation history and metadata to the target agent
+- Handoff transfers context to the target agent using context distillation by default (full passthrough available via `distill=False`)
 - Handoff events appear in the event log (HandoffInitiated with reason, HandoffCompleted)
 - Handoffs render correctly in the Rich trace (shows "handoff: triage -> specialist" with reason)
 - Conditional handoffs route to different agents based on state
-- At least 8 tests covering simple handoff, conditional handoff, context preservation, and event logging
+- Context distillation reduces token count compared to full passthrough while preserving task-relevant information
+- At least 10 tests covering simple handoff, conditional handoff, context distillation, full passthrough, and event logging
 
 **Risk Level:** Low
 
@@ -530,7 +536,7 @@
 
 #### Task 2.8: MCP Client Integration
 
-**Description:** Implement an MCP (Model Context Protocol) client that discovers and invokes tools from MCP servers. MCP tools should be usable as regular Orchestra tools (registered in the tool system, callable by agents, traced in events). Support both stdio and SSE transport for MCP server communication.
+**Description:** Implement an MCP (Model Context Protocol) client that discovers and invokes tools from MCP servers, targeting the MCP 2025-11-25 specification. MCP tools should be usable as regular Orchestra tools (registered in the tool system, callable by agents, traced in events). Support stdio transport for local/IDE integrations and Streamable HTTP transport for remote/cloud deployments. Note: the legacy SSE transport is deprecated as of the 2025-11-25 spec and is replaced by Streamable HTTP (single `/mcp` endpoint handling GET/POST/DELETE with stream resumption via Last-Event-ID).
 
 **Dependencies:** Task 1.6 (tool system), Task 2.1 (events for tracing)
 
@@ -538,14 +544,15 @@
 
 **Deliverables:**
 - `src/orchestra/tools/mcp.py` -- MCPClient, MCPToolAdapter
-- stdio and SSE transport implementations
-- Auto-discovery of MCP server tools (list_tools -> register as Orchestra tools)
+- stdio and Streamable HTTP transport implementations
+- Auto-discovery of MCP server tools (tools/list -> register as Orchestra tools)
 - MCP tool calls traced as regular tool events
 - Integration tests with a mock MCP server
 
 **Success Criteria / Definition of Done:**
 - MCPClient connects to an MCP server via stdio transport and discovers available tools
-- MCPClient connects to an MCP server via SSE transport and discovers available tools
+- MCPClient connects to an MCP server via Streamable HTTP transport and discovers available tools
+- Stream resumption works via Last-Event-ID header on reconnection
 - Discovered MCP tools are usable by agents through the standard tool interface (agents do not know they are MCP tools)
 - MCP tool calls produce ToolCalled events with full input/output tracing
 - Error handling: MCP server timeout, tool execution error, and server disconnection are handled gracefully
