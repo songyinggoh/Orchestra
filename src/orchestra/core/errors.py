@@ -122,3 +122,41 @@ class ReducerError(StateError):
 
 class StateValidationError(StateError):
     """Raised when state fails Pydantic validation."""
+
+
+# --- Persistence Errors ---
+
+
+class PersistenceError(OrchestraError):
+    """Base for storage/persistence errors."""
+
+
+class EventStoreError(PersistenceError):
+    """Raised when event store operations fail."""
+
+
+class CheckpointError(PersistenceError):
+    """Raised when checkpoint operations fail."""
+
+
+class ContractValidationError(PersistenceError):
+    """Raised when agent output fails boundary contract validation."""
+
+
+# --- MCP Errors ---
+
+
+class MCPError(OrchestraError):
+    """Base for MCP-related errors."""
+
+
+class MCPConnectionError(MCPError):
+    """Raised when MCP server connection fails."""
+
+
+class MCPToolError(MCPError):
+    """Raised when MCP tool execution fails."""
+
+
+class MCPTimeoutError(MCPError):
+    """Raised when MCP server times out."""
