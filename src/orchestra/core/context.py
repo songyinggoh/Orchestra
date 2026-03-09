@@ -37,6 +37,15 @@ class ExecutionContext:
     # Configuration
     config: dict[str, Any] = field(default_factory=dict)
 
+    # Per-run loop counters (scoped to each run() call)
+    loop_counters: dict[str, int] = field(default_factory=dict)
+
+    # Node execution order tracking
+    node_execution_order: list[str] = field(default_factory=list)
+
+    # Event bus for workflow event emission (Phase 2+)
+    event_bus: Any = None
+
     def get_config(self, key: str, default: Any = None) -> Any:
         """Get a configuration value."""
         return self.config.get(key, default)
