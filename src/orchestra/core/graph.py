@@ -24,7 +24,8 @@ from typing import Any
 
 from orchestra.core.edges import ConditionalEdge, Edge, EdgeCondition, ParallelEdge
 from orchestra.core.errors import GraphCompileError
-from orchestra.core.nodes import AgentNode, FunctionNode, GraphNode, NodeFunction
+from orchestra.core.handoff import HandoffEdge
+from orchestra.core.nodes import AgentNode, FunctionNode, GraphNode, NodeFunction, SubgraphNode
 from orchestra.core.types import END, START
 
 
@@ -33,10 +34,10 @@ def _get_node_name(node_or_agent: Any) -> str:
     if hasattr(node_or_agent, "name"):
         name = node_or_agent.name
         if callable(name):
-            return name()
+            return str(name())
         return str(name)
     if hasattr(node_or_agent, "__name__"):
-        return node_or_agent.__name__
+        return str(node_or_agent.__name__)
     return str(id(node_or_agent))
 
 
@@ -60,9 +61,6 @@ def _wrap_as_node(item: Any, node_id: str) -> GraphNode:
     )
 
 
-# Avoid circular import
-from orchestra.core.nodes import SubgraphNode  # noqa: E402
-
 
 class WorkflowGraph:
     """Builder for workflow graphs.
@@ -78,8 +76,10 @@ class WorkflowGraph:
         self._name = name
         self._nodes: dict[str, GraphNode] = {}
         self._edges: list[Edge | ConditionalEdge | ParallelEdge] = []
+        self._handoff_edges: list[HandoffEdge] = []
         self._entry_point: str | None = None
         self._last_node: str | None = None
+        self._parallel_nodes: list[str] | None = None
 
     # ---- Explicit API ----
 
@@ -150,6 +150,28 @@ class WorkflowGraph:
         )
         return self
 
+    def add_handoff(
+        self,
+        from_agent: str,
+        to_agent: str,
+        *,
+        condition: EdgeCondition | None = None,
+        distill: bool = True,
+    ) -> "WorkflowGraph":
+        """Add a handoff edge between agents.
+
+        Handoffs are Swarm-style agent-to-agent transfers with optional
+        context distillation. The source and target nodes must already
+        be registered via add_node() or the fluent API.
+
+        Usage:
+            graph.add_handoff("triage", "specialist", condition=needs_expert)
+            graph.add_handoff("researcher", "writer")  # Unconditional
+        """
+        edge = HandoffEdge(source=from_agent, target=to_agent, condition=condition, distill=distill)
+        self._handoff_edges.append(edge)
+        return self
+
     def set_entry_point(self, node_id: str) -> WorkflowGraph:
         """Set the starting node for execution."""
         self._entry_point = node_id
@@ -194,6 +216,12 @@ class WorkflowGraph:
             self.add_node(node_id, item)
             node_names.append(node_id)
 
+        if self._parallel_nodes is not None:
+            raise GraphCompileError(
+                "Cannot call .parallel() again before calling .join().\n"
+                "  Fix: Call .join(joiner) to merge the previous parallel group first."
+            )
+
         if self._last_node is not None:
             self._edges.append(
                 ParallelEdge(source=self._last_node, targets=node_names, join_node=None)
@@ -209,7 +237,7 @@ class WorkflowGraph:
 
         Must be called after .parallel().
         """
-        if not hasattr(self, "_parallel_nodes"):
+        if self._parallel_nodes is None:
             raise GraphCompileError(
                 "Cannot join without a preceding .parallel() call.\n"
                 "  Fix: Call .parallel(agent_a, agent_b) before .join(joiner)."
@@ -219,20 +247,19 @@ class WorkflowGraph:
         self.add_node(node_id, agent_or_fn)
 
         # Update the parallel edge with join_node
-        if hasattr(self, "_parallel_nodes"):
-            for i, edge in enumerate(self._edges):
-                if (
-                    isinstance(edge, ParallelEdge)
-                    and edge.targets == self._parallel_nodes
-                    and edge.join_node is None
-                ):
-                    self._edges[i] = ParallelEdge(
-                        source=edge.source,
-                        targets=edge.targets,
-                        join_node=node_id,
-                    )
-                    break
-            del self._parallel_nodes
+        for i, edge in enumerate(self._edges):
+            if (
+                isinstance(edge, ParallelEdge)
+                and edge.targets == self._parallel_nodes
+                and edge.join_node is None
+            ):
+                self._edges[i] = ParallelEdge(
+                    source=edge.source,
+                    targets=edge.targets,
+                    join_node=node_id,
+                )
+                break
+        self._parallel_nodes = None
 
         self._last_node = node_id
         return self
@@ -338,14 +365,14 @@ class WorkflowGraph:
         if self._last_node is not None and self._last_node != node_id:
             self.add_edge(self._last_node, node_id)
 
-        # Track iteration count per loop per run using a dict keyed by
-        # a unique loop id. The dict is created fresh each time _loop_condition
-        # is called with a state that has no prior counter, effectively resetting
-        # between runs since each run starts with fresh state.
+        # Loop counters are stored per-run on the ExecutionContext (injected
+        # into state_dict as "__loop_counters__" by CompiledGraph._resolve_next).
+        # This makes the graph reentrant — concurrent runs each have their own
+        # counter scope.
         loop_id = f"__loop_{node_id}"
-        counters: dict[str, int] = {}
 
         def _loop_condition(state: dict[str, Any]) -> Any:
+            counters = state.get("__loop_counters__", {})
             count = counters.get(loop_id, 0) + 1
             counters[loop_id] = count
             if count >= max_iterations:
@@ -386,6 +413,7 @@ class WorkflowGraph:
             state_schema=self._state_schema,
             max_turns=max_turns,
             name=self._name,
+            handoff_edges=list(self._handoff_edges),
         )
 
     def _validate(self) -> None:
