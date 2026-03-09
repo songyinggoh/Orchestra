@@ -133,6 +133,7 @@ sys.modules["asyncpg.pool"] = _asyncpg_mock.pool  # type: ignore[attr-defined]
 
 # Now import the module under test
 from orchestra.storage.postgres import PostgresEventStore  # noqa: E402
+from orchestra.storage.checkpoint import Checkpoint  # noqa: E402
 from orchestra.storage.events import (  # noqa: E402
     CheckpointCreated,
     EventType,
@@ -172,13 +173,15 @@ def _make_node_completed(run_id: str = _RUN_ID, sequence: int = 2) -> NodeComple
     )
 
 
-def _make_checkpoint(run_id: str = _RUN_ID, sequence: int = 3) -> CheckpointCreated:
-    return CheckpointCreated(
+def _make_checkpoint(run_id: str = _RUN_ID, sequence: int = 3) -> Checkpoint:
+    return Checkpoint.create(
         run_id=run_id,
-        sequence=sequence,
-        checkpoint_id=uuid.uuid4().hex,
         node_id="node-a",
-        state_snapshot={"x": 42},
+        interrupt_type="before",
+        state={"x": 42},
+        sequence_number=sequence,
+        loop_counters={},
+        node_execution_order=[],
     )
 
 
@@ -359,11 +362,16 @@ async def test_get_latest_checkpoint_returns_checkpoint(
     class FakeRow(dict):
         pass
 
+    import json
+    from datetime import datetime, timezone
     fake_row = FakeRow(
         checkpoint_id=checkpoint_id,
         node_id="node-a",
         sequence_at=5,
-        state_snapshot={"x": 99},
+        state_snapshot=json.dumps({"x": 99}),
+        interrupt_type="before",
+        execution_context=json.dumps({"loop_counters": {}, "node_execution_order": []}),
+        created_at=datetime.now(timezone.utc).isoformat(),
     )
     store._pool._conn._fetchrow_result = fake_row  # type: ignore[union-attr]
 
@@ -371,8 +379,8 @@ async def test_get_latest_checkpoint_returns_checkpoint(
     assert result is not None
     assert result.checkpoint_id == checkpoint_id
     assert result.node_id == "node-a"
-    assert result.sequence == 5
-    assert result.state_snapshot == {"x": 99}
+    assert result.sequence_number == 5
+    assert result.state == {"x": 99}
 
 
 # ---------------------------------------------------------------------------

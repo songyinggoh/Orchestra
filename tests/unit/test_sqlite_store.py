@@ -11,6 +11,7 @@ import os
 import pytest
 import pytest_asyncio
 
+from orchestra.storage.checkpoint import Checkpoint
 from orchestra.storage.events import (
     CheckpointCreated,
     EventType,
@@ -58,12 +59,15 @@ def make_node_completed(run_id: str = "run-1", sequence: int = 2, node_id: str =
     )
 
 
-def make_checkpoint(run_id: str = "run-1", sequence: int = 3, node_id: str = "node-a") -> CheckpointCreated:
-    return CheckpointCreated(
+def make_checkpoint(run_id: str = "run-1", sequence: int = 3, node_id: str = "node-a") -> Checkpoint:
+    return Checkpoint.create(
         run_id=run_id,
-        sequence=sequence,
         node_id=node_id,
-        state_snapshot={"x": 42, "step": 1},
+        interrupt_type="before",
+        state={"x": 42, "step": 1},
+        sequence_number=sequence,
+        loop_counters={},
+        node_execution_order=[],
     )
 
 
@@ -204,7 +208,7 @@ async def test_checkpoint_roundtrip(store: SQLiteEventStore):
     assert retrieved is not None
     assert retrieved.checkpoint_id == checkpoint.checkpoint_id
     assert retrieved.node_id == "node-b"
-    assert retrieved.state_snapshot == {"x": 42, "step": 1}
+    assert retrieved.state == {"x": 42, "step": 1}
 
 
 # ---------------------------------------------------------------------------
@@ -357,7 +361,14 @@ async def test_snapshot_manager_triggers_at_interval():
 
     mgr = SnapshotManager(MockStore(), interval=2)  # type: ignore[arg-type]
 
-    checkpoint_event = make_checkpoint(run_id="run-trigger", sequence=2)
+    # SnapshotManager.on_event receives WorkflowEvent objects; it only snapshots
+    # on CheckpointCreated events. Use the event type directly here.
+    checkpoint_event = CheckpointCreated(
+        run_id="run-trigger",
+        sequence=2,
+        node_id="node-a",
+        state_snapshot={"x": 1},
+    )
     # Fire enough events to reach the interval
     for _ in range(1):
         mgr.on_event(checkpoint_event)
