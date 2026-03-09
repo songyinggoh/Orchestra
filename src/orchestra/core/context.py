@@ -46,6 +46,14 @@ class ExecutionContext:
     # Event bus for workflow event emission (Phase 2+)
     event_bus: Any = None
 
+    # Time-travel / Replay data
+    replay_events: list[Any] = field(default_factory=list)
+
+    @property
+    def replay_mode(self) -> bool:
+        """Return True if we are in historical replay mode."""
+        return len(self.replay_events) > 0
+
     def get_config(self, key: str, default: Any = None) -> Any:
         """Get a configuration value."""
         return self.config.get(key, default)

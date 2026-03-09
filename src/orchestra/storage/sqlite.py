@@ -24,6 +24,7 @@ from typing import Any
 
 import aiosqlite
 
+from orchestra.storage.checkpoint import Checkpoint
 from orchestra.storage.events import (
     CheckpointCreated,
     EventType,
@@ -65,8 +66,10 @@ CREATE TABLE IF NOT EXISTS workflow_checkpoints (
     run_id        TEXT NOT NULL,
     checkpoint_id TEXT NOT NULL UNIQUE,
     node_id       TEXT NOT NULL,
+    interrupt_type TEXT NOT NULL,
     sequence_at   INTEGER NOT NULL,
     state_snapshot TEXT NOT NULL,
+    execution_context TEXT NOT NULL,
     created_at    TEXT NOT NULL,
     FOREIGN KEY (run_id) REFERENCES workflow_runs(run_id)
 );
@@ -220,15 +223,16 @@ class SQLiteEventStore:
             events.append(dict_to_event(raw))
         return events
 
-    async def get_latest_checkpoint(self, run_id: str) -> CheckpointCreated | None:
+    async def get_latest_checkpoint(self, run_id: str) -> Checkpoint | None:
         """Return the most recent checkpoint for a run, or None."""
         conn = self._require_conn()
         async with conn.execute(
             """
-            SELECT state_snapshot, checkpoint_id, node_id, sequence_at, created_at
+            SELECT checkpoint_id, node_id, interrupt_type, sequence_at,
+                   state_snapshot, execution_context, created_at
             FROM workflow_checkpoints
             WHERE run_id = ?
-            ORDER BY sequence_at DESC
+            ORDER BY sequence_at DESC, id DESC
             LIMIT 1
             """,
             (run_id,),
@@ -238,31 +242,72 @@ class SQLiteEventStore:
         if row is None:
             return None
 
-        return CheckpointCreated(
+        ctx = json.loads(row["execution_context"])
+        return Checkpoint(
             run_id=run_id,
             checkpoint_id=row["checkpoint_id"],
             node_id=row["node_id"],
-            sequence=row["sequence_at"],
-            state_snapshot=json.loads(row["state_snapshot"]),
+            interrupt_type=row["interrupt_type"],
+            sequence_number=row["sequence_at"],
+            state=json.loads(row["state_snapshot"]),
+            loop_counters=ctx.get("loop_counters", {}),
+            node_execution_order=ctx.get("node_execution_order", []),
+            timestamp=datetime.fromisoformat(row["created_at"]),
         )
 
-    async def save_checkpoint(self, checkpoint: CheckpointCreated) -> None:
-        """Persist a CheckpointCreated event as a checkpoint record."""
+    async def get_checkpoint(self, checkpoint_id: str) -> Checkpoint | None:
+        """Retrieve a specific checkpoint by its ID."""
         conn = self._require_conn()
-        created_at = datetime.now(timezone.utc).isoformat()
+        async with conn.execute(
+            """
+            SELECT run_id, checkpoint_id, node_id, interrupt_type, sequence_at,
+                   state_snapshot, execution_context, created_at
+            FROM workflow_checkpoints
+            WHERE checkpoint_id = ?
+            """,
+            (checkpoint_id,),
+        ) as cursor:
+            row = await cursor.fetchone()
+
+        if row is None:
+            return None
+
+        ctx = json.loads(row["execution_context"])
+        return Checkpoint(
+            run_id=row["run_id"],
+            checkpoint_id=row["checkpoint_id"],
+            node_id=row["node_id"],
+            interrupt_type=row["interrupt_type"],
+            sequence_number=row["sequence_at"],
+            state=json.loads(row["state_snapshot"]),
+            loop_counters=ctx.get("loop_counters", {}),
+            node_execution_order=ctx.get("node_execution_order", []),
+            timestamp=datetime.fromisoformat(row["created_at"]),
+        )
+
+    async def save_checkpoint(self, checkpoint: Checkpoint) -> None:
+        """Persist a Checkpoint object to the store."""
+        conn = self._require_conn()
+        ctx_json = json.dumps({
+            "loop_counters": checkpoint.loop_counters,
+            "node_execution_order": checkpoint.node_execution_order,
+        })
         await conn.execute(
             """
             INSERT OR REPLACE INTO workflow_checkpoints
-                (run_id, checkpoint_id, node_id, sequence_at, state_snapshot, created_at)
-            VALUES (?, ?, ?, ?, ?, ?)
+                (run_id, checkpoint_id, node_id, interrupt_type, sequence_at,
+                 state_snapshot, execution_context, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 checkpoint.run_id,
                 checkpoint.checkpoint_id,
                 checkpoint.node_id,
-                checkpoint.sequence,
-                json.dumps(checkpoint.state_snapshot),
-                created_at,
+                checkpoint.interrupt_type,
+                checkpoint.sequence_number,
+                json.dumps(checkpoint.state),
+                ctx_json,
+                checkpoint.timestamp.isoformat(),
             ),
         )
         await conn.commit()

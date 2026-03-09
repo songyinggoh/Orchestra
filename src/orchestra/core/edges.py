@@ -12,6 +12,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
+from orchestra.core.errors import GraphCompileError
+
 EdgeCondition = Callable[[dict[str, Any]], Any]
 
 
@@ -39,7 +41,14 @@ class ConditionalEdge:
     def resolve(self, state: dict[str, Any]) -> Any:
         result = self.condition(state)
         if self.path_map and isinstance(result, str):
-            return self.path_map.get(result, result)
+            if result not in self.path_map:
+                raise GraphCompileError(
+                    f"Conditional edge returned '{result}' which is not in path_map.\n"
+                    f"  Available keys: {list(self.path_map.keys())}\n"
+                    f"  Fix: Return one of the available keys from your condition function, "
+                    f"or add '{result}' to the path_map."
+                )
+            return self.path_map[result]
         return result
 
 

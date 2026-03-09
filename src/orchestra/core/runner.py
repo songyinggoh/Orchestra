@@ -90,7 +90,7 @@ async def run(
     # Extract output
     output = final_state.get("output", "")
     messages = final_state.get("messages", [])
-    node_order = final_state.pop("__node_execution_order__", [])
+    node_order = context.node_execution_order
 
     return RunResult(
         output=output,

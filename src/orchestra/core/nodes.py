@@ -29,6 +29,8 @@ class AgentNode:
     map_output: bool = False
     input_mapper: Callable[[dict[str, Any]], dict[str, Any]] | None = None
     output_mapper: Callable[[AgentResult], dict[str, Any]] | None = None
+    interrupt_before: bool = False
+    interrupt_after: bool = False
 
 
 @dataclass(frozen=True)
@@ -41,6 +43,8 @@ class FunctionNode:
 
     func: NodeFunction
     name: str = ""
+    interrupt_before: bool = False
+    interrupt_after: bool = False
 
     def __post_init__(self) -> None:
         if not self.name:
@@ -57,6 +61,8 @@ class SubgraphNode:
     graph: Any
     input_mapper: Callable[[dict[str, Any]], dict[str, Any]] | None = None
     output_mapper: Callable[[dict[str, Any]], dict[str, Any]] | None = None
+    interrupt_before: bool = False
+    interrupt_after: bool = False
 
     async def __call__(self, state: dict[str, Any]) -> dict[str, Any]:
         input_state = self.input_mapper(state) if self.input_mapper else state

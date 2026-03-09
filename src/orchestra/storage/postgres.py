@@ -25,7 +25,7 @@ import os
 from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-from typing import Any, AsyncGenerator
+from typing import TYPE_CHECKING, Any, AsyncGenerator
 
 from orchestra.storage.events import (
     CheckpointCreated,
@@ -34,6 +34,9 @@ from orchestra.storage.events import (
 )
 from orchestra.storage.serialization import dict_to_event, event_to_dict
 from orchestra.storage.store import RunSummary
+
+if TYPE_CHECKING:
+    from orchestra.storage.checkpoint import Checkpoint
 
 try:
     import asyncpg
@@ -83,8 +86,10 @@ _DDL_STATEMENTS = [
         run_id UUID NOT NULL REFERENCES workflow_runs(run_id),
         checkpoint_id UUID NOT NULL UNIQUE,
         node_id TEXT NOT NULL,
+        interrupt_type TEXT NOT NULL DEFAULT 'before',
         sequence_at INTEGER NOT NULL,
         state_snapshot JSONB NOT NULL,
+        execution_context JSONB NOT NULL DEFAULT '{}',
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
     """,
@@ -101,7 +106,7 @@ class PostgresEventStore:
     Implements the EventStore protocol from orchestra.storage.store.
 
     Features beyond SQLite:
-    - Advisory locks for workflow-level concurrency (prevents concurrent writes
+    - Advisory locks for workflow-level concurrency (prevents concurrent writers
       to the same workflow run within a transaction)
     - LISTEN/NOTIFY for real-time event streaming via subscribe_events()
     - JSONB columns for efficient payload queries
@@ -312,15 +317,17 @@ class PostgresEventStore:
             events.append(dict_to_event(raw))
         return events
 
-    async def get_latest_checkpoint(self, run_id: str) -> CheckpointCreated | None:
+    async def get_latest_checkpoint(self, run_id: str) -> Checkpoint | None:
         """Return the most recent checkpoint for a run, or None."""
+        from orchestra.storage.checkpoint import Checkpoint
         pool = self._require_pool()
         row = await pool.fetchrow(
             """
-            SELECT checkpoint_id, node_id, sequence_at, state_snapshot
+            SELECT checkpoint_id, node_id, interrupt_type, sequence_at,
+                   state_snapshot, execution_context, created_at
             FROM workflow_checkpoints
             WHERE run_id = $1
-            ORDER BY sequence_at DESC
+            ORDER BY sequence_at DESC, id DESC
             LIMIT 1
             """,
             run_id,
@@ -328,38 +335,79 @@ class PostgresEventStore:
         if row is None:
             return None
 
-        snapshot = row["state_snapshot"]
-        if isinstance(snapshot, str):
-            snapshot = json.loads(snapshot)
+        # asyncpg returns JSONB as dict or list
+        state = row["state_snapshot"]
+        ctx = row["execution_context"]
 
-        return CheckpointCreated(
+        return Checkpoint(
             run_id=run_id,
-            checkpoint_id=row["checkpoint_id"],
+            checkpoint_id=str(row["checkpoint_id"]),
             node_id=row["node_id"],
-            sequence=row["sequence_at"],
-            state_snapshot=snapshot,
+            interrupt_type=row["interrupt_type"],
+            sequence_number=row["sequence_at"],
+            state=state if isinstance(state, dict) else json.loads(state),
+            loop_counters=ctx.get("loop_counters", {}) if isinstance(ctx, dict) else {},
+            node_execution_order=ctx.get("node_execution_order", []) if isinstance(ctx, dict) else [],
+            timestamp=row["created_at"],
         )
 
-    async def save_checkpoint(self, checkpoint: CheckpointCreated) -> None:
-        """Persist a CheckpointCreated event as a checkpoint record."""
+    async def get_checkpoint(self, checkpoint_id: str) -> Checkpoint | None:
+        """Retrieve a specific checkpoint by its ID."""
+        from orchestra.storage.checkpoint import Checkpoint
         pool = self._require_pool()
-        created_at = datetime.now(timezone.utc)
-        snapshot_json = json.dumps(checkpoint.state_snapshot)
+        row = await pool.fetchrow(
+            """
+            SELECT run_id, checkpoint_id, node_id, interrupt_type, sequence_at,
+                   state_snapshot, execution_context, created_at
+            FROM workflow_checkpoints
+            WHERE checkpoint_id = $1
+            """,
+            checkpoint_id,
+        )
+        if row is None:
+            return None
+
+        state = row["state_snapshot"]
+        ctx = row["execution_context"]
+
+        return Checkpoint(
+            run_id=str(row["run_id"]),
+            checkpoint_id=str(row["checkpoint_id"]),
+            node_id=row["node_id"],
+            interrupt_type=row["interrupt_type"],
+            sequence_number=row["sequence_at"],
+            state=state if isinstance(state, dict) else json.loads(state),
+            loop_counters=ctx.get("loop_counters", {}) if isinstance(ctx, dict) else {},
+            node_execution_order=ctx.get("node_execution_order", []) if isinstance(ctx, dict) else [],
+            timestamp=row["created_at"],
+        )
+
+    async def save_checkpoint(self, checkpoint: Checkpoint) -> None:
+        """Persist a Checkpoint object to the store."""
+        pool = self._require_pool()
+        ctx_json = json.dumps({
+            "loop_counters": checkpoint.loop_counters,
+            "node_execution_order": checkpoint.node_execution_order,
+        })
         await pool.execute(
             """
             INSERT INTO workflow_checkpoints
-                (run_id, checkpoint_id, node_id, sequence_at, state_snapshot, created_at)
-            VALUES ($1, $2, $3, $4, $5::jsonb, $6)
+                (run_id, checkpoint_id, node_id, interrupt_type, sequence_at,
+                 state_snapshot, execution_context, created_at)
+            VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8)
             ON CONFLICT (checkpoint_id) DO UPDATE
                 SET state_snapshot = EXCLUDED.state_snapshot,
+                    execution_context = EXCLUDED.execution_context,
                     created_at = EXCLUDED.created_at
             """,
             checkpoint.run_id,
             checkpoint.checkpoint_id,
             checkpoint.node_id,
-            checkpoint.sequence,
-            snapshot_json,
-            created_at,
+            checkpoint.interrupt_type,
+            checkpoint.sequence_number,
+            json.dumps(checkpoint.state),
+            ctx_json,
+            checkpoint.timestamp,
         )
 
     async def list_runs(

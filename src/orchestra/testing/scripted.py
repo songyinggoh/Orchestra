@@ -17,6 +17,7 @@ Usage:
 
 from __future__ import annotations
 
+import re
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -118,3 +119,37 @@ class ScriptedLLM:
     def reset(self) -> None:
         self._index = 0
         self._call_log.clear()
+
+    def assert_all_consumed(self) -> None:
+        """Assert that all scripted responses were consumed.
+
+        Raises AssertionError if the workflow exited before using all
+        responses — a sign it completed earlier than expected.
+        """
+        remaining = len(self._responses) - self._index
+        if remaining > 0:
+            raise AssertionError(
+                f"ScriptedLLM has {remaining} unconsumed response(s) "
+                f"(used {self._index} of {len(self._responses)}). "
+                f"The workflow completed earlier than expected."
+            )
+
+    def assert_prompt_received(self, call_index: int, pattern: str) -> None:
+        """Assert that the Nth LLM call included a message matching a regex pattern.
+
+        Args:
+            call_index: Zero-based index of the call to check.
+            pattern: Regex pattern to search for in the concatenated message content.
+        """
+        if call_index >= len(self._call_log):
+            raise AssertionError(
+                f"Call {call_index} was never made "
+                f"(only {len(self._call_log)} call(s) total)."
+            )
+        messages = self._call_log[call_index].get("messages", [])
+        text = " ".join(m.content for m in messages if m.content)
+        if not re.search(pattern, text):
+            raise AssertionError(
+                f"Pattern {pattern!r} not found in call {call_index} messages.\n"
+                f"  Actual text: {text[:200]}"
+            )

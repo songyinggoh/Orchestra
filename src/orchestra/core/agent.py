@@ -13,7 +13,10 @@ import functools
 import inspect
 import time
 from collections.abc import Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from orchestra.security.acl import ToolACL
 
 import structlog
 from pydantic import BaseModel, Field
@@ -46,6 +49,7 @@ class BaseAgent(BaseModel):
     model: str = "gpt-4o-mini"
     system_prompt: str = "You are a helpful assistant."
     tools: list[Any] = Field(default_factory=list)
+    acl: Any = None  # Lazy-loaded ToolACL
     max_iterations: int = 10
     temperature: float = 0.7
     output_type: Any = None
@@ -119,6 +123,10 @@ class BaseAgent(BaseModel):
                         node_id=context.node_id,
                         agent_name=self.name,
                         model=self.model,
+                        content=response.content,
+                        tool_calls=[tc.model_dump() for tc in response.tool_calls]
+                        if response.tool_calls
+                        else [],
                         input_tokens=_in_tok,
                         output_tokens=_out_tok,
                         cost_usd=_cost,
@@ -219,7 +227,49 @@ class BaseAgent(BaseModel):
         tool_call: ToolCall,
         context: ExecutionContext,
     ) -> ToolResult:
-        """Execute a single tool call."""
+        """Execute a single tool call after authorizing via ACL."""
+        # --- Time-Travel: Replay Check ---
+        if context.replay_mode:
+            from orchestra.storage.events import ToolCalled
+            for event in context.replay_events:
+                if (isinstance(event, ToolCalled) 
+                    and event.tool_name == tool_call.name
+                    # arguments check could be more robust (json match)
+                    and event.arguments == (tool_call.arguments or {})):
+                    
+                    logger.debug("replaying_tool_call", tool=tool_call.name)
+                    return ToolResult(
+                        tool_call_id=tool_call.id,
+                        name=tool_call.name,
+                        content=str(event.result) if event.result is not None else "",
+                        error=event.error,
+                    )
+
+        # 1. Authorization check
+        if self.acl is None:
+            from orchestra.security.acl import ToolACL
+            object.__setattr__(self, "acl", ToolACL.open())
+
+        if not self.acl.is_authorized(tool_call.name):
+            from orchestra.storage.events import SecurityViolation
+            if context.event_bus is not None:
+                await context.event_bus.emit(
+                    SecurityViolation(
+                        run_id=context.run_id,
+                        node_id=context.node_id,
+                        agent_name=self.name,
+                        violation_type="unauthorized_tool",
+                        details={"tool_name": tool_call.name},
+                    )
+                )
+            return ToolResult(
+                tool_call_id=tool_call.id,
+                name=tool_call.name,
+                content="",
+                error=f"Security Policy Violation: Agent '{self.name}' is not authorized to use tool '{tool_call.name}'.",
+            )
+
+        # 2. Tool lookup
         tool = next((t for t in self.tools if t.name == tool_call.name), None)
         if not tool:
             return ToolResult(
@@ -230,6 +280,7 @@ class BaseAgent(BaseModel):
                 f"Available: {[t.name for t in self.tools]}",
             )
 
+        # 3. Execution
         try:
             result: ToolResult = await tool.execute(tool_call.arguments, context=context)
             return result

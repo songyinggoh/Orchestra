@@ -4,7 +4,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 from orchestra.storage.events import (
     AnyEvent,
@@ -12,9 +12,14 @@ from orchestra.storage.events import (
     EventType,
     ExecutionCompleted,
     ExecutionStarted,
+    NodeCompleted,
+    NodeStarted,
     StateUpdated,
     WorkflowEvent,
 )
+
+if TYPE_CHECKING:
+    from orchestra.storage.checkpoint import Checkpoint
 
 
 @dataclass
@@ -98,9 +103,11 @@ class EventStore(Protocol):
         event_types: list[EventType] | None = None,
     ) -> list[WorkflowEvent]: ...
 
-    async def get_latest_checkpoint(self, run_id: str) -> CheckpointCreated | None: ...
+    async def get_latest_checkpoint(self, run_id: str) -> Checkpoint | None: ...
 
-    async def save_checkpoint(self, checkpoint: CheckpointCreated) -> None: ...
+    async def get_checkpoint(self, checkpoint_id: str) -> Checkpoint | None: ...
+
+    async def save_checkpoint(self, checkpoint: Checkpoint) -> None: ...
 
     async def list_runs(
         self, *, limit: int = 50, status: str | None = None
@@ -116,7 +123,7 @@ class InMemoryEventStore:
 
     def __init__(self) -> None:
         self._events: dict[str, list[WorkflowEvent]] = {}
-        self._checkpoints: dict[str, list[CheckpointCreated]] = {}
+        self._checkpoints: dict[str, list[Checkpoint]] = {}
         self._run_meta: dict[str, dict[str, Any]] = {}
 
     async def append(self, event: WorkflowEvent) -> None:
@@ -149,13 +156,21 @@ class InMemoryEventStore:
             filtered = [e for e in filtered if e.event_type in type_set]
         return filtered
 
-    async def get_latest_checkpoint(self, run_id: str) -> CheckpointCreated | None:
+    async def get_latest_checkpoint(self, run_id: str) -> Checkpoint | None:
         """Get the most recent checkpoint for a run."""
         checkpoints = self._checkpoints.get(run_id, [])
         return checkpoints[-1] if checkpoints else None
 
-    async def save_checkpoint(self, checkpoint: CheckpointCreated) -> None:
-        """Persist a checkpoint event."""
+    async def get_checkpoint(self, checkpoint_id: str) -> Checkpoint | None:
+        """Retrieve a specific checkpoint by its ID."""
+        for run_id in self._checkpoints:
+            for cp in self._checkpoints[run_id]:
+                if cp.checkpoint_id == checkpoint_id:
+                    return cp
+        return None
+
+    async def save_checkpoint(self, checkpoint: Checkpoint) -> None:
+        """Persist a checkpoint object."""
         self._checkpoints.setdefault(checkpoint.run_id, []).append(checkpoint)
 
     async def list_runs(
@@ -184,9 +199,9 @@ def project_state(
 ) -> dict[str, Any]:
     """Rebuild current state from an event sequence.
 
-    Uses resulting_state from StateUpdated events (absolute post-reducer state).
-    Falls back to initial_state from ExecutionStarted if no StateUpdated found.
-    CheckpointCreated snapshots act as fast-forward points.
+    1. Starts from initial_state or ExecutionStarted.initial_state.
+    2. Fast-forwards via CheckpointCreated snapshots.
+    3. Applies incremental updates from NodeCompleted or StateUpdated.
     """
     state: dict[str, Any] = dict(initial_state or {})
 
@@ -195,8 +210,12 @@ def project_state(
             state = dict(event.initial_state)
         elif isinstance(event, CheckpointCreated):
             state = dict(event.state_snapshot)
+        elif isinstance(event, NodeCompleted) and event.state_update:
+            state.update(event.state_update)
         elif isinstance(event, StateUpdated):
-            # Use absolute resulting_state -- no reducer logic needed
-            state = dict(event.resulting_state)
+            if event.resulting_state:
+                state = dict(event.resulting_state)
+            else:
+                state.update(event.field_updates)
 
     return state

@@ -35,8 +35,12 @@ Wave 1 (parallel):
   Plan 03: LLM Provider Adapters (DIFF-10)        -- no dependencies (uses existing LLMProvider protocol)
 
 Wave 2 (parallel, depends on Plan 01):
-  Plan 04: SQLite + Rich Trace + Handoff (DIFF-02, DIFF-06, DIFF-07)
+  Plan 04a: SQLite Event Store (DIFF-02)                    -- split from original Plan 04
+  Plan 04b: Rich Trace Renderer + Handoff Protocol (DIFF-06, DIFF-07)  -- split from original Plan 04
   Plan 05: PostgreSQL Backend (DIFF-03)
+
+  NOTE: Plan 04 was split before Wave 2 execution to reduce blast radius.
+  04a and 04b both depend on Plan 01 but not on each other.
 
 Wave 3 (depends on Plan 04):
   Plan 06: HITL + Tool ACLs (DIFF-04, DIFF-09)

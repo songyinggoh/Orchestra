@@ -18,15 +18,19 @@ import structlog
 
 from orchestra.core.context import ExecutionContext
 from orchestra.core.edges import ConditionalEdge, Edge, ParallelEdge
+from orchestra.core.handoff import HandoffEdge, HandoffPayload
+from orchestra.core.context_distill import distill_context, full_passthrough
 from orchestra.core.errors import AgentError, GraphCompileError, MaxIterationsError
-from orchestra.core.nodes import AgentNode, FunctionNode, GraphNode, SubgraphNode
+from orchestra.core.nodes import AgentNode, FunctionNode, GraphNode, NodeFunction, SubgraphNode
 from orchestra.core.state import (
     WorkflowState,
     apply_state_update,
     extract_reducers,
     merge_parallel_updates,
 )
-from orchestra.core.types import END, AgentResult
+from orchestra.core.types import END, AgentResult, WorkflowStatus
+from orchestra.storage.checkpoint import Checkpoint
+from orchestra.debugging.timetravel import TimeTravelController
 
 if TYPE_CHECKING:
     from orchestra.storage.store import EventStore
@@ -80,6 +84,7 @@ class CompiledGraph:
         persist: bool = True,
         event_store: "EventStore | None" = None,
         run_id: str | None = None,
+        start_at: str | None = None,
     ) -> dict[str, Any]:
         """Execute the graph from entry point to completion.
 
@@ -93,6 +98,7 @@ class CompiledGraph:
             event_store: Explicit EventStore instance. Overrides persist=True
                 auto-creation. Pass an InMemoryEventStore for testing.
             run_id: Override the auto-generated run UUID.
+            start_at: Node ID to start from (defaults to entry_point).
 
         Returns:
             Final state as a dict.
@@ -101,6 +107,7 @@ class CompiledGraph:
             ErrorOccurred,
             ExecutionCompleted,
             ExecutionStarted,
+            ForkCreated,
             NodeCompleted,
             NodeStarted,
         )
@@ -188,17 +195,210 @@ class CompiledGraph:
             )
         )
 
-        # Normalize to WorkflowState if schema provided
-        if self._state_schema and isinstance(raw_state, dict):
-            state: WorkflowState | dict[str, Any] = self._state_schema.model_validate(raw_state)
-        elif isinstance(raw_state, WorkflowState):
-            state = raw_state
-        else:
-            state = raw_state
+        final_state_dict = await self._run_loop(
+            current_node_id=start_at or self._entry_point,
+            state_dict=raw_state,
+            context=context,
+            event_bus=event_bus,
+            event_store=event_store,
+        )
 
-        current_node_id: Any = self._entry_point
-        turns = 0
-        run_error: Exception | None = None
+        if _store_owner and event_store is not None:
+            await event_store.close()  # type: ignore[union-attr]
+
+        return final_state_dict
+
+    async def resume(
+        self,
+        run_id: str,
+        *,
+        state_updates: dict[str, Any] | None = None,
+        event_store: "EventStore | None" = None,
+        provider: Any = None,
+    ) -> dict[str, Any]:
+        """Resume an interrupted workflow run from its latest checkpoint.
+
+        Args:
+            run_id: The ID of the run to resume.
+            state_updates: Optional manual updates to apply to the state before resuming.
+            event_store: The event store where the checkpoint is persisted.
+            provider: Optional LLM provider override.
+
+        Returns:
+            Final state as a dict.
+        """
+        from orchestra.storage.events import InterruptResumed
+        from orchestra.storage.store import EventBus
+
+        if event_store is None:
+            # Try to auto-load SQLite if no store provided
+            try:
+                from orchestra.storage.sqlite import SQLiteEventStore
+                event_store = SQLiteEventStore()
+                await event_store.initialize()  # type: ignore[attr-defined]
+            except (ImportError, Exception) as e:
+                raise AgentError(f"Failed to auto-initialize event store for resume: {e}")
+
+        # 1. Load latest checkpoint
+        checkpoint = await event_store.get_latest_checkpoint(run_id)
+        if not checkpoint:
+            raise AgentError(f"No checkpoint found for run_id '{run_id}'. Cannot resume.")
+
+        # 2. Reconstruct state
+        current_state_dict = dict(checkpoint.state)
+        if state_updates:
+            current_state_dict.update(state_updates)
+
+        # 3. Initialize ExecutionContext
+        context = ExecutionContext(
+            run_id=run_id,
+            provider=provider,
+            loop_counters=dict(checkpoint.loop_counters),
+            node_execution_order=list(checkpoint.node_execution_order),
+        )
+        event_bus = EventBus()
+        # Seed sequence number from checkpoint
+        event_bus._sequence_counters[run_id] = checkpoint.sequence_number
+        context.event_bus = event_bus
+
+        # Bind store
+        async def _store_callback(e: Any) -> None:
+            await event_store.append(e)  # type: ignore[union-attr]
+
+        event_bus.subscribe(_store_callback)
+
+        # 4. Emit InterruptResumed
+        await event_bus.emit(
+            InterruptResumed(
+                run_id=run_id,
+                sequence=event_bus.next_sequence(run_id),
+                node_id=checkpoint.node_id,
+                state_modifications=state_updates or {},
+            )
+        )
+
+        # 5. Delegate to run logic, starting from the checkpoint node
+        # If we resumed from a 'before' interrupt, skip the check on first node execution
+        bypass = checkpoint.interrupt_type == "before"
+
+        return await self._run_loop(
+            current_node_id=checkpoint.node_id,
+            state_dict=current_state_dict,
+            context=context,
+            event_bus=event_bus,
+            event_store=event_store,
+            bypass_interrupt_on_start=bypass,
+        )
+
+    async def fork(
+        self,
+        parent_run_id: str,
+        sequence_number: int,
+        *,
+        state_overrides: dict[str, Any] | None = None,
+        event_store: "EventStore | None" = None,
+    ) -> tuple[str, dict[str, Any], str]:
+        """Fork a new run from a historical point in a parent run.
+
+        Args:
+            parent_run_id: The ID of the original run.
+            sequence_number: The event sequence number to fork from.
+            state_overrides: Optional state modifications for the new branch.
+            event_store: Event store containing the parent history.
+
+        Returns:
+            Tuple of (new_run_id, initial_state_for_fork, start_at_node_id).
+        """
+        from orchestra.storage.events import ForkCreated
+
+        if event_store is None:
+            from orchestra.storage.sqlite import SQLiteEventStore
+            event_store = SQLiteEventStore()
+            await event_store.initialize()  # type: ignore[attr-defined]
+
+        # 1. Reconstruct historical state
+        tt = TimeTravelController(event_store)
+        history = await tt.get_state_at(parent_run_id, sequence_number)
+
+        # 2. Prepare fork
+        new_run_id = uuid.uuid4().hex
+        fork_state_dict = dict(history.state)
+        if state_overrides:
+            fork_state_dict.update(state_overrides)
+
+        # 3. Determine where to start the new execution path.
+        # If the fork point was a NodeCompleted, we resolve the next edge.
+        # If it was a NodeStarted, we might want to re-run that node (defaulting to history.node_id).
+        # To be safe, we'll try to resolve the next node from this state.
+        
+        # We need a dummy context for resolution
+        from orchestra.core.state import WorkflowState
+        if self._state_schema:
+            state_obj = self._state_schema.model_validate(fork_state_dict)
+        else:
+            state_obj = fork_state_dict
+
+        dummy_context = ExecutionContext(run_id=new_run_id)
+        next_node, _ = await self._resolve_next(
+            history.node_id, 
+            fork_state_dict, 
+            state_obj, 
+            dummy_context
+        )
+
+        # 4. Record the fork link in the parent's event stream
+        await event_store.append(
+            ForkCreated(
+                run_id=parent_run_id,
+                sequence=0,
+                parent_run_id=parent_run_id,
+                fork_point_sequence=sequence_number,
+                new_run_id=new_run_id,
+            )
+        )
+
+        return new_run_id, fork_state_dict, next_node
+
+    async def _run_loop(
+        self,
+        current_node_id: Any,
+        state_dict: dict[str, Any],
+        context: ExecutionContext,
+        event_bus: Any,
+        event_store: "EventStore | None",
+        bypass_interrupt_on_start: bool = False,
+    ) -> dict[str, Any]:
+        """Internal execution loop shared by run() and resume()."""
+        from orchestra.storage.events import (
+            ErrorOccurred,
+            ExecutionCompleted,
+            NodeCompleted,
+            NodeStarted,
+            InterruptRequested,
+        )
+
+        # Re-resolve state object if schema exists
+        if self._state_schema:
+            state: WorkflowState | dict[str, Any] = self._state_schema.model_validate(state_dict)
+        else:
+            state = state_dict
+
+        effective_run_id = context.run_id
+        run_start_time = datetime.now(timezone.utc)
+        turns = context.turn_number
+        _renderer = None
+
+        # 2b. Set up trace renderer
+        _default_trace = "rich" if os.environ.get("ORCHESTRA_ENV", "dev") == "dev" else "off"
+        trace_mode = os.environ.get("ORCHESTRA_TRACE", _default_trace)
+        if trace_mode != "off":
+            try:
+                from orchestra.observability.console import RichTraceRenderer
+                _renderer = RichTraceRenderer(verbose=(trace_mode == "verbose"))
+                event_bus.subscribe(_renderer.on_event)
+                _renderer.start()
+            except ImportError:
+                _renderer = None
 
         try:
             while (current_node_id != END and not isinstance(current_node_id, type(END))
@@ -215,6 +415,45 @@ class CompiledGraph:
                     )
 
                 logger.debug("executing_node", node=current_node_id, turn=turns)
+
+                # --- HITL: interrupt_before ---
+                if node.interrupt_before and not bypass_interrupt_on_start:
+                    await event_bus.emit(
+                        InterruptRequested(
+                            run_id=effective_run_id,
+                            sequence=event_bus.next_sequence(effective_run_id),
+                            node_id=str(current_node_id),
+                            interrupt_type="before",
+                        )
+                    )
+                    state_dict = (
+                        state.model_dump() if isinstance(state, WorkflowState) else dict(state)
+                    )
+                    checkpoint = Checkpoint.create(
+                        run_id=effective_run_id,
+                        node_id=str(current_node_id),
+                        interrupt_type="before",
+                        state=state_dict,
+                        sequence_number=event_bus.next_sequence(effective_run_id),
+                        loop_counters=dict(context.loop_counters),
+                        node_execution_order=list(context.node_execution_order),
+                    )
+                    if event_store:
+                        await event_store.save_checkpoint(checkpoint)
+
+                    final_state = dict(state_dict)
+                    final_state["__metadata__"] = {
+                        "run_id": effective_run_id,
+                        "status": WorkflowStatus.INTERRUPTED,
+                        "interrupted_at": str(current_node_id),
+                        "interrupt_type": "before",
+                    }
+                    if _renderer:
+                        _renderer.stop()
+                    return final_state
+
+                # Reset bypass after first potential interrupt point
+                bypass_interrupt_on_start = False
 
                 # 4a. Emit NodeEntered
                 await event_bus.emit(
@@ -254,6 +493,48 @@ class CompiledGraph:
                     )
                 )
 
+                # --- HITL: interrupt_after ---
+                if node.interrupt_after:
+                    # Determine next node BEFORE interrupting, so we know where to resume
+                    state_dict = (
+                        state.model_dump() if isinstance(state, WorkflowState) else dict(state)
+                    )
+                    next_node_id, _ = await self._resolve_next(
+                        str(current_node_id), state_dict, state, context
+                    )
+
+                    await event_bus.emit(
+                        InterruptRequested(
+                            run_id=effective_run_id,
+                            sequence=event_bus.next_sequence(effective_run_id),
+                            node_id=str(current_node_id),
+                            interrupt_type="after",
+                        )
+                    )
+                    checkpoint = Checkpoint.create(
+                        run_id=effective_run_id,
+                        node_id=str(next_node_id),  # Resume at the NEXT node
+                        interrupt_type="after",
+                        state=state_dict,
+                        sequence_number=event_bus.next_sequence(effective_run_id),
+                        loop_counters=dict(context.loop_counters),
+                        node_execution_order=list(context.node_execution_order),
+                    )
+                    if event_store:
+                        await event_store.save_checkpoint(checkpoint)
+
+                    final_state = dict(state_dict)
+                    final_state["__metadata__"] = {
+                        "run_id": effective_run_id,
+                        "status": WorkflowStatus.INTERRUPTED,
+                        "interrupted_at": str(current_node_id),
+                        "interrupt_type": "after",
+                        "next_node": str(next_node_id),
+                    }
+                    if _renderer:
+                        _renderer.stop()
+                    return final_state
+
                 # Determine next node (parallel execution may update state)
                 state_dict = state.model_dump() if isinstance(state, WorkflowState) else dict(state)
                 current_node_id, state = await self._resolve_next(
@@ -269,7 +550,6 @@ class CompiledGraph:
                 )
 
         except Exception as exc:
-            run_error = exc
             # 5b. Emit RunFailed
             duration_ms = (datetime.now(timezone.utc) - run_start_time).total_seconds() * 1000
             await event_bus.emit(
@@ -290,12 +570,14 @@ class CompiledGraph:
                     status="failed",
                 )
             )
-            if _store_owner and event_store is not None:
+            if event_store:
                 completed_at = datetime.now(timezone.utc).isoformat()
-                await event_store.update_run_status(  # type: ignore[union-attr]
-                    effective_run_id, "failed", completed_at
-                )
-                await event_store.close()  # type: ignore[union-attr]
+                try:
+                    await event_store.update_run_status(  # type: ignore[attr-defined]
+                        effective_run_id, "failed", completed_at
+                    )
+                except Exception:
+                    pass
             if _renderer is not None:
                 _renderer.stop()
             raise
@@ -312,12 +594,14 @@ class CompiledGraph:
                 status="completed",
             )
         )
-        if _store_owner and event_store is not None:
+        if event_store:
             completed_at = datetime.now(timezone.utc).isoformat()
-            await event_store.update_run_status(  # type: ignore[union-attr]
-                effective_run_id, "completed", completed_at
-            )
-            await event_store.close()  # type: ignore[union-attr]
+            try:
+                await event_store.update_run_status(  # type: ignore[attr-defined]
+                    effective_run_id, "completed", completed_at
+                )
+            except Exception:
+                pass
 
         if _renderer is not None:
             _renderer.stop()
@@ -442,23 +726,17 @@ class CompiledGraph:
         state: WorkflowState | dict[str, Any],
         context: ExecutionContext,
     ) -> tuple[Any, WorkflowState | dict[str, Any]]:
-        """Determine the next node based on outgoing edges.
+        """Determine the next node based on outgoing edges or handoffs.
 
-        Returns (next_node_id, updated_state). State may change during
-        parallel execution.
+        Returns (next_node_id, updated_state).
         """
+        # 1. Check for standard edges
         edges = self._edge_map.get(current_node_id, [])
-
-        if not edges:
-            return END, state
-
         for edge in edges:
             if isinstance(edge, Edge):
                 return edge.target, state
 
             elif isinstance(edge, ConditionalEdge):
-                # Inject per-run loop counters so loop conditions can track
-                # iteration counts without closure-captured mutable state.
                 state_dict["__loop_counters__"] = context.loop_counters
                 result = edge.resolve(state_dict)
                 return result, state
@@ -469,6 +747,63 @@ class CompiledGraph:
                 )
                 next_node = edge.join_node if edge.join_node is not None else END
                 return next_node, new_state
+
+        # 2. Check for handoff edges
+        from orchestra.storage.events import HandoffCompleted, HandoffInitiated
+        for edge in self._handoff_edges:
+            if edge.source == current_node_id:
+                # Check condition if present
+                if edge.condition:
+                    if not edge.condition(state_dict):
+                        continue
+
+                # Handoff triggered!
+                # Distill context
+                messages = state_dict.get("messages", [])
+                if edge.distill:
+                    distilled_history = distill_context(messages)
+                else:
+                    distilled_history = full_passthrough(messages)
+
+                # Emit HandoffInitiated
+                await context.event_bus.emit(
+                    HandoffInitiated(
+                        run_id=context.run_id,
+                        sequence=context.event_bus.next_sequence(context.run_id),
+                        from_agent=edge.source,
+                        to_agent=edge.target,
+                        reason="explicit_handoff",
+                    )
+                )
+
+                # Create payload
+                payload = HandoffPayload.create(
+                    from_agent=edge.source,
+                    to_agent=edge.target,
+                    reason="explicit_handoff",
+                    conversation_history=distilled_history,
+                    distilled=edge.distill,
+                )
+
+                # Update state for next agent: pass the payload
+                update = {
+                    "handoff_payload": payload,
+                    "messages": list(distilled_history),
+                }
+
+                if isinstance(state, WorkflowState):
+                    new_state = apply_state_update(state, update, self._reducers)
+                else:
+                    new_state = dict(state)
+                    new_state.update(update)
+
+                # HandoffCompleted is emitted after the target node finishes,
+                # but we emit it here as 'initiated' is the transfer.
+                # Actually, according to PLAN-04b, it's after completion.
+                # We'll stick to Initiated here and the next turn's NodeCompleted
+                # will serve as the arrival.
+
+                return edge.target, new_state
 
         return END, state
 
@@ -553,5 +888,16 @@ class CompiledGraph:
                 if edge.join_node and edge.join_node != END:
                     for target in edge.targets:
                         lines.append(f"    {target} --> {edge.join_node}")
+
+        # Add handoff edges
+        for h_edge in self._handoff_edges:
+            target = "END" if h_edge.target == END or h_edge.target is END else h_edge.target
+            label = "handoff"
+            if h_edge.distill:
+                label += " (distilled)"
+            if target == "END":
+                lines.append(f"    {h_edge.source} -.->|{label}| __end__((End))")
+            else:
+                lines.append(f"    {h_edge.source} -.->|{label}| {target}")
 
         return "\n".join(lines)

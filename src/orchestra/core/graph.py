@@ -41,18 +41,55 @@ def _get_node_name(node_or_agent: Any) -> str:
     return str(id(node_or_agent))
 
 
-def _wrap_as_node(item: Any, node_id: str) -> GraphNode:
+def _wrap_as_node(
+    item: Any,
+    node_id: str,
+    interrupt_before: bool = False,
+    interrupt_after: bool = False,
+) -> GraphNode:
     """Wrap an agent, function, or node into a GraphNode."""
-    if isinstance(item, (AgentNode, FunctionNode, SubgraphNode)):
-        return item
+    if isinstance(item, AgentNode):
+        return AgentNode(
+            agent=item.agent,
+            output_key=item.output_key,
+            map_output=item.map_output,
+            input_mapper=item.input_mapper,
+            output_mapper=item.output_mapper,
+            interrupt_before=interrupt_before or item.interrupt_before,
+            interrupt_after=interrupt_after or item.interrupt_after,
+        )
+    if isinstance(item, FunctionNode):
+        return FunctionNode(
+            func=item.func,
+            name=item.name,
+            interrupt_before=interrupt_before or item.interrupt_before,
+            interrupt_after=interrupt_after or item.interrupt_after,
+        )
+    if isinstance(item, SubgraphNode):
+        return SubgraphNode(
+            graph=item.graph,
+            input_mapper=item.input_mapper,
+            output_mapper=item.output_mapper,
+            interrupt_before=interrupt_before or item.interrupt_before,
+            interrupt_after=interrupt_after or item.interrupt_after,
+        )
 
     # If it's an agent-like object (has system_prompt and run method)
     if hasattr(item, "system_prompt") and hasattr(item, "run"):
-        return AgentNode(agent=item)
+        return AgentNode(
+            agent=item,
+            interrupt_before=interrupt_before,
+            interrupt_after=interrupt_after,
+        )
 
     # If it's a plain async function
     if callable(item):
-        return FunctionNode(func=item, name=node_id)
+        return FunctionNode(
+            func=item,
+            name=node_id,
+            interrupt_before=interrupt_before,
+            interrupt_after=interrupt_after,
+        )
 
     raise GraphCompileError(
         f"Cannot wrap '{item}' as a graph node.\n"
@@ -89,6 +126,8 @@ class WorkflowGraph:
         node: GraphNode | NodeFunction | Any,
         *,
         output_key: str | None = None,
+        interrupt_before: bool = False,
+        interrupt_after: bool = False,
     ) -> WorkflowGraph:
         """Add a node to the graph."""
         if node_id in (END, START):
@@ -102,7 +141,12 @@ class WorkflowGraph:
                 f"  Fix: Use a unique name for each node."
             )
 
-        wrapped = _wrap_as_node(node, node_id)
+        wrapped = _wrap_as_node(
+            node,
+            node_id,
+            interrupt_before=interrupt_before,
+            interrupt_after=interrupt_after,
+        )
 
         # Apply output_key to AgentNodes
         if output_key and isinstance(wrapped, AgentNode):
@@ -179,14 +223,26 @@ class WorkflowGraph:
 
     # ---- Fluent API ----
 
-    def then(self, agent_or_fn: Any, *, name: str | None = None) -> WorkflowGraph:
+    def then(
+        self,
+        agent_or_fn: Any,
+        *,
+        name: str | None = None,
+        interrupt_before: bool = False,
+        interrupt_after: bool = False,
+    ) -> WorkflowGraph:
         """Add a node and connect it sequentially to the previous node.
 
         Usage:
             graph = WorkflowGraph().then(researcher).then(writer).then(editor)
         """
         node_id = name or _get_node_name(agent_or_fn)
-        self.add_node(node_id, agent_or_fn)
+        self.add_node(
+            node_id,
+            agent_or_fn,
+            interrupt_before=interrupt_before,
+            interrupt_after=interrupt_after,
+        )
 
         if self._last_node is not None:
             self.add_edge(self._last_node, node_id)

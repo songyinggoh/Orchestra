@@ -127,6 +127,7 @@ class WorkflowStatus(str, Enum):
     PENDING = "pending"
     RUNNING = "running"
     COMPLETED = "completed"
+    INTERRUPTED = "interrupted"
     FAILED = "failed"
     CANCELLED = "cancelled"
 

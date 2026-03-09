@@ -14,6 +14,7 @@ class EventType(str, Enum):
 
     EXECUTION_STARTED = "execution.started"
     EXECUTION_COMPLETED = "execution.completed"
+    FORK_CREATED = "execution.forked"
     NODE_STARTED = "node.started"
     NODE_COMPLETED = "node.completed"
     STATE_UPDATED = "state.updated"
@@ -26,6 +27,7 @@ class EventType(str, Enum):
     INTERRUPT_REQUESTED = "interrupt.requested"
     INTERRUPT_RESUMED = "interrupt.resumed"
     CHECKPOINT_CREATED = "checkpoint.created"
+    SECURITY_VIOLATION = "security.violation"
     OUTPUT_REJECTED = "output.rejected"
     HANDOFF_INITIATED = "handoff.initiated"
     HANDOFF_COMPLETED = "handoff.completed"
@@ -65,6 +67,15 @@ class ExecutionCompleted(WorkflowEvent):
     total_tokens: int = 0
     total_cost_usd: float = 0.0
     status: str = "completed"  # "completed" or "failed"
+
+
+class ForkCreated(WorkflowEvent):
+    """Emitted when a new run is forked from an existing run."""
+
+    event_type: Literal[EventType.FORK_CREATED] = EventType.FORK_CREATED
+    parent_run_id: str
+    fork_point_sequence: int
+    new_run_id: str
 
 
 # --- Node Events ---
@@ -116,6 +127,8 @@ class LLMCalled(WorkflowEvent):
     node_id: str
     agent_name: str = ""
     model: str = ""
+    content: str | None = None
+    tool_calls: list[dict[str, Any]] = Field(default_factory=list)
     input_tokens: int = 0
     output_tokens: int = 0
     cost_usd: float = 0.0
@@ -194,6 +207,16 @@ class CheckpointCreated(WorkflowEvent):
     state_snapshot: dict[str, Any] = Field(default_factory=dict)
 
 
+class SecurityViolation(WorkflowEvent):
+    """Emitted when a security policy (like Tool ACL) is violated."""
+
+    event_type: Literal[EventType.SECURITY_VIOLATION] = EventType.SECURITY_VIOLATION
+    node_id: str
+    agent_name: str = ""
+    violation_type: str = ""  # e.g., "unauthorized_tool"
+    details: dict[str, Any] = Field(default_factory=dict)
+
+
 # --- Contract Events ---
 
 
@@ -233,6 +256,7 @@ AnyEvent = Annotated[
     Union[
         ExecutionStarted,
         ExecutionCompleted,
+        ForkCreated,
         NodeStarted,
         NodeCompleted,
         StateUpdated,
@@ -245,6 +269,7 @@ AnyEvent = Annotated[
         InterruptRequested,
         InterruptResumed,
         CheckpointCreated,
+        SecurityViolation,
         OutputRejected,
         HandoffInitiated,
         HandoffCompleted,

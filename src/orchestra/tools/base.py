@@ -92,7 +92,7 @@ class ToolWrapper:
         self._name = name or func.__name__
         self._description = description or inspect.getdoc(func) or ""
         self._parameters_schema = _generate_parameters_schema(func)
-        functools.update_wrapper(self, func)
+        functools.update_wrapper(self, func)  # type: ignore[arg-type]
 
     @property
     def name(self) -> str:

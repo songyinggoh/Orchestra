@@ -4,6 +4,9 @@
 
 *More debuggable than CrewAI, less verbose than LangGraph, more secure than both, and completely free.*
 
+> **Status: Pre-release — Under Active Development**
+> This README describes Orchestra's planned API and architecture. Phase 1 (core engine) is currently under development. Code examples reflect the target API design and are not yet installable. Star/watch this repo to follow progress.
+
 ---
 
 ## Table of Contents
@@ -22,10 +25,13 @@
   - [Module Dependency Map](#module-dependency-map)
 - [Progressive Infrastructure](#progressive-infrastructure)
 - [Observability](#observability)
+- [Human-in-the-Loop (HITL)](#human-in-the-loop-hitl)
 - [Security Model](#security-model)
 - [Memory System](#memory-system)
 - [Cost Management](#cost-management)
 - [LLM Provider Support](#llm-provider-support)
+- [Competitive Comparison](#competitive-comparison)
+- [Tech Stack](#tech-stack)
 - [Roadmap](#roadmap)
 - [Contributing](#contributing)
 - [License](#license)
@@ -69,20 +75,21 @@ Orchestra fills every one of these gaps.
 
 ## Key Features
 
-| Feature | Description |
-|---|---|
-| **Graph Workflow Engine** | Full directed graph with sequential, parallel, conditional, loop, and handoff edges. Compile-time validation catches errors before runtime. |
-| **Hybrid Agent Definition** | Class-based (CrewAI-style), decorator-based (Pythonic), or config-based (YAML). All produce the same internal `AgentSpec`. |
-| **Dynamic Subgraphs** | `DynamicNode` generates new sub-nodes and edges at runtime — no other framework supports runtime graph mutation. |
-| **Typed State with Reducers** | Pydantic-based state with `Annotated` reducer functions for deterministic concurrent state merges. |
-| **Event-Sourced Persistence** | Every state transition is an immutable event. Enables time-travel debugging, audit trails, and workflow resumability. |
-| **First-Class Testing** | `ScriptedLLM` for deterministic unit tests, `SimulatedLLM` for integration tests, `FlakyLLM` for chaos testing. |
-| **Zero-Infrastructure Observability** | Rich terminal trace tree, time-travel debugging, and cost waterfall — no LangSmith, no cloud console required. |
-| **Capability-Based Agent Security** | Agent identity with scoped permissions, tool-level ACLs, circuit breakers, and guardrails middleware. |
-| **Intelligent Cost Router** | Complexity profiling + auto-routing to cost-optimal models. Per-agent and per-workflow budget enforcement. |
-| **MCP + A2A Support** | First-class MCP client, host, and server. A2A Agent Cards for cross-framework interoperability. |
-| **Multi-Tier Memory** | Working, short-term, long-term (semantic/pgvector), and entity memory with a unified manager. |
-| **Progressive Infrastructure** | Same code runs on SQLite + asyncio locally, PostgreSQL + Redis + Kubernetes in production. |
+| Feature | Phase | Description |
+|---|---|---|
+| **Graph Workflow Engine** | 1 | Full directed graph with sequential, parallel, conditional, loop, and handoff edges. Compile-time validation catches errors before runtime. |
+| **Hybrid Agent Definition** | 1 | Class-based (CrewAI-style), decorator-based (Pythonic), or config-based (YAML). All produce the same internal `AgentSpec`. |
+| **Typed State with Reducers** | 1 | Pydantic-based state with `Annotated` reducer functions for deterministic concurrent state merges. |
+| **First-Class Testing** | 1-3 | `ScriptedLLM` for deterministic unit tests (Phase 1). `SimulatedLLM` and `FlakyLLM` for integration and chaos testing (Phase 3). |
+| **Event-Sourced Persistence** | 2 | Every state transition is an immutable event. Enables time-travel debugging, audit trails, and workflow resumability. |
+| **Zero-Infrastructure Observability** | 2-3 | Rich terminal trace tree and time-travel debugging (Phase 2). OpenTelemetry and cost waterfall (Phase 3). |
+| **MCP + A2A Support** | 2, 4 | First-class MCP client integration (Phase 2). A2A Agent Cards for cross-framework interoperability (Phase 4). |
+| **Multi-Tier Memory** | 3 | Working, short-term, long-term (semantic/pgvector), and entity memory with a unified manager. |
+| **Guardrails Middleware** | 3 | Content filtering, PII detection, and cost limits as composable middleware on agent nodes. |
+| **Progressive Infrastructure** | 3-4 | Same code runs on SQLite + asyncio locally, PostgreSQL + Redis + Kubernetes in production. |
+| **Intelligent Cost Router** | 4 | Complexity profiling + auto-routing to cost-optimal models. Per-agent and per-workflow budget enforcement. |
+| **Capability-Based Agent Security** | 4 | Agent identity with scoped permissions, tool-level ACLs, and circuit breakers. |
+| **Dynamic Subgraphs** | 4 | `DynamicNode` generates new sub-nodes and edges at runtime — no other framework supports runtime graph mutation. |
 
 ---
 
@@ -91,26 +98,43 @@ Orchestra fills every one of these gaps.
 ### Installation
 
 ```bash
-pip install orchestra
+pip install orchestra    # Requires Python 3.11+
 ```
+
+### Configuration
+
+Orchestra reads LLM provider credentials from environment variables:
+
+```bash
+export OPENAI_API_KEY="sk-..."        # Required for OpenAI models
+export ANTHROPIC_API_KEY="sk-ant-..."  # Required for Anthropic models
+export GOOGLE_API_KEY="..."            # Required for Google Gemini models
+```
+
+No other configuration is needed to get started. All infrastructure (storage, caching, observability) defaults to zero-infrastructure local mode.
 
 ### Your First Agent (5 lines)
 
 ```python
+import asyncio
 from orchestra import agent, run
 
 @agent(name="greeter", model="gpt-4o")
 async def greet(name: str) -> str:
     """You are a friendly assistant. Greet the user by name."""
+    # The docstring becomes the system prompt. No function body needed.
 
-result = run(greet, "Alice")
-print(result.output)
+result = asyncio.run(run(greet, input={"name": "Alice"}))
+print(result.output)  # result is an AgentResult with .output, .messages, .token_usage, etc.
 ```
+
+`run()` is an async function — use `asyncio.run()` at the top level, or `await run(...)` inside async code. When called with a single agent, `run()` returns an `AgentResult`. When called with a compiled workflow graph, it returns the workflow's state object. All examples below follow this pattern.
 
 ### Your First Workflow (20 lines)
 
 ```python
-from orchestra import Agent, WorkflowGraph, WorkflowState, run
+import asyncio
+from orchestra import Agent, WorkflowGraph, run
 from pydantic import BaseModel
 
 class ResearchState(BaseModel):
@@ -128,14 +152,22 @@ graph.add_edge("research", "write")
 graph.set_entry_point("research")
 
 workflow = graph.compile()
-result = run(workflow, {"query": "Latest advances in multi-agent systems"})
-print(result.report)
+state = asyncio.run(run(workflow, input={"query": "Latest advances in multi-agent systems"}))
+print(state.report)  # state is a ResearchState instance — access any field directly
 ```
 
 ### Parallel Fan-Out with Conditional Routing
 
 ```python
 from orchestra import WorkflowGraph, END
+from pydantic import BaseModel
+
+class AnalysisState(BaseModel):
+    text: str = ""
+    sentiment: str = ""
+    entities: list[str] = []
+    summary: str = ""
+    confidence: float = 0.0
 
 graph = WorkflowGraph(state_schema=AnalysisState)
 
@@ -159,20 +191,25 @@ workflow = graph.compile()
 ### Deterministic Testing
 
 ```python
+import pytest
+from orchestra import run
 from orchestra.testing import ScriptedLLM, WorkflowAssertions
 
-scripted = ScriptedLLM(responses={
-    "researcher": ["Multi-agent systems have evolved significantly..."],
-    "writer": ["## Research Report\n\nKey findings include..."],
-})
+@pytest.mark.asyncio
+async def test_research_workflow():
+    workflow = graph.compile()
 
-workflow = graph.compile(llm=scripted)
-result = await workflow.invoke({"query": "test query"})
+    # ScriptedLLM is a context manager that intercepts all LLM calls
+    with ScriptedLLM(script={
+        "researcher": ["Multi-agent systems have evolved significantly..."],
+        "writer": ["## Research Report\n\nKey findings include..."],
+    }):
+        result = await run(workflow, input={"query": "test query"})
 
-assertions = WorkflowAssertions(result)
-assertions.assert_node_executed("researcher")
-assertions.assert_node_executed("writer")
-assertions.assert_output_contains("Key findings")
+    assertions = WorkflowAssertions(result)
+    assertions.assert_node_executed("researcher")
+    assertions.assert_node_executed("writer")
+    assertions.assert_output_contains("Key findings")
 ```
 
 ---
@@ -304,7 +341,7 @@ registry.set_acl("writer", allow=["web_search"], deny=["github_*"])
 
 ### Testing Framework
 
-Orchestra provides the industry's first comprehensive agent testing framework — "pytest for agents":
+Orchestra provides a dedicated agent testing framework built into the orchestration layer — "pytest for agents":
 
 | Mock | Purpose | Speed |
 |---|---|---|
@@ -314,20 +351,26 @@ Orchestra provides the industry's first comprehensive agent testing framework �
 
 ```python
 # Unit test with ScriptedLLM
+@pytest.mark.asyncio
 async def test_research_workflow():
-    scripted = ScriptedLLM(responses={
+    workflow = graph.compile()
+
+    with ScriptedLLM(script={
         "researcher": ["Finding 1: ...", "Finding 2: ..."],
         "writer": ["Final report based on findings..."],
-    })
-    workflow = graph.compile(llm=scripted)
-    result = await workflow.invoke({"query": "test"})
+    }):
+        result = await run(workflow, input={"query": "test"})
+
     assert "Final report" in result.report
 
 # Chaos test with FlakyLLM
+@pytest.mark.asyncio
 async def test_resilience():
-    flaky = FlakyLLM(failure_rate=0.3, timeout_rate=0.1)
-    workflow = graph.compile(llm=flaky)
-    result = await workflow.invoke({"query": "test"})
+    workflow = graph.compile()
+
+    with FlakyLLM(failure_rate=0.3, timeout_rate=0.1):
+        result = await run(workflow, input={"query": "test"})
+
     assert result is not None  # Workflow recovers gracefully
 ```
 
@@ -348,8 +391,9 @@ assertions.assert_total_cost_under(0.50)
 ### Project Structure
 
 ```
-orchestra/
-src/orchestra/
+orchestra/                      # repository root
+  src/
+    orchestra/                  # installable package
     __init__.py
     core/                   # Graph engine, agents, state, execution
         agent.py            # Agent Protocol, BaseAgent, @agent decorator
@@ -466,6 +510,36 @@ Orchestra provides built-in, zero-infrastructure observability that works out of
 
 ---
 
+## Human-in-the-Loop (HITL)
+
+Orchestra supports pausing workflows for human review and resuming with modified state:
+
+```python
+from orchestra import WorkflowGraph, run, resume
+
+# Interrupt before a specific node
+workflow = graph.compile(
+    interrupt_before=["final_decision"],
+)
+
+# Run until the interrupt point
+result = await run(workflow, input={"proposal": "..."})
+# result.status == "interrupted"
+
+# Human inspects the state
+print(result.state.draft_decision)
+
+# Resume with human feedback
+final = await resume(
+    run_id=result.run_id,
+    state_override={"human_approved": True, "reviewer_notes": "Looks good"},
+)
+```
+
+Escalation policies handle timeouts automatically — if a human does not respond within a configured window, the workflow can escalate to a different reviewer or proceed with a fallback.
+
+---
+
 ## Security Model
 
 Orchestra is the first multi-agent framework with a capability-based agent identity and access management system:
@@ -540,18 +614,21 @@ Orchestra is the only framework that actively reduces your LLM bill:
 - **Cost Attribution** — Track costs per agent, per workflow, per user with real-time dashboards
 
 ```python
+from orchestra import WorkflowGraph, run
 from orchestra.providers import CostRouter
 
 router = CostRouter(
     tiers={
         "simple": "gpt-4o-mini",     # Classification, extraction
-        "moderate": "claude-sonnet",   # Summarization, writing
+        "moderate": "claude-sonnet-4-6", # Summarization, writing
         "complex": "gpt-4o",          # Reasoning, planning
     },
     budget_per_workflow=5.00,  # USD
 )
 
-workflow = graph.compile(llm=router)
+# Agents in the workflow use the router as their LLM provider
+analyst = Agent(name="analyst", role="Data Analyst", provider=router)
+writer = Agent(name="writer", role="Report Writer", provider=router)
 ```
 
 ---
@@ -563,8 +640,8 @@ Orchestra supports all major LLM providers through a unified `LLMProvider` Proto
 | Provider | Models | Status |
 |---|---|---|
 | **OpenAI** | GPT-4o, GPT-4o-mini, o1, o3 | Core |
-| **Anthropic** | Claude Opus, Sonnet, Haiku | Core |
-| **Google** | Gemini Pro, Flash | Optional |
+| **Anthropic** | Claude 4 (Opus, Sonnet), Claude 3.5 (Haiku) | Core |
+| **Google** | Gemini 2.0 Flash, Gemini 1.5 Pro | Optional |
 | **Ollama** | Llama, Mistral, and all local models | Optional |
 | **Any OpenAI-compatible** | Via base URL configuration | Optional |
 
@@ -593,6 +670,15 @@ FastAPI server, OpenTelemetry, Redis cache, multi-tier memory, advanced test har
 
 ### Phase 4: Enterprise & Scale (Weeks 19-26)
 Cost router, agent IAM, Ray distributed executor, NATS messaging, dynamic subgraphs, TypeScript SDK, and Kubernetes deployment. Enterprise features that create a durable competitive moat.
+
+### Examples
+
+The `examples/` directory contains end-to-end working examples (available once Phase 1 ships):
+
+- `quickstart.py` — Minimal agent and workflow setup
+- `research_pipeline.py` — Multi-agent research with structured output
+- `customer_support_handoff.py` — Swarm-style handoffs between support tiers
+- `parallel_debate.py` — Parallel agents with adversarial review
 
 ---
 
@@ -635,15 +721,38 @@ Cost router, agent IAM, Ray distributed executor, NATS messaging, dynamic subgra
 
 ## Contributing
 
-Orchestra is 100% free and open-source. Contributions are welcome.
+Orchestra is 100% free and open-source under Apache 2.0. Contributions are welcome.
+
+### Getting Started
+
+```bash
+git clone https://github.com/songyinggoh/multi-agent-orchestration-framework.git
+cd multi-agent-orchestration-framework
+pip install -e ".[dev]"    # Install with dev dependencies
+pytest                     # Run the test suite
+```
+
+### Workflow
 
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feature/my-feature`)
-3. Write tests for your changes using the testing framework
-4. Ensure all tests pass (`orchestra test`)
+3. Write tests for your changes using `ScriptedLLM` for deterministic assertions
+4. Ensure all tests pass (`pytest`)
 5. Submit a pull request
 
-See the [planning/](./planning/) directory for architecture decisions, API design documents, and the detailed roadmap.
+### Project Layout
+
+- **[planning/](./planning/)** — Architecture decisions, API design, and the detailed roadmap
+- **[planning/API-DESIGN.md](./planning/API-DESIGN.md)** — Canonical API reference for all public interfaces
+- **[planning/ROADMAP.md](./planning/ROADMAP.md)** — Phase-by-phase development plan with success criteria
+- **[research/](./research/)** — Competitive analysis, tech stack rationale, and design research
+
+### Code Style
+
+- Python 3.11+ with type annotations throughout
+- `async/await` for all I/O-bound operations
+- Pydantic models for data validation and serialization
+- Protocol-first design (structural subtyping over inheritance)
 
 ---
 

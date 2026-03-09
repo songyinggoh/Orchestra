@@ -1,20 +1,13 @@
-"""Generic OpenAI-compatible HTTP provider.
+"""Anthropic provider for Claude models.
 
-Zero extra dependencies beyond httpx (already in core).
-Works with any endpoint that speaks the OpenAI chat completions format:
-OpenAI, Ollama, vLLM, LiteLLM, Azure OpenAI, etc.
+Uses httpx directly (zero extra dependencies beyond core).
+Handles Anthropic's Messages API format which differs from OpenAI's.
 
 Usage:
-    from orchestra.providers import HttpProvider
+    from orchestra.providers import AnthropicProvider
 
-    # OpenAI (default)
-    provider = HttpProvider(api_key="sk-...")
-
-    # Ollama (local)
-    provider = HttpProvider(base_url="http://localhost:11434/v1", default_model="llama3")
-
-    # Any OpenAI-compatible endpoint
-    provider = HttpProvider(base_url="https://my-endpoint/v1", api_key="...")
+    provider = AnthropicProvider(api_key="sk-ant-...")
+    # Or set ANTHROPIC_API_KEY env var
 """
 
 from __future__ import annotations
@@ -36,84 +29,121 @@ from orchestra.core.errors import (
 from orchestra.core.types import (
     LLMResponse,
     Message,
+    MessageRole,
     ModelCost,
     StreamChunk,
     TokenUsage,
     ToolCall,
 )
 
-
-def _messages_to_openai_format(messages: list[Message]) -> list[dict[str, Any]]:
-    """Convert Orchestra Messages to OpenAI API format."""
-    result = []
-    for msg in messages:
-        entry: dict[str, Any] = {
-            "role": msg.role.value,
-            "content": msg.content,
-        }
-        if msg.name:
-            entry["name"] = msg.name
-        if msg.tool_call_id:
-            entry["tool_call_id"] = msg.tool_call_id
-        if msg.tool_calls:
-            entry["tool_calls"] = [
-                {
-                    "id": tc.id,
-                    "type": "function",
-                    "function": {
-                        "name": tc.name,
-                        "arguments": json.dumps(tc.arguments),
-                    },
-                }
-                for tc in msg.tool_calls
-            ]
-        result.append(entry)
-    return result
-
-
 # Approximate costs per 1K tokens (input/output)
 _MODEL_COSTS: dict[str, tuple[float, float]] = {
-    "gpt-4o": (0.0025, 0.01),
-    "gpt-4o-mini": (0.00015, 0.0006),
-    "gpt-4-turbo": (0.01, 0.03),
-    "o1": (0.015, 0.06),
-    "o3-mini": (0.0011, 0.0044),
+    "claude-opus-4-6": (0.015, 0.075),
+    "claude-sonnet-4-6": (0.003, 0.015),
+    "claude-haiku-4-5-20251001": (0.0008, 0.004),
+    "claude-3-5-sonnet-20241022": (0.003, 0.015),
+    "claude-3-5-haiku-20241022": (0.0008, 0.004),
 }
 
 
-class HttpProvider:
-    """Generic OpenAI-compatible HTTP provider. Zero extra dependencies.
+def _messages_to_anthropic_format(
+    messages: list[Message],
+) -> tuple[str | None, list[dict[str, Any]]]:
+    """Convert Orchestra Messages to Anthropic API format.
 
-    Works with any endpoint that speaks the OpenAI chat completions format.
+    Returns (system_prompt, messages) since Anthropic separates system
+    from the messages array.
+    """
+    system_prompt: str | None = None
+    result: list[dict[str, Any]] = []
+
+    for msg in messages:
+        if msg.role == MessageRole.SYSTEM:
+            system_prompt = msg.content
+            continue
+
+        if msg.role == MessageRole.TOOL:
+            result.append({
+                "role": "user",
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": msg.tool_call_id or "",
+                        "content": msg.content,
+                    }
+                ],
+            })
+            continue
+
+        role = "assistant" if msg.role == MessageRole.ASSISTANT else "user"
+        content: Any
+
+        if msg.tool_calls:
+            # Assistant message with tool calls
+            blocks: list[dict[str, Any]] = []
+            if msg.content:
+                blocks.append({"type": "text", "text": msg.content})
+            for tc in msg.tool_calls:
+                blocks.append({
+                    "type": "tool_use",
+                    "id": tc.id,
+                    "name": tc.name,
+                    "input": tc.arguments,
+                })
+            content = blocks
+        else:
+            content = msg.content
+
+        result.append({"role": role, "content": content})
+
+    return system_prompt, result
+
+
+def _tools_to_anthropic_format(
+    tools: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Convert OpenAI-style tool schemas to Anthropic format."""
+    result = []
+    for t in tools:
+        func = t.get("function", t)
+        result.append({
+            "name": func.get("name", ""),
+            "description": func.get("description", ""),
+            "input_schema": func.get("parameters", {}),
+        })
+    return result
+
+
+class AnthropicProvider:
+    """Anthropic Claude provider using the Messages API.
+
+    Handles the Anthropic-specific API format (system prompt separation,
+    tool_use/tool_result content blocks, different response structure).
     """
 
     def __init__(
         self,
-        base_url: str = "https://api.openai.com/v1",
         api_key: str | None = None,
-        default_model: str = "gpt-4o-mini",
+        default_model: str = "claude-sonnet-4-6",
         max_retries: int = 3,
         timeout: float = 120.0,
     ) -> None:
-        self._base_url = base_url.rstrip("/")
-        self._api_key = api_key or os.environ.get("OPENAI_API_KEY", "")
+        self._api_key = api_key or os.environ.get("ANTHROPIC_API_KEY", "")
         self._default_model = default_model
         self._max_retries = max_retries
         self._client = httpx.AsyncClient(
-            base_url=self._base_url,
+            base_url="https://api.anthropic.com",
             timeout=timeout,
-            headers=self._build_headers(),
+            headers={
+                "x-api-key": self._api_key,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json",
+            },
         )
-
-    def _build_headers(self) -> dict[str, str]:
-        headers: dict[str, str] = {"Content-Type": "application/json"}
-        if self._api_key:
-            headers["Authorization"] = f"Bearer {self._api_key}"
-        return headers
 
     @property
     def provider_name(self) -> str:
-        return "http_openai_compat"
+        return "anthropic"
 
     @property
     def default_model(self) -> str:
@@ -129,33 +159,20 @@ class HttpProvider:
         max_tokens: int | None = None,
         output_type: Any = None,
     ) -> LLMResponse:
-        """Send a chat completion request."""
+        """Send a chat completion request to the Anthropic Messages API."""
         use_model = model or self._default_model
+        system_prompt, api_messages = _messages_to_anthropic_format(messages)
 
         body: dict[str, Any] = {
             "model": use_model,
-            "messages": _messages_to_openai_format(messages),
+            "messages": api_messages,
+            "max_tokens": max_tokens or 4096,
             "temperature": temperature,
         }
+        if system_prompt:
+            body["system"] = system_prompt
         if tools:
-            body["tools"] = tools
-        if max_tokens:
-            body["max_tokens"] = max_tokens
-
-        # Structured output via response_format
-        if output_type is not None:
-            try:
-                schema = output_type.model_json_schema()
-                body["response_format"] = {
-                    "type": "json_schema",
-                    "json_schema": {
-                        "name": output_type.__name__,
-                        "schema": schema,
-                        "strict": True,
-                    },
-                }
-            except (AttributeError, Exception):
-                pass
+            body["tools"] = _tools_to_anthropic_format(tools)
 
         response_data = await self._request_with_retry(body)
         return self._parse_response(response_data, use_model)
@@ -169,22 +186,24 @@ class HttpProvider:
         temperature: float = 0.7,
         max_tokens: int | None = None,
     ) -> AsyncIterator[StreamChunk]:
-        """Stream chat completion responses."""
+        """Stream chat completion responses from Anthropic."""
         use_model = model or self._default_model
+        system_prompt, api_messages = _messages_to_anthropic_format(messages)
 
         body: dict[str, Any] = {
             "model": use_model,
-            "messages": _messages_to_openai_format(messages),
+            "messages": api_messages,
+            "max_tokens": max_tokens or 4096,
             "temperature": temperature,
             "stream": True,
         }
+        if system_prompt:
+            body["system"] = system_prompt
         if tools:
-            body["tools"] = tools
-        if max_tokens:
-            body["max_tokens"] = max_tokens
+            body["tools"] = _tools_to_anthropic_format(tools)
 
         async with self._client.stream(
-            "POST", "/chat/completions", json=body
+            "POST", "/v1/messages", json=body
         ) as response:
             if response.status_code != 200:
                 text = ""
@@ -196,28 +215,39 @@ class HttpProvider:
                 if not line.startswith("data: "):
                     continue
                 data = line[6:]
-                if data == "[DONE]":
-                    break
                 try:
-                    chunk_data = json.loads(data)
-                    choices = chunk_data.get("choices", [])
-                    if choices:
-                        delta = choices[0].get("delta", {})
-                        content = delta.get("content", "")
-                        finish = choices[0].get("finish_reason")
-                        yield StreamChunk(
-                            content=content or "",
-                            finish_reason=finish,
-                            model=use_model,
-                        )
+                    event = json.loads(data)
                 except json.JSONDecodeError:
                     continue
+
+                event_type = event.get("type", "")
+
+                if event_type == "content_block_delta":
+                    delta = event.get("delta", {})
+                    if delta.get("type") == "text_delta":
+                        yield StreamChunk(
+                            content=delta.get("text", ""),
+                            model=use_model,
+                        )
+
+                elif event_type == "message_delta":
+                    stop = event.get("delta", {}).get("stop_reason")
+                    if stop:
+                        reason = "tool_calls" if stop == "tool_use" else "stop"
+                        yield StreamChunk(
+                            content="",
+                            finish_reason=reason,
+                            model=use_model,
+                        )
+
+                elif event_type == "message_stop":
+                    break
 
     def count_tokens(self, messages: list[Message], model: str | None = None) -> int:
         """Approximate token count (4 chars per token heuristic)."""
         total = 0
         for msg in messages:
-            total += len(msg.content) // 4 + 4  # message overhead
+            total += len(msg.content) // 4 + 4
         return total
 
     def get_model_cost(self, model: str | None = None) -> ModelCost:
@@ -232,7 +262,7 @@ class HttpProvider:
 
         for attempt in range(self._max_retries + 1):
             try:
-                response = await self._client.post("/chat/completions", json=body)
+                response = await self._client.post("/v1/messages", json=body)
 
                 if response.status_code == 200:
                     result: dict[str, Any] = response.json()
@@ -254,8 +284,8 @@ class HttpProvider:
             except httpx.HTTPError as e:
                 last_error = ProviderUnavailableError(
                     f"HTTP error: {e}\n"
-                    f"  Endpoint: {self._base_url}\n"
-                    f"  Fix: Check that the endpoint is running and reachable."
+                    f"  Endpoint: https://api.anthropic.com\n"
+                    f"  Fix: Check network connectivity."
                 )
                 if attempt < self._max_retries:
                     import asyncio
@@ -269,14 +299,14 @@ class HttpProvider:
         if status_code == 401:
             raise AuthenticationError(
                 "Authentication failed (401).\n"
-                "  Fix: Check your API key or set OPENAI_API_KEY env var."
+                "  Fix: Check your API key or set ANTHROPIC_API_KEY env var."
             )
         elif status_code == 429:
             raise RateLimitError(
                 f"Rate limited (429).\n"
                 f"  Response: {text[:200]}"
             )
-        elif status_code == 400 and "context_length" in text.lower():
+        elif status_code == 400 and "context" in text.lower():
             raise ContextWindowError(
                 f"Context window exceeded.\n"
                 f"  Response: {text[:200]}\n"
@@ -294,45 +324,40 @@ class HttpProvider:
             )
 
     def _parse_response(self, data: dict[str, Any], model: str) -> LLMResponse:
-        """Parse OpenAI-format response into LLMResponse."""
-        choices = data.get("choices", [])
-        if not choices:
-            return LLMResponse(content=None, model=model)
+        """Parse Anthropic Messages API response into LLMResponse."""
+        content_blocks = data.get("content", [])
 
-        choice = choices[0]
-        message = choice.get("message", {})
+        text_parts: list[str] = []
+        tool_calls: list[ToolCall] = []
 
-        # Parse tool calls
-        tool_calls = []
-        raw_tool_calls = message.get("tool_calls", [])
-        for tc in raw_tool_calls:
-            func = tc.get("function", {})
-            try:
-                args = json.loads(func.get("arguments", "{}"))
-            except json.JSONDecodeError:
-                args = {}
-            tool_calls.append(
-                ToolCall(
-                    id=tc.get("id", ""),
-                    name=func.get("name", ""),
-                    arguments=args,
+        for block in content_blocks:
+            block_type = block.get("type", "")
+            if block_type == "text":
+                text_parts.append(block.get("text", ""))
+            elif block_type == "tool_use":
+                tool_calls.append(
+                    ToolCall(
+                        id=block.get("id", ""),
+                        name=block.get("name", ""),
+                        arguments=block.get("input", {}),
+                    )
                 )
-            )
 
-        # Parse finish reason
-        raw_finish = choice.get("finish_reason", "stop")
-        finish_reason = "stop"
-        if raw_finish == "tool_calls":
+        # Map Anthropic stop reasons to Orchestra's
+        stop_reason = data.get("stop_reason", "end_turn")
+        if stop_reason == "tool_use":
             finish_reason = "tool_calls"
-        elif raw_finish == "length":
+        elif stop_reason == "max_tokens":
             finish_reason = "length"
+        else:
+            finish_reason = "stop"
 
         # Parse usage
         usage = None
         raw_usage = data.get("usage")
         if raw_usage:
-            input_tok = raw_usage.get("prompt_tokens", 0)
-            output_tok = raw_usage.get("completion_tokens", 0)
+            input_tok = raw_usage.get("input_tokens", 0)
+            output_tok = raw_usage.get("output_tokens", 0)
             cost_info = _MODEL_COSTS.get(model, (0.0, 0.0))
             estimated_cost = (input_tok / 1000 * cost_info[0]) + (
                 output_tok / 1000 * cost_info[1]
@@ -345,7 +370,7 @@ class HttpProvider:
             )
 
         return LLMResponse(
-            content=message.get("content"),
+            content="\n".join(text_parts) if text_parts else None,
             tool_calls=tool_calls,
             finish_reason=finish_reason,
             usage=usage,

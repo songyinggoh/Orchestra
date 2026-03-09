@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import ast
+import operator
 from typing import Annotated
 
 import pytest
@@ -675,8 +677,22 @@ class TestAgentIntegration:
     async def test_agent_tool_loop(self):
         @tool
         async def calculator(expression: str) -> str:
-            """Evaluate a math expression."""
-            return str(eval(expression))
+            """Evaluate a math expression safely (no eval)."""
+            _ops = {
+                ast.Add: operator.add,
+                ast.Sub: operator.sub,
+                ast.Mult: operator.mul,
+            }
+
+            def _safe_eval(node: ast.expr) -> int | float:
+                if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
+                    return node.value
+                if isinstance(node, ast.BinOp) and type(node.op) in _ops:
+                    return _ops[type(node.op)](_safe_eval(node.left), _safe_eval(node.right))
+                raise ValueError(f"Unsupported: {ast.dump(node)}")
+
+            tree = ast.parse(expression, mode="eval")
+            return str(_safe_eval(tree.body))
 
         # First response has a tool call, second is final
         llm = ScriptedLLM([
