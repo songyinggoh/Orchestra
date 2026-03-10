@@ -1,37 +1,100 @@
-"""Orchestra security module — prompt injection detection.
+"""Orchestra security module — guardrails, rate limiting, circuit breakers.
 
-Rebuff (https://github.com/protectai/rebuff) integration:
-  RebuffChecker           — async wrapper around RebuffSdk
-  InjectionDetectionResult — per-check result with layer scores
-  InjectionReport          — full audit report (includes canary findings)
-  PromptInjectionAgent     — BaseAgent subclass with built-in injection blocking
-  InjectionAuditorAgent    — standalone pre-processing auditor node
-  make_injection_guard_node() — graph node factory
-  rebuff_tool()            — Tool for inline injection checking in agent loops
+Core guardrails framework:
+  OnFail              — enum of failure actions (BLOCK, FIX, LOG, RETRY, EXCEPTION)
+  GuardrailResult     — result from guardrail validation
+  Guardrail           — runtime-checkable protocol
+  GuardrailChain      — sequential validator runner
+  GuardedAgent        — BaseAgent subclass with input/output hooks
+  GuardrailError      — exception raised by EXCEPTION on_fail
+  GuardrailViolation  — single violation record
 
-Requires:
-    pip install rebuff
+Built-in validators:
+  ContentFilter       — banned words/patterns
+  PIIDetector         — regex-based PII detection
+  SchemaValidator     — Pydantic schema validation
 
-Environment variables (alternative to passing keys):
-    REBUFF_OPENAI_KEY
-    REBUFF_PINECONE_KEY
-    REBUFF_PINECONE_INDEX
-    REBUFF_OPENAI_MODEL  (optional)
+Extended validators (orchestra.security.validators):
+  MaxLengthGuardrail      — length limit enforcement
+  RegexGuardrail          — pattern matching/blocking
+  PIIRedactionGuardrail   — PII detection with optional redaction
+
+Rate limiting:
+  TokenBucket         — per-identity token-bucket rate limiter
+
+Circuit breaker:
+  AsyncCircuitBreaker — CLOSED/OPEN/HALF_OPEN circuit breaker
+  CircuitOpenError    — raised when circuit is open
+  CircuitState        — circuit state enum
+
+Prompt injection (requires rebuff):
+  RebuffChecker, InjectionDetectionResult, InjectionReport,
+  PromptInjectionAgent, InjectionAuditorAgent,
+  make_injection_guard_node, rebuff_tool
 """
 
-from orchestra.security.rebuff import (
-    InjectionAuditorAgent,
-    InjectionDetectionResult,
-    InjectionReport,
-    PromptInjectionAgent,
-    RebuffChecker,
-    make_injection_guard_node,
-    rebuff_tool,
+from orchestra.security.guardrails import (
+    ContentFilter,
+    Guardrail,
+    GuardrailChain,
+    GuardrailError,
+    GuardrailResult,
+    GuardrailViolation,
+    GuardedAgent,
+    OnFail,
+    PIIDetector,
+    SchemaValidator,
+)
+from orchestra.security.validators import (
+    MaxLengthGuardrail,
+    PIIRedactionGuardrail,
+    RegexGuardrail,
+)
+from orchestra.security.rate_limit import TokenBucket
+from orchestra.security.circuit_breaker import (
+    AsyncCircuitBreaker,
+    CircuitOpenError,
+    CircuitState,
 )
 
-from orchestra.security.guardrails import Guardrail, GuardrailViolation
+# Rebuff is optional — guarded import
+try:
+    from orchestra.security.rebuff import (
+        InjectionAuditorAgent,
+        InjectionDetectionResult,
+        InjectionReport,
+        PromptInjectionAgent,
+        RebuffChecker,
+        make_injection_guard_node,
+        rebuff_tool,
+    )
+except ImportError:
+    pass
 
 __all__ = [
+    # Core guardrails
+    "OnFail",
+    "GuardrailResult",
+    "GuardrailViolation",
+    "Guardrail",
+    "GuardrailChain",
+    "GuardedAgent",
+    "GuardrailError",
+    # Built-in validators
+    "ContentFilter",
+    "PIIDetector",
+    "SchemaValidator",
+    # Extended validators
+    "MaxLengthGuardrail",
+    "RegexGuardrail",
+    "PIIRedactionGuardrail",
+    # Rate limiting
+    "TokenBucket",
+    # Circuit breaker
+    "AsyncCircuitBreaker",
+    "CircuitOpenError",
+    "CircuitState",
+    # Rebuff (optional)
     "RebuffChecker",
     "InjectionDetectionResult",
     "InjectionReport",
@@ -39,6 +102,4 @@ __all__ = [
     "InjectionAuditorAgent",
     "make_injection_guard_node",
     "rebuff_tool",
-    "Guardrail",
-    "GuardrailViolation",
 ]
