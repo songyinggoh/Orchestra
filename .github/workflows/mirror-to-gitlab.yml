@@ -1,0 +1,21 @@
+name: Mirror to GitLab
+
+on:
+  push:
+    branches: ["*"]
+    tags: ["*"]
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: |
+          git remote add gitlab "https://oauth2:${GITLAB_PAT}@gitlab.com/${GITLAB_REPO}.git"
+          git push gitlab --all --force
+          git push gitlab --tags --force
+        env:
+          GITLAB_PAT: ${{ secrets.GITLAB_PAT }}
+          GITLAB_REPO: ${{ secrets.GITLAB_REPO }}
