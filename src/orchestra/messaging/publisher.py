@@ -42,6 +42,11 @@ class TaskPublisher:
     ) -> PublishResult:
         """Encrypt *body* for *recipient_did* and publish to NATS.
 
+        Injects the active OpenTelemetry W3C trace context (``traceparent`` /
+        ``tracestate``) into NATS headers so distributed traces span the
+        publish/consume boundary. If opentelemetry-api is not installed the
+        injection is skipped silently.
+
         Args:
             agent_type: Routing key — determines the NATS subject suffix.
             body: Plaintext task payload dict.
@@ -56,10 +61,23 @@ class TaskPublisher:
         subject = f"orchestra.tasks.{agent_type}"
         token = self._provider.encrypt_for(body, recipient_did)
 
-        headers: dict[str, str] | None = None
+        headers: dict[str, str] = {}
         if dedup_id:
-            headers = {"Nats-Msg-Id": dedup_id}
+            headers["Nats-Msg-Id"] = dedup_id
+        _inject_trace_context(headers)
 
-        ack = await self._js.publish(subject, token.encode("utf-8"), headers=headers)
+        ack = await self._js.publish(
+            subject, token.encode("utf-8"), headers=headers or None
+        )
         log.debug("task_published", subject=subject, seq=ack.seq)
         return PublishResult(subject=subject, sequence=ack.seq)
+
+
+def _inject_trace_context(headers: dict[str, str]) -> None:
+    """Inject OTel W3C trace context headers if opentelemetry-api is available."""
+    try:
+        from opentelemetry.propagate import inject
+
+        inject(headers)
+    except ImportError:
+        pass

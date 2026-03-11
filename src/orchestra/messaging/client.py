@@ -14,7 +14,11 @@ if TYPE_CHECKING:
 log = structlog.get_logger(__name__)
 
 _STREAM_NAME = "ORCHESTRA_TASKS"
-_STREAM_SUBJECTS = ["orchestra.tasks.>"]
+_STREAM_SUBJECTS = [
+    "orchestra.tasks.>",
+    "orchestra.events.>",
+    "orchestra.handoffs.>",
+]
 
 
 @dataclass
@@ -22,12 +26,18 @@ class NATSClientConfig:
     servers: list[str] = field(default_factory=lambda: ["nats://localhost:4222"])
     max_reconnect_attempts: int = 5
     reconnect_time_wait: float = 2.0
+    # Heartbeat: disconnect after max_outstanding_pings missed pings
+    ping_interval: int = 20
+    max_outstanding_pings: int = 3
     stream_name: str = _STREAM_NAME
     stream_subjects: list[str] = field(default_factory=lambda: list(_STREAM_SUBJECTS))
-    # Task messages expire after 1 hour
-    max_age_seconds: int = 3600
-    # Deduplication window — 2 minutes
-    duplicate_window_seconds: int = 120
+    # LIMITS retention: keep messages until capacity/age thresholds are exceeded
+    max_age_seconds: int = 7 * 24 * 3600  # 7 days
+    duplicate_window_seconds: int = 120   # 2-minute dedup window
+    max_msgs: int = 1_000_000
+    max_bytes: int = 1 * 1024**3          # 1 GB
+    max_msg_size: int = 1 * 1024**2       # 1 MB per message
+    num_replicas: int = 1
 
 
 async def create_nats_client(
@@ -36,8 +46,9 @@ async def create_nats_client(
     """Connect to NATS and ensure the ORCHESTRA_TASKS stream exists.
 
     Creates the stream on first call; updates config on subsequent calls if
-    the stream already exists. Uses WorkQueue retention so each message is
-    consumed exactly once and discarded after ack.
+    the stream already exists. Uses LIMITS retention so messages are replayable
+    until capacity/age thresholds are exceeded — enables crash recovery and
+    consumer-group fan-out across KEDA-scaled replicas.
     """
     try:
         import nats as nats_lib
@@ -53,9 +64,12 @@ async def create_nats_client(
     nc = await nats_lib.connect(
         config.servers,
         error_cb=_error_cb,
+        disconnected_cb=_disconnected_cb,
         reconnected_cb=_reconnected_cb,
         max_reconnect_attempts=config.max_reconnect_attempts,
         reconnect_time_wait=config.reconnect_time_wait,
+        ping_interval=config.ping_interval,
+        max_outstanding_pings=config.max_outstanding_pings,
     )
     js = nc.jetstream()
 
@@ -63,7 +77,11 @@ async def create_nats_client(
         name=config.stream_name,
         subjects=config.stream_subjects,
         storage=StorageType.FILE,
-        retention=RetentionPolicy.WORK_QUEUE,
+        retention=RetentionPolicy.LIMITS,
+        max_msgs=config.max_msgs,
+        max_bytes=config.max_bytes,
+        max_msg_size=config.max_msg_size,
+        num_replicas=config.num_replicas,
         # nats-py uses nanoseconds for time-based fields
         max_age=config.max_age_seconds * 1_000_000_000,
         duplicate_window=config.duplicate_window_seconds * 1_000_000_000,
@@ -94,6 +112,10 @@ async def _ensure_stream(js: JetStreamContext, cfg: object, stream_name: str) ->
 
 async def _error_cb(exc: Exception) -> None:
     log.error("nats_error", error=str(exc))
+
+
+async def _disconnected_cb() -> None:
+    log.warning("nats_disconnected")
 
 
 async def _reconnected_cb() -> None:

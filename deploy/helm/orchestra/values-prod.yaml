@@ -1,0 +1,35 @@
+replicaCount: 3
+
+runtime:
+  className: gvisor  # gVisor sandbox for all agent pods in production
+
+image:
+  pullPolicy: Always
+
+keda:
+  enabled: true
+  minReplicaCount: 2
+  maxReplicaCount: 50
+  lagThreshold: "50"
+  activationLagThreshold: "5"
+
+resources:
+  requests:
+    cpu: 500m
+    memory: 1Gi
+  limits:
+    cpu: "4"
+    memory: 4Gi
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 2
+
+tolerations:
+  - key: orchestra.dev/agent-only
+    operator: Equal
+    value: "true"
+    effect: NoSchedule
+
+nodeSelector:
+  orchestra.dev/role: agent

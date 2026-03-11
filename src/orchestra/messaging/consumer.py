@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any
 
@@ -57,8 +58,18 @@ class TaskConsumer:
         *,
         batch_size: int = 1,
         timeout: float = 1.0,
+        heartbeat_interval: float = 0.0,
     ) -> int:
         """Fetch a batch, decrypt each message, call *handler*, and ack.
+
+        Args:
+            handler: Async callable that processes the decrypted message dict.
+            batch_size: Number of messages to fetch per call.
+            timeout: Pull timeout in seconds.
+            heartbeat_interval: If > 0, call ``msg.in_progress()`` every this
+                many seconds while the handler is running. Use for tasks that
+                may exceed the stream's ``ack_wait`` (default 30 s). A value of
+                10.0 is a safe default for long-running agent work.
 
         On decryption failure the message is NAK'd (triggering redelivery up
         to the stream's ``max_deliver`` limit). Handler exceptions are also
@@ -80,7 +91,12 @@ class TaskConsumer:
         for msg in msgs:
             try:
                 plaintext = self._provider.decrypt(msg.data.decode("utf-8"))
-                await handler(plaintext)
+                if heartbeat_interval > 0:
+                    await self._run_with_heartbeat(
+                        handler, plaintext, msg, heartbeat_interval
+                    )
+                else:
+                    await handler(plaintext)
                 await msg.ack()
                 processed += 1
             except Exception as exc:
@@ -92,3 +108,34 @@ class TaskConsumer:
                 await msg.nak()
 
         return processed
+
+    @staticmethod
+    async def terminate(msg: Any) -> None:
+        """Terminate a poison message — do not redeliver.
+
+        Use when a message is permanently unprocessable (e.g. malformed data,
+        unsupported schema version). Unlike NAK which schedules redelivery,
+        ``term()`` removes the message from the consumer's delivery queue
+        permanently without counting against ``max_deliver``.
+        """
+        await msg.term()
+
+    @staticmethod
+    async def _run_with_heartbeat(
+        handler: Callable[[dict], Awaitable[Any]],
+        plaintext: dict,
+        msg: Any,
+        heartbeat_interval: float,
+    ) -> None:
+        """Run *handler* while sending periodic ``in_progress()`` heartbeats."""
+
+        async def _heartbeat() -> None:
+            while True:
+                await asyncio.sleep(heartbeat_interval)
+                await msg.in_progress()
+
+        hb_task = asyncio.create_task(_heartbeat())
+        try:
+            await handler(plaintext)
+        finally:
+            hb_task.cancel()

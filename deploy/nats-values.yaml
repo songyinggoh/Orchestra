@@ -17,7 +17,7 @@ config:
       pvc:
         enabled: true
         size: 10Gi
-        storageClassName: ""  # Use cluster default
+        storageClassName: ""  # Use cluster default (gp3 on EKS, pd-ssd on GKE)
     memoryStore:
       enabled: false
 
@@ -26,6 +26,17 @@ container:
     repository: nats
     tag: "2.10-alpine"
     pullPolicy: IfNotPresent
+  env:
+    # Increase max payload to match stream max_msg_size (1 MB)
+    - name: NATS_MAX_PAYLOAD
+      value: "1048576"
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: "2"
+      memory: 2Gi
 
 # Expose monitoring port 8222 — required for KEDA NATS JetStream scaler
 service:

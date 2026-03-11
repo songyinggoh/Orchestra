@@ -1,0 +1,15 @@
+apiVersion: v2
+name: orchestra
+description: Multi-agent orchestration framework
+type: application
+version: 0.1.0
+appVersion: "4.0.0"
+dependencies:
+  - name: nats
+    version: "1.2.x"
+    repository: https://nats-io.github.io/k8s/helm/charts/
+    condition: nats.enabled
+  - name: keda
+    version: "2.16.x"
+    repository: https://kedacore.github.io/charts
+    condition: keda.enabled
