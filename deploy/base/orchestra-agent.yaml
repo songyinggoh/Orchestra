@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: orchestra-agent
+  labels:
+    app: orchestra-agent
+spec:
+  replicas: 1 # Standardized default, overridden by KEDA
+  selector:
+    matchLabels:
+      app: orchestra-agent
+  template:
+    metadata:
+      labels:
+        app: orchestra-agent
+    spec:
+      containers:
+      - name: agent
+        image: orchestra-agents/worker:latest
+        ports:
+        - containerPort: 8080
+        env:
+        - name: NATS_URL
+          value: "nats://nats:4222"
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: orchestra-agent-scaler
+spec:
+  scaleTargetRef:
+    name: orchestra-agent
+  pollingInterval: 5
+  cooldownPeriod: 30
+  minReplicaCount: 1
+  maxReplicaCount: 10
+  triggers:
+  - type: nats-jetstream
+    metadata:
+      natsServerMonitoringEndpoint: "nats:8222"
+      stream: "agent-tasks"
+      consumer: "worker"
+      lagThreshold: "10"
