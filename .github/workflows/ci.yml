@@ -28,6 +28,34 @@ jobs:
       - run: pip install -e ".[dev]"
       - run: mypy src/orchestra/
 
+  security:
+    name: Security Scanning
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0 # Full history for Gitleaks
+
+      - name: Gitleaks Scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Bandit Scan (SAST)
+        run: |
+          pip install bandit
+          bandit -r src/ -ll -ii
+
+      - name: pip-audit Scan (SCA)
+        uses: pypa/gh-action-pip-audit@v1.1.0
+        with:
+          inputs: pyproject.toml
+
   test:
     name: Test (${{ matrix.os }}, Py ${{ matrix.python-version }})
     strategy:

@@ -96,7 +96,9 @@ class SQLiteEventStore:
     """
 
     def __init__(self, db_path: str | None = None) -> None:
-        self._db_path = db_path if db_path is not None else ".orchestra/runs.db"
+        if db_path is None:
+            db_path = os.environ.get("ORCHESTRA_DB_PATH", ".orchestra/runs.db")
+        self._db_path = db_path
         self._conn: aiosqlite.Connection | None = None
 
     # ------------------------------------------------------------------

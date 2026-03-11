@@ -91,6 +91,9 @@ async def resume_run(run_id: str, body: ResumeRequest, request: Request) -> RunR
     if active_run is None:
         raise HTTPException(status_code=404, detail=f"Run '{run_id}' not found.")
 
+    if active_run.status == "completed":
+        raise HTTPException(status_code=409, detail=f"Run '{run_id}' already completed.")
+
     graph = registry.get(active_run.graph_name)
     if graph is None:
         raise HTTPException(
