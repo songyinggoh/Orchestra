@@ -57,10 +57,17 @@ server = [
 ]
 security = [
     "wasmtime>=23.0",
-    "joserfc>=1.0",
+    "joserfc>=1.6",
     "pynacl>=1.5",
 ]
-nats = ["nats-py>=2.8"]
+nats = ["nats-py>=2.14"]
+messaging = [
+    "nats-py>=2.14",
+    "joserfc>=1.6",
+    "peerdid>=0.5.2",
+    "base58>=2.1",
+    "cryptography>=42.0",
+]
 ray = ["ray[serve]>=2.10"]
 dev = [
     "pytest>=8.0",

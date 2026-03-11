@@ -1,0 +1,48 @@
+# NATS Helm chart values — 3-node JetStream cluster with file storage.
+# Chart: nats/nats >= 1.1.0
+# Install: helm repo add nats https://nats-io.github.io/k8s/helm/charts/
+#          helm install nats nats/nats -n orchestra -f deploy/nats-values.yaml
+
+config:
+  cluster:
+    enabled: true
+    replicas: 3
+    name: orchestra-nats
+
+  jetstream:
+    enabled: true
+    fileStore:
+      enabled: true
+      dir: /data/jetstream
+      pvc:
+        enabled: true
+        size: 10Gi
+        storageClassName: ""  # Use cluster default
+    memoryStore:
+      enabled: false
+
+container:
+  image:
+    repository: nats
+    tag: "2.10-alpine"
+    pullPolicy: IfNotPresent
+
+# Expose monitoring port 8222 — required for KEDA NATS JetStream scaler
+service:
+  ports:
+    monitor:
+      enabled: true
+      port: 8222
+
+# Prevent single node from taking down the cluster during rolling updates
+podDisruptionBudget:
+  enabled: true
+  maxUnavailable: 1
+
+# Reload server config without restarts
+reloader:
+  enabled: true
+
+# Disable nats-box debug container in production
+natsBox:
+  enabled: false
