@@ -10,7 +10,7 @@ LLM response caching is a well-understood optimization that delivers 80-95% late
 
 The recommended architecture is a **`CachedProvider` wrapper** that decorates any `LLMProvider` with cache-through semantics, backed by a pluggable `CacheBackend` protocol. Phase 3 ships two backends: `InMemoryCacheBackend` (cachetools TTLCache) and `DiskCacheBackend` (diskcache). A `RedisCacheBackend` is a mechanical Phase 4 addition. The `MemoryManager` protocol should be defined as a thin interface with a single `InMemoryMemoryManager` implementation.
 
-**Primary recommendation:** Build `CachedProvider` + `CacheBackend` protocol with in-memory and disk backends. Define `MemoryManager` protocol stub. Defer semantic caching, Redis, and vector retrieval to Phase 4.
+**Primary recommendation:** Build `CachedProvider` + `CacheBackend` protocol with in-memory and disk backends. Define a simplified 2-method `MemoryManager` protocol. Defer semantic caching, Redis, and vector retrieval to Phase 4.
 
 ---
 
@@ -238,9 +238,9 @@ cache_key = hashlib.sha256(canonical.encode()).hexdigest()
 
 | Backend | Library | Version | Infra | Persistence | Async Native | Thread-Safe | Use Case |
 |---------|---------|---------|-------|-------------|--------------|-------------|----------|
-| In-Memory | `cachetools` | 7.0.3 | None | No | No (wrap in executor) | No (use lock) | Dev, testing, ephemeral |
-| Disk | `diskcache` | 5.6.3 | None | Yes (SQLite) | No (wrap in executor) | Yes | Single-process production |
-| Redis | `redis` (redis-py) | 7.x | Redis server | Yes | Yes (`redis.asyncio`) | Yes | Distributed (Phase 4) |
+| In-Memory | `cachetools` | 7.0.3 | None | No | No | No | Dev, testing, ephemeral |
+| Disk | `diskcache` | 5.6.3 | None | Yes (SQLite) | No | Yes | Single-process production |
+| Redis (Phase 4) | `redis` | 7.x | Redis server | Yes | Yes | Yes | Distributed (Phase 4) |
 
 ### 3.2 InMemoryCacheBackend (cachetools)
 
@@ -514,121 +514,39 @@ Orchestra's existing infrastructure covers several memory concerns:
 | Cross-run context | Not implemented | Need MemoryManager |
 | Semantic retrieval | Not implemented | Phase 4 (vector store) |
 
-### 6.3 Recommended Phase 3 Scope: Thin Interface + Simple Implementation
+### 6.3 Recommended Phase 3 Scope: 2-Method Interface
 
 ```python
 # src/orchestra/memory/manager.py
 
 from __future__ import annotations
 
-from typing import Any, Literal, Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 
 @runtime_checkable
 class MemoryManager(Protocol):
-    """Protocol for multi-tier memory management.
+    """Simplified protocol for session persistence."""
 
-    Tiers:
-    - "hot": Fast access, limited capacity (in-memory or Redis)
-    - "warm": Medium access, run-scoped (EventStore)
-    - "cold": Slow access, cross-run (archive/vector search)
-    """
-
-    async def store(
-        self,
-        key: str,
-        value: Any,
-        *,
-        tier: Literal["hot", "warm", "cold"] = "hot",
-        metadata: dict[str, Any] | None = None,
-        ttl: int | None = None,
-    ) -> None: ...
-
+    async def store(self, key: str, value: Any) -> None: ...
     async def retrieve(self, key: str) -> Any | None: ...
-
-    async def search(
-        self,
-        query: str,
-        *,
-        tier: Literal["hot", "warm", "cold"] | None = None,
-        limit: int = 10,
-    ) -> list[dict[str, Any]]: ...
-
-    async def promote(self, key: str) -> None:
-        """Move from cold -> hot tier."""
-        ...
-
-    async def demote(self, key: str) -> None:
-        """Move from hot -> cold tier."""
-        ...
 
 
 class InMemoryMemoryManager:
     """Simple in-memory implementation for Phase 3.
 
-    All tiers backed by dicts. No persistence, no vector search.
+    All data backed by a dict. No persistence, no vector search.
     Establishes the interface for Phase 4 backends.
     """
 
-    def __init__(self, max_hot_items: int = 1000) -> None:
-        self._hot: dict[str, Any] = {}
-        self._warm: dict[str, Any] = {}
-        self._cold: dict[str, Any] = {}
-        self._metadata: dict[str, dict[str, Any]] = {}
+    def __init__(self) -> None:
+        self._data: dict[str, Any] = {}
 
-    async def store(
-        self,
-        key: str,
-        value: Any,
-        *,
-        tier: Literal["hot", "warm", "cold"] = "hot",
-        metadata: dict[str, Any] | None = None,
-        ttl: int | None = None,  # Ignored in this implementation
-    ) -> None:
-        store = {"hot": self._hot, "warm": self._warm, "cold": self._cold}[tier]
-        store[key] = value
-        if metadata:
-            self._metadata[key] = metadata
+    async def store(self, key: str, value: Any) -> None:
+        self._data[key] = value
 
     async def retrieve(self, key: str) -> Any | None:
-        # Search hot -> warm -> cold
-        for store in (self._hot, self._warm, self._cold):
-            if key in store:
-                return store[key]
-        return None
-
-    async def search(
-        self,
-        query: str,
-        *,
-        tier: Literal["hot", "warm", "cold"] | None = None,
-        limit: int = 10,
-    ) -> list[dict[str, Any]]:
-        # Phase 3: simple substring match on keys
-        # Phase 4: replace with vector similarity search
-        stores = (
-            [{"hot": self._hot, "warm": self._warm, "cold": self._cold}[tier]]
-            if tier
-            else [self._hot, self._warm, self._cold]
-        )
-        results = []
-        for store in stores:
-            for k, v in store.items():
-                if query.lower() in k.lower():
-                    results.append({"key": k, "value": v, "metadata": self._metadata.get(k, {})})
-                    if len(results) >= limit:
-                        return results
-        return results
-
-    async def promote(self, key: str) -> None:
-        for source in (self._cold, self._warm):
-            if key in source:
-                self._hot[key] = source.pop(key)
-                return
-
-    async def demote(self, key: str) -> None:
-        if key in self._hot:
-            self._cold[key] = self._hot.pop(key)
+        return self._data.get(key)
 ```
 
 ### 6.4 Phase 4 Upgrade Path
@@ -636,9 +554,7 @@ class InMemoryMemoryManager:
 | Phase 3 (Now) | Phase 4 (Later) | Migration |
 |----------------|-----------------|-----------|
 | `InMemoryMemoryManager` | `RedisMemoryManager` (hot tier) | Swap implementation, same protocol |
-| Dict-based search | pgvector semantic search (cold tier) | Add embedding + vector column to Postgres |
-| No automatic tiering | Time/relevance-based demotion | Add background task |
-| Key-based retrieve | Embedding-based similarity search | Add `search()` with cosine similarity |
+| Simplified store/retrieve | Multi-tiering + Vector search | Extend protocol or add specialized methods |
 
 **Confidence: MEDIUM** -- The interface is well-designed based on Mem0/Letta patterns, but the optimal search/retrieval strategy depends on actual usage patterns that Phase 3 deployment will reveal.
 
