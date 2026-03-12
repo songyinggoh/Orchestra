@@ -64,7 +64,6 @@ nats = ["nats-py>=2.14"]
 messaging = [
     "nats-py>=2.14",
     "joserfc>=1.6",
-    "peerdid>=0.5.2",
     "base58>=2.1",
     "cryptography>=42.0",
 ]
