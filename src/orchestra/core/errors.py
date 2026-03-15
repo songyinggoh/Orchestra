@@ -5,6 +5,8 @@ Every error includes: (a) what happened, (b) where, (c) how to fix.
 
 from __future__ import annotations
 
+from typing import Any
+
 
 class OrchestraError(Exception):
     """Base exception for all Orchestra errors."""
@@ -49,7 +51,17 @@ class OutputValidationError(AgentError):
 
 
 class MaxIterationsError(AgentError):
-    """Raised when an agent exceeds max tool-calling iterations."""
+    """Raised when an agent exceeds max tool-calling iterations.
+
+    Attributes:
+        partial_output: The AgentResult captured at the point the limit was
+            hit.  It is always populated so callers can inspect whatever work
+            was completed before the limit was reached.
+    """
+
+    def __init__(self, message: str, partial_output: Any = None) -> None:
+        super().__init__(message)
+        self.partial_output = partial_output
 
 
 # --- Provider Errors ---
@@ -167,3 +179,71 @@ class MCPTimeoutError(MCPError):
 
 class BudgetExceededError(OrchestraError):
     """Raised when a hard budget limit is exceeded before an LLM call."""
+
+
+# --- Routing Errors ---
+
+
+class RoutingError(OrchestraError):
+    """Base for routing/model-selection errors."""
+
+
+class ModelSelectionError(RoutingError):
+    """No model satisfies both SLA and budget constraints."""
+
+    def __init__(self, message: str, sla: Any = None, budget: Any = None) -> None:
+        super().__init__(message)
+        self.sla = sla
+        self.budget = budget
+
+
+class AllProvidersUnavailableError(RoutingError):
+    """All providers in failover chain failed or are circuit-broken."""
+
+
+# --- Identity Errors ---
+
+
+class IdentityError(OrchestraError):
+    """Base for agent identity errors."""
+
+
+class InvalidSignatureError(IdentityError):
+    """Agent Card or message signature verification failed."""
+
+
+class DelegationDepthExceededError(IdentityError):
+    """Delegation chain exceeds max_depth."""
+
+
+class AgentRevokedException(IdentityError):
+    """Raised when an agent's DID appears in the active revocation list.
+
+    This is checked BEFORE signature verification and BEFORE UCAN/ACL checks
+    so that a compromised agent is blocked at the earliest possible point.
+
+    Attributes:
+        did: The revoked DID that triggered the exception.
+    """
+
+    def __init__(self, did: str) -> None:
+        self.did = did
+        super().__init__(
+            f"Agent DID '{did}' has been revoked and is no longer authorized. "
+            "Re-provision a new identity to regain access."
+        )
+
+
+# --- Authorization Errors ---
+
+
+class AuthorizationError(OrchestraError):
+    """Base for capability/authorization errors."""
+
+
+class UCANVerificationError(AuthorizationError):
+    """UCAN token is expired, has invalid audience, or bad signature."""
+
+
+class CapabilityDeniedError(AuthorizationError):
+    """UCAN does not grant the required capability."""

@@ -28,6 +28,7 @@ class EventType(str, Enum):
     INTERRUPT_RESUMED = "interrupt.resumed"
     CHECKPOINT_CREATED = "checkpoint.created"
     SECURITY_VIOLATION = "security.violation"
+    RESTRICTED_MODE_ENTERED = "security.restricted_mode_entered"
     INPUT_REJECTED = "input.rejected"
     OUTPUT_REJECTED = "output.rejected"
     HANDOFF_INITIATED = "handoff.initiated"
@@ -218,6 +219,21 @@ class SecurityViolation(WorkflowEvent):
     details: dict[str, Any] = Field(default_factory=dict)
 
 
+class RestrictedModeEntered(WorkflowEvent):
+    """Emitted when an agent's execution context transitions into restricted mode.
+
+    This is a distinct event from SecurityViolation so monitoring systems can
+    subscribe to state-transition events separately from policy-violation events,
+    and so isinstance checks work without string-matching violation_type.
+    """
+
+    event_type: Literal[EventType.RESTRICTED_MODE_ENTERED] = EventType.RESTRICTED_MODE_ENTERED
+    node_id: str
+    risk_score: float = 0.0
+    injection_detected: bool = False
+    trigger: str = ""  # "risk_score" | "injection_detected"
+
+
 # --- Guardrail Events ---
 
 
@@ -284,6 +300,7 @@ AnyEvent = Annotated[
         InterruptResumed,
         CheckpointCreated,
         SecurityViolation,
+        RestrictedModeEntered,
         InputRejected,
         OutputRejected,
         HandoffInitiated,

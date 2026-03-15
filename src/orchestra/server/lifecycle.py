@@ -141,6 +141,12 @@ class RunManager:
             async def list_runs(self, *args: Any, **kwargs: Any) -> Any:
                 return await self._inner.list_runs(*args, **kwargs)
 
+            async def create_run(self, *args: Any, **kwargs: Any) -> Any:
+                return await self._inner.create_run(*args, **kwargs)
+
+            async def update_run_status(self, *args: Any, **kwargs: Any) -> Any:
+                return await self._inner.update_run_status(*args, **kwargs)
+
         broadcast_store = _BroadcastStore(event_store, active_run.event_queue)
 
         async def _run_workflow() -> dict[str, Any]:

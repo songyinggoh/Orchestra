@@ -30,7 +30,14 @@ def create_app(config: ServerConfig | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         """Initialize shared resources on startup; clean up on shutdown."""
+        import os
+        from orchestra.observability.logging import setup_logging
         from orchestra.storage.store import InMemoryEventStore
+
+        setup_logging(
+            level=os.environ.get("LOG_LEVEL", "INFO"),
+            json_output=os.environ.get("ORCHESTRA_ENV", "dev") != "dev",
+        )
 
         app.state.config = config
         app.state.graph_registry = GraphRegistry()

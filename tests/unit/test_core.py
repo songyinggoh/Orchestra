@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import ast
 import operator
+import sqlite3
 from typing import Annotated
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -674,6 +676,61 @@ class TestAgentIntegration:
         assert result.output == "A well-written article."
 
     @pytest.mark.asyncio
+    async def test_max_iterations_attaches_partial_output(self):
+        """MaxIterationsError.partial_output must contain accumulated tool records."""
+        @tool
+        async def noop_tool(x: str) -> str:
+            """Do nothing."""
+            return x
+
+        # Every LLM call returns a tool-call, so the loop never finishes naturally.
+        responses = [
+            LLMResponse(
+                content="calling tool",
+                tool_calls=[ToolCall(name="noop_tool", arguments={"x": str(i)})],
+            )
+            for i in range(5)
+        ]
+        llm = ScriptedLLM(responses)
+        agent_inst = BaseAgent(name="looper", tools=[noop_tool], max_iterations=3)
+        ctx = ExecutionContext(provider=llm)
+
+        with pytest.raises(MaxIterationsError) as exc_info:
+            await agent_inst.run("go", ctx)
+
+        err = exc_info.value
+        assert err.partial_output is not None, "partial_output should be attached to the exception"
+        assert err.partial_output.partial is True
+        # 3 iterations → 3 tool calls recorded
+        assert len(err.partial_output.tool_calls_made) == 3
+
+    @pytest.mark.asyncio
+    async def test_max_iterations_emit_partial_returns_result(self):
+        """emit_partial_on_max_iterations=True must return a partial AgentResult
+        instead of raising."""
+        @tool
+        async def noop_tool(x: str) -> str:
+            """Do nothing."""
+            return x
+
+        responses = [
+            LLMResponse(
+                content="calling tool",
+                tool_calls=[ToolCall(name="noop_tool", arguments={"x": str(i)})],
+            )
+            for i in range(5)
+        ]
+        llm = ScriptedLLM(responses)
+        agent_inst = BaseAgent(name="looper", tools=[noop_tool], max_iterations=2)
+        ctx = ExecutionContext(provider=llm)
+
+        result = await agent_inst.run("go", ctx, emit_partial_on_max_iterations=True)
+
+        assert isinstance(result, AgentResult)
+        assert result.partial is True
+        assert len(result.tool_calls_made) == 2  # max_iterations tool calls
+
+    @pytest.mark.asyncio
     async def test_agent_tool_loop(self):
         @tool
         async def calculator(expression: str) -> str:
@@ -728,3 +785,173 @@ class TestRunner:
         assert result.state["output"] == "done"
         assert result.duration_ms > 0
         assert "step" in result.node_execution_order
+
+
+# ===== SubgraphBuilder Security (CRITICAL-4.5) =====
+
+
+class TestSubgraphBuilderSecurity:
+    """Verify that the dynamic.py allowlist independently blocks untrusted modules
+    and that the stored allowlist tuple cannot be mutated at runtime."""
+
+    def test_dynamic_allowlist_blocks_untrusted_module(self):
+        """SubgraphBuilder.resolve_ref must raise ImportError for any ref not
+        covered by the configured allowlist, before importlib is invoked."""
+        from orchestra.core.dynamic import SubgraphBuilder
+
+        builder = SubgraphBuilder(allowed_prefixes=["orchestra.core.", "orchestra.tools."])
+
+        for untrusted_ref in ("os.path", "subprocess.run", "sys.exit", "builtins.eval"):
+            with pytest.raises(ImportError, match="not in the security allowlist"):
+                builder.resolve_ref(untrusted_ref)
+
+    def test_dynamic_allowlist_is_immutable(self):
+        """The allowlist stored on SubgraphBuilder._allowed_prefixes must be a
+        tuple (immutable). Any attempt to append or assign into it must raise
+        TypeError (tuple does not support mutation) or AttributeError."""
+        from orchestra.core.dynamic import SubgraphBuilder, DEFAULT_ALLOWED_PREFIXES
+
+        builder = SubgraphBuilder()
+
+        # Verify it is stored as a tuple, not a mutable list or set.
+        assert isinstance(builder._allowed_prefixes, tuple), (
+            "_allowed_prefixes must be a tuple, not "
+            f"{type(builder._allowed_prefixes).__name__}"
+        )
+
+        # Attempting to call .append() must raise AttributeError (tuples have no append).
+        with pytest.raises(AttributeError):
+            builder._allowed_prefixes.append("malicious.")  # type: ignore[attr-defined]
+
+        # Attempting item assignment must raise TypeError.
+        with pytest.raises(TypeError):
+            builder._allowed_prefixes[0] = "malicious."  # type: ignore[index]
+
+        # The module-level DEFAULT_ALLOWED_PREFIXES constant must also be a tuple.
+        assert isinstance(DEFAULT_ALLOWED_PREFIXES, tuple), (
+            "DEFAULT_ALLOWED_PREFIXES must be a tuple"
+        )
+        with pytest.raises(AttributeError):
+            DEFAULT_ALLOWED_PREFIXES.append("malicious.")  # type: ignore[attr-defined]
+
+
+# ===== Checkpoint Resume Exception Handling (CRITICAL-1.2) =====
+
+
+class TestCheckpointResumeExceptions:
+    """Verify that CompiledGraph.resume() catches only expected I/O and DB exceptions
+    when auto-initialising the SQLite event store, and lets all other exceptions
+    propagate without being swallowed.
+
+    The try block in question (compiled.py lines 262-267):
+        from orchestra.storage.sqlite import SQLiteEventStore
+        event_store = SQLiteEventStore()
+        await event_store.initialize()
+
+    Expected to catch and wrap as AgentError: ImportError, OSError, sqlite3.Error.
+    Expected to propagate without wrapping: RuntimeError (and any other Exception
+    subclass not in the narrow list above).
+    """
+
+    def _make_compiled_graph(self) -> "object":
+        """Return a minimal compiled graph instance for calling resume()."""
+        from orchestra.core.graph import WorkflowGraph
+        from orchestra.core.types import END
+
+        async def noop(state: dict) -> dict:
+            return {}
+
+        g = WorkflowGraph()
+        g.add_node("a", noop)
+        g.set_entry_point("a")
+        g.add_edge("a", END)
+        return g.compile()
+
+    @pytest.mark.asyncio
+    async def test_import_error_becomes_agent_error(self):
+        """ImportError (missing aiosqlite/module) is wrapped as AgentError."""
+        from orchestra.core.errors import AgentError
+
+        compiled = self._make_compiled_graph()
+        with patch(
+            "orchestra.storage.sqlite.SQLiteEventStore",
+            side_effect=ImportError("aiosqlite not installed"),
+        ):
+            with patch(
+                "orchestra.core.compiled.SQLiteEventStore",
+                side_effect=ImportError("aiosqlite not installed"),
+                create=True,
+            ):
+                # The import inside resume() itself — patch the module-level import
+                with patch.dict(
+                    "sys.modules",
+                    {"orchestra.storage.sqlite": None},
+                ):
+                    with pytest.raises(AgentError, match="Failed to auto-initialize"):
+                        await compiled.resume("nonexistent-run-id")
+
+    @pytest.mark.asyncio
+    async def test_os_error_becomes_agent_error(self):
+        """OSError from makedirs (e.g. permission denied) is wrapped as AgentError."""
+        from orchestra.core.errors import AgentError
+
+        compiled = self._make_compiled_graph()
+
+        mock_store = AsyncMock()
+        mock_store.initialize = AsyncMock(side_effect=OSError("Permission denied"))
+
+        with patch("orchestra.core.compiled.SQLiteEventStore", return_value=mock_store, create=True):
+            # Force the branch where event_store is None by not passing event_store;
+            # we also need the import inside the function to succeed and return our mock.
+            # Patch at the location where the name is looked up inside the function body.
+            import orchestra.storage.sqlite as _sqlite_mod
+            original_cls = getattr(_sqlite_mod, "SQLiteEventStore", None)
+            _sqlite_mod.SQLiteEventStore = lambda *a, **kw: mock_store  # type: ignore[attr-defined]
+            try:
+                with pytest.raises(AgentError, match="Failed to auto-initialize"):
+                    await compiled.resume("nonexistent-run-id")
+            finally:
+                if original_cls is not None:
+                    _sqlite_mod.SQLiteEventStore = original_cls  # type: ignore[attr-defined]
+
+    @pytest.mark.asyncio
+    async def test_sqlite_error_becomes_agent_error(self):
+        """sqlite3.Error from DB operations is wrapped as AgentError."""
+        from orchestra.core.errors import AgentError
+
+        compiled = self._make_compiled_graph()
+
+        mock_store = AsyncMock()
+        mock_store.initialize = AsyncMock(
+            side_effect=sqlite3.OperationalError("disk I/O error")
+        )
+
+        import orchestra.storage.sqlite as _sqlite_mod
+        original_cls = getattr(_sqlite_mod, "SQLiteEventStore", None)
+        _sqlite_mod.SQLiteEventStore = lambda *a, **kw: mock_store  # type: ignore[attr-defined]
+        try:
+            with pytest.raises(AgentError, match="Failed to auto-initialize"):
+                await compiled.resume("nonexistent-run-id")
+        finally:
+            if original_cls is not None:
+                _sqlite_mod.SQLiteEventStore = original_cls  # type: ignore[attr-defined]
+
+    @pytest.mark.asyncio
+    async def test_runtime_error_propagates(self):
+        """RuntimeError must NOT be swallowed — it should propagate as-is."""
+        compiled = self._make_compiled_graph()
+
+        mock_store = AsyncMock()
+        mock_store.initialize = AsyncMock(
+            side_effect=RuntimeError("unexpected internal failure")
+        )
+
+        import orchestra.storage.sqlite as _sqlite_mod
+        original_cls = getattr(_sqlite_mod, "SQLiteEventStore", None)
+        _sqlite_mod.SQLiteEventStore = lambda *a, **kw: mock_store  # type: ignore[attr-defined]
+        try:
+            with pytest.raises(RuntimeError, match="unexpected internal failure"):
+                await compiled.resume("nonexistent-run-id")
+        finally:
+            if original_cls is not None:
+                _sqlite_mod.SQLiteEventStore = original_cls  # type: ignore[attr-defined]

@@ -17,7 +17,6 @@ import pytest
 import pytest_asyncio
 
 nats_lib = pytest.importorskip("nats", reason="nats-py not installed")
-peerdid = pytest.importorskip("peerdid", reason="peerdid not installed")
 base58 = pytest.importorskip("base58", reason="base58 not installed")  # noqa: F841
 
 from orchestra.messaging import SecureNatsProvider, TaskConsumer, TaskPublisher

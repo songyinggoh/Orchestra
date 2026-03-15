@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import threading
 import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import structlog
 
@@ -61,6 +61,8 @@ class WasmToolSandbox:
         cfg.epoch_interruption = True  # Enable wall-clock timeout via epoch
         self._engine = wasmtime.Engine(cfg)
         self._epoch_interval = epoch_interval
+        self._ticker_stop = threading.Event()
+        self._ticker_thread: threading.Thread | None = None
         self._start_epoch_ticker()
 
     # ------------------------------------------------------------------
@@ -155,14 +157,24 @@ class WasmToolSandbox:
         """Reject modules that declare excessive memory up front."""
         import wasmtime
 
+        # Check imports
         for imp in module.imports:  # type: ignore[attr-defined]
             if isinstance(imp.type, wasmtime.MemoryType):
-                max_pages = imp.type.limits.max
-                if max_pages is not None and max_pages > policy.max_memory_pages:
-                    raise ToolMemoryError(
-                        f"Module requests {max_pages} memory pages "
-                        f"(policy max: {policy.max_memory_pages})"
-                    )
+                self._check_mem_limit(imp.type, policy)
+
+        # Check exports
+        for exp in module.exports:  # type: ignore[attr-defined]
+            if isinstance(exp.type, wasmtime.MemoryType):
+                self._check_mem_limit(exp.type, policy)
+
+    def _check_mem_limit(self, mem_type: Any, policy: SandboxPolicy) -> None:
+        """Check if a memory type exceeds policy limits."""
+        min_pages = mem_type.limits.min
+        if min_pages > policy.max_memory_pages:
+            raise ToolMemoryError(
+                f"Module requests {min_pages} memory pages "
+                f"(policy max: {policy.max_memory_pages})"
+            )
 
     def _read_output(self, instance: object, store: object) -> bytes:
         """Attempt to read output via a ``get_output`` export, else return b''."""
@@ -191,14 +203,39 @@ class WasmToolSandbox:
             ) from exc
         raise ToolExecutionError(str(exc)) from exc
 
+    def shutdown(self) -> None:
+        """Stop the epoch-ticker thread and wait for it to exit.
+
+        Call this when the sandbox is no longer needed (e.g., in a finally block
+        or an async lifespan handler).  Safe to call multiple times.
+        If not called explicitly, the daemon thread is killed automatically when
+        the process exits, so omitting it is only a concern for long-lived
+        processes that create many sandboxes.
+        """
+        self._ticker_stop.set()
+        if self._ticker_thread is not None and self._ticker_thread.is_alive():
+            self._ticker_thread.join(timeout=self._epoch_interval * 2 + 1)
+            if self._ticker_thread.is_alive():  # pragma: no cover
+                log.warning("wasm_epoch_ticker_did_not_stop_cleanly")
+        log.debug("wasm_epoch_ticker_stopped")
+
+    def __enter__(self) -> "WasmToolSandbox":
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        self.shutdown()
+
     def _start_epoch_ticker(self) -> None:
-        """Start a daemon thread that increments the engine epoch every second."""
+        """Start a daemon thread that increments the engine epoch every interval."""
 
         def _ticker() -> None:
-            while True:
-                time.sleep(self._epoch_interval)
+            # wait() returns True when the stop event is set, False on timeout.
+            # Loop exits immediately on shutdown() rather than sleeping a full interval.
+            while not self._ticker_stop.wait(self._epoch_interval):
                 self._engine.increment_epoch()
 
-        t = threading.Thread(target=_ticker, daemon=True, name="wasm-epoch-ticker")
-        t.start()
+        self._ticker_thread = threading.Thread(
+            target=_ticker, daemon=True, name="wasm-epoch-ticker"
+        )
+        self._ticker_thread.start()
         log.debug("wasm_epoch_ticker_started", interval_s=self._epoch_interval)

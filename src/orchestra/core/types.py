@@ -6,7 +6,7 @@ import uuid
 from enum import Enum
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class MessageRole(str, Enum):
@@ -16,6 +16,15 @@ class MessageRole(str, Enum):
     USER = "user"
     ASSISTANT = "assistant"
     TOOL = "tool"
+
+
+class Send(BaseModel):
+    """Dynamic fan-out target with per-item scoped state."""
+
+    node: str
+    state: dict[str, Any] = Field(default_factory=dict)
+
+    model_config = ConfigDict(frozen=True)
 
 
 class Message(BaseModel):
@@ -78,6 +87,10 @@ class AgentResult(BaseModel):
     handoff_to: str | None = None
     state_updates: dict[str, Any] = Field(default_factory=dict)
     token_usage: TokenUsage | None = None
+    partial: bool = False
+    """True when the result was produced by hitting max_iterations rather than
+    a clean finish.  The output may be empty and tool_calls_made contains
+    whatever the agent managed to execute before the limit was reached."""
 
     model_config = {"arbitrary_types_allowed": True}
 

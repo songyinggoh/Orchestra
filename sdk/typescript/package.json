@@ -1,0 +1,29 @@
+{
+  "name": "@orchestra/sdk",
+  "version": "0.1.0",
+  "description": "TypeScript SDK for the Orchestra Multi-Agent Framework",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "lint": "eslint src",
+    "typegen": "openapi-typescript ../../openapi.json -o src/types.ts"
+  },
+  "dependencies": {
+    "openapi-fetch": "^0.9.0",
+    "fetch-event-stream": "^0.1.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.0",
+    "tsup": "^8.0.0",
+    "vitest": "^1.2.0",
+    "msw": "^2.1.0",
+    "openapi-typescript": "^6.7.0"
+  }
+}

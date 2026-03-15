@@ -55,10 +55,25 @@ server = [
     "uvicorn[standard]>=0.30",
     "sse-starlette>=2.1",
 ]
+routing = ["numpy>=1.26"]
 security = [
     "wasmtime>=23.0",
     "joserfc>=1.6",
-    "pynacl>=1.5",
+]
+redis = ["redis[hiredis]>=7.0", "msgpack>=1.0"]
+memory = [
+    "redis[hiredis]>=7.0",
+    "msgpack>=1.0",
+]
+vectordb = [
+    "pgvector>=0.4",
+    "model2vec>=0.6",
+    "pyzstd>=0.17",
+    "msgpack>=1.0",
+]
+promptshield = [
+    "optimum[onnxruntime]>=1.24",
+    "transformers>=4.51,<5.0",
 ]
 nats = ["nats-py>=2.14"]
 messaging = [
@@ -103,6 +118,7 @@ asyncio_mode = "auto"
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "integration: marks integration tests",
+    "load: marks load/stress tests requiring 1000+ concurrent tasks (deselect with '-m \"not load\"')",
 ]
 
 [tool.ruff]

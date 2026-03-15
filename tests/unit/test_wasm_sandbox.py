@@ -34,22 +34,19 @@ from orchestra.tools.wasm_runtime import WasmToolSandbox  # noqa: E402
 
 def _nop_wasm() -> bytes:
     """A valid Wasm module with a _start export that does nothing."""
-    # Build binary using wasmtime.Module from WAT text format
     import wasmtime
-    engine = wasmtime.Engine()
-    # WAT: module with _start function that returns immediately
     wat = """
     (module
-      (func (export "_start"))
+      (func (export "_start")
+        return)
     )
     """
-    return wasmtime.Module(engine, wat).serialize()
+    return wasmtime.wat2wasm(wat)
 
 
 def _infinite_loop_wasm() -> bytes:
     """A Wasm module whose _start loops forever — should be fuel-terminated."""
     import wasmtime
-    engine = wasmtime.Engine()
     wat = """
     (module
       (func (export "_start")
@@ -59,7 +56,7 @@ def _infinite_loop_wasm() -> bytes:
       )
     )
     """
-    return wasmtime.Module(engine, wat).serialize()
+    return wasmtime.wat2wasm(wat)
 
 
 # ---------------------------------------------------------------------------
@@ -71,7 +68,9 @@ class TestWasmToolSandbox:
 
     @pytest.fixture(scope="class")
     def sandbox(self):
-        return WasmToolSandbox()
+        s = WasmToolSandbox()
+        yield s
+        s.shutdown()
 
     def test_nop_module_executes_successfully(self, sandbox):
         """A valid no-op module should complete without raising."""
@@ -102,23 +101,21 @@ class TestWasmToolSandbox:
 
     def test_invalid_wasm_raises_execution_error(self, sandbox):
         """Non-Wasm bytes should raise ToolExecutionError during compilation."""
-        with pytest.raises(ToolExecutionError, match="compilation failed"):
+        with pytest.raises(ToolExecutionError, match="Wasm module compilation failed"):
             sandbox.execute(b"not wasm bytes at all", policy=POLICY_DEFAULT)
 
     def test_missing_start_export_raises_execution_error(self, sandbox):
         """A Wasm module with no _start or run export should raise ToolExecutionError."""
         import wasmtime
-        engine = wasmtime.Engine()
         # Module with no exports
         wat = "(module (func $internal))"
-        wasm = wasmtime.Module(engine, wat).serialize()
+        wasm = wasmtime.wat2wasm(wat)
         with pytest.raises(ToolExecutionError, match="export"):
             sandbox.execute(wasm, policy=POLICY_DEFAULT)
 
     def test_wasi_no_filesystem_access(self, sandbox):
         """Module attempting filesystem I/O should fail because no FS preopen is granted."""
         import wasmtime
-        engine = wasmtime.Engine()
         # This WAT only defines _start but the WASI file-open call would be absent in
         # pure WAT — we test that WasiConfig has zero preopen dirs by checking config
         cfg = wasmtime.WasiConfig()
@@ -133,17 +130,16 @@ class TestWasmToolSandbox:
         assert POLICY_STRICT.max_memory_pages < POLICY_DEFAULT.max_memory_pages < POLICY_RELAXED.max_memory_pages
 
     def test_memory_limit_validation(self, sandbox):
-        """A module that imports more memory than the policy allows should raise ToolMemoryError."""
+        """A module that exports more memory than the policy allows should raise ToolMemoryError."""
         import wasmtime
-        engine = wasmtime.Engine()
         # Module that requests 512 pages (32MB) — policy only allows 64 pages
         wat = """
         (module
-          (memory (import "env" "mem") 512)
+          (memory (export "memory") 512)
           (func (export "_start"))
         )
         """
-        wasm = wasmtime.Module(engine, wat).serialize()
+        wasm = wasmtime.wat2wasm(wat)
         strict = SandboxPolicy(fuel=10_000_000, timeout_epochs=5, max_memory_pages=64)
         with pytest.raises(ToolMemoryError):
             sandbox.execute(wasm, policy=strict)
@@ -154,3 +150,21 @@ class TestWasmToolSandbox:
         for _ in range(5):
             result = sandbox.execute(wasm, policy=POLICY_DEFAULT)
             assert isinstance(result, bytes)
+
+    def test_shutdown_stops_ticker_thread(self):
+        """shutdown() must stop the ticker thread so it doesn't leak on disposal."""
+        import threading
+
+        s = WasmToolSandbox(epoch_interval=0.05)
+        assert s._ticker_thread is not None
+        assert s._ticker_thread.is_alive()
+
+        s.shutdown()
+
+        assert not s._ticker_thread.is_alive(), "Ticker thread should have exited after shutdown()"
+
+    def test_shutdown_is_idempotent(self):
+        """Calling shutdown() twice must not raise."""
+        s = WasmToolSandbox(epoch_interval=0.05)
+        s.shutdown()
+        s.shutdown()  # Second call must be a no-op
