@@ -288,9 +288,30 @@ JetStream stores **only opaque JWE ciphertexts**. Even with full NATS access, an
 
 ---
 
-## 10. Open Questions
+## 10. Resolved Decisions
 
-1. **Key distribution:** How do agents discover each other's DIDs? Options: central registry, NATS key-value store, out-of-band exchange
-2. **Multi-instance agents:** When KEDA scales to N replicas, do all share one DID or get unique DIDs? (Shared DID = shared secrets = weaker isolation)
-3. **Performance:** DIDComm pack/unpack adds latency per message. Need benchmarks for high-throughput subjects.
-4. **Key rotation:** What triggers rotation? Time-based? Event-based? How to handle in-flight messages during rotation?
+### Library Choice (Gap 1 — RESOLVED)
+- **Decision:** Use `joserfc>=1.6` directly. Do NOT add `didcomm-python` (unmaintained, pins attrs<23).
+- `joserfc` 1.6+ supports ECDH-1PU via `joserfc.drafts.jwe_ecdh_1pu.register_ecdh_1pu()` at startup
+- ECDH-ES (anoncrypt) also supported natively, no registration needed
+- Same library reused for T-4.7 UCAN JWT operations
+- No `pycryptodome` needed for A256CBC-HS512 content encryption
+
+### Key Distribution (Gap 2 — RESOLVED)
+- **Decision:** Use NATS JetStream KV Store (`KV:agent-keys/{agent_type}`)
+- One X25519 public key per agent TYPE (not per instance) in Wave 1
+- Bootstrapping: `kv.create()` with first-writer-wins (atomic, `KeyWrongLastSequenceError` for races)
+- All replicas of same type converge to same public key via `kv.get()` after failed `kv.create()`
+- KV entries persist across KEDA scale-to-zero
+- T-4.6 upgrade: swap raw JWK value → signed Agent Card (same bucket, same key scheme)
+- Security: add NATS NKeys with per-type write ACLs on `agent-keys.*` subject
+
+### Encryption Mode (Gap 2 corollary — RESOLVED)
+- **Wave 1:** ECDH-ES (anoncrypt) — unsigned KV discovery makes ECDH-1PU sender auth redundant
+- **Wave 2:** Upgrade to ECDH-1PU (authcrypt) alongside T-4.6 Signed Agent Cards
+- Not a security regression: ECDH-ES satisfies T-4.1 done criterion (opaque ciphertexts in NATS)
+
+## 11. Remaining Open Questions
+
+1. **Performance:** JWE pack/unpack adds latency per message. Need benchmarks for high-throughput subjects.
+2. **Key rotation:** Atomic via `kv.update(key, new_value, last=revision)` (CAS). TTL can auto-expire. But how to handle in-flight messages encrypted with old key during rotation window?

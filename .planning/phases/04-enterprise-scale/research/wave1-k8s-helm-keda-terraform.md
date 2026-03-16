@@ -527,16 +527,24 @@ deploy/
 └── otel-collector.yaml     # OTel Collector config (see wave1-otel-collector.md)
 ```
 
+### Cloud Target (Gap 5 — RESOLVED)
+**Decision: GKE primary, EKS secondary.**
+- GKE has native gVisor support (one field vs ~100 lines DaemonSet on EKS)
+- Helm chart stays cloud-agnostic via `runtimeClassName` value override
+- GKE is default in `deploy/terraform/environments/`; EKS config provided for multi-cloud
+- Kata deferred to Phase 5 (GKE doesn't support it; gVisor sufficient for I/O-bound agents)
+
 ### EKS vs GKE Decision Matrix
 
 | Factor | EKS | GKE |
 |--------|-----|-----|
-| gVisor | DaemonSet (manual) | Native (one field) |
+| gVisor | DaemonSet (manual) | **Native** (one field) |
 | Kata | Custom AMI | Not available |
 | KEDA | Helm install | Helm install |
 | Workload Identity | IRSA | Native WI |
 | Cost (estimate) | ~$73/mo control plane | ~$73/mo control plane |
 | Terraform maturity | Very mature module | Very mature module |
+| **Verdict** | Secondary | **Primary** |
 
 ### Validation Checklist
 1. `helm template` renders without errors

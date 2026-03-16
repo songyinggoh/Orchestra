@@ -71,7 +71,8 @@ Wave 4 — Ecosystem (Weeks 25-26)
 - `src/orchestra/messaging/consumer.py` — pull-based consumer, transparent decryption, explicit ack
 - `deploy/nats-values.yaml` — NATS Helm chart (JetStream, file storage, 3-node cluster)
 - `tests/integration/test_secure_nats.py`
-**Libraries:** `nats-py>=2.14`, `joserfc>=1.0`
+**Libraries:** `nats-py>=2.14`, `joserfc>=1.6`
+**Note:** joserfc>=1.6 confirmed to support ECDH-1PU (draft-madden-jose-ecdh-1pu-04) and ECDH-ES with X25519/OKPKey + A256CBC-HS512. ECDH-1PU requires `register_ecdh_1pu()` at startup (not auto-registered). No pycryptodome needed for A256CBC-HS512 content encryption. Do not add `didcomm-python` (last PyPI release 2023-05, pins authlib<2.0 which conflicts with joserfc migration path).
 **Done when:** Publish 100 tasks → 100 acks; NATS store contains only opaque ciphertexts; decryption verified.
 
 ---
@@ -109,7 +110,7 @@ Wave 4 — Ecosystem (Weeks 25-26)
 - `src/orchestra/providers/failover.py` — ProviderFailover with AsyncCircuitBreaker
 - `src/orchestra/providers/strategy.py` — NativeStrategy vs PromptedStrategy (transparent switching)
 - `tests/unit/test_cost_router.py`
-**Libraries:** `numpy>=1.26`, `aiobreaker>=1.2`
+**Libraries:** `numpy>=1.26` (Note: existing `AsyncCircuitBreaker` from `security/circuit_breaker.py` is used per DD-6 — no `aiobreaker`)
 **Done when:** 30%+ cost reduction on mixed workloads; failover within 5s of primary failure.
 
 ---
@@ -135,7 +136,7 @@ Wave 4 — Ecosystem (Weeks 25-26)
 - `src/orchestra/identity/discovery.py` — SignedDiscoveryProvider (verifies signatures on Agent Cards before ingestion)
 - `src/orchestra/security/secrets.py` — SecretProvider ABC + Vault (hvac)
 - `tests/unit/test_agent_identity.py`, `tests/unit/test_signed_discovery.py`
-**Libraries:** `peerdid>=0.5.2`, `pynacl>=1.5`, `hvac>=2.4.0`
+**Libraries:** `hvac>=2.4.0` (Note: custom `orchestra.messaging.peer_did` module is used per DD-8 — no `peerdid`/`pynacl`)
 **Done when:** Agents carry verified DIDs; gossip poisoning blocked by signature verification.
 
 ---

@@ -8,8 +8,10 @@ Tier 1 of Orchestra's 3-tier sandboxing strategy:
 
 from __future__ import annotations
 
+import atexit
 import threading
 import time
+import weakref
 from typing import TYPE_CHECKING, Any
 
 import structlog
@@ -64,6 +66,11 @@ class WasmToolSandbox:
         self._ticker_stop = threading.Event()
         self._ticker_thread: threading.Thread | None = None
         self._start_epoch_ticker()
+
+        # Safety net: call shutdown() at process exit even if the caller forgot.
+        # weakref avoids keeping this object alive solely due to the atexit entry.
+        _ref = weakref.ref(self)
+        atexit.register(lambda: _ref() and _ref().shutdown())
 
     # ------------------------------------------------------------------
     # Public API
@@ -235,7 +242,7 @@ class WasmToolSandbox:
                 self._engine.increment_epoch()
 
         self._ticker_thread = threading.Thread(
-            target=_ticker, daemon=True, name="wasm-epoch-ticker"
+            target=_ticker, daemon=False, name="wasm-epoch-ticker"
         )
         self._ticker_thread.start()
         log.debug("wasm_epoch_ticker_started", interval_s=self._epoch_interval)

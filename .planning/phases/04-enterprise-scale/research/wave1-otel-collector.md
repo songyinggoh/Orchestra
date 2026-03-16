@@ -536,13 +536,21 @@ Orchestra app → OTLP HTTP → localhost:4318 → Agent DaemonSet → Gateway �
 
 ---
 
-## 10. Open Questions
+## 10. Resolved Decisions
 
-1. **Trace ID routing correctness:** Need to verify loadbalancingexporter consistent hashing works with NATS-originated trace IDs (not HTTP-originated)
-2. **Redaction processor maturity:** The redaction processor is in `alpha` status. May need fallback to attributes+transform only.
-3. **Multi-tenant traces:** If Orchestra supports multiple tenants, need tenant-aware sampling policies
-4. **Cost:** Gateway replicas + storage backends add infrastructure cost. Need to estimate for budget planning.
-5. **Existing Phase 3 OTel:** Verify Phase 3's OTLP exporter config is compatible with hostPort DaemonSet pattern
+### Redaction Processor Maturity (Gap 7 — RESOLVED)
+- **Decision:** Use attributes + transform processors as primary PII defense; redaction processor as optional enhancement
+- Attributes processor (delete/hash) and Transform processor (OTTL patterns) are `stable`
+- Redaction processor is `alpha` — enable via Helm value `otel.redaction.enabled: true`
+- If redaction processor breaks on upgrade, attributes + transform layers still protect PII
+- Gateway pipeline order: `memory_limiter → redaction (optional) → attributes/pii → transform/pii → tail_sampling → batch`
+
+## 11. Remaining Open Questions
+
+1. **Trace ID routing correctness:** Verify loadbalancingexporter consistent hashing works with NATS-originated trace IDs (not HTTP-originated)
+2. **Multi-tenant traces:** If Orchestra supports multiple tenants, need tenant-aware sampling policies
+3. **Cost:** Gateway replicas + storage backends add infrastructure cost. Need budget estimate.
+4. **Existing Phase 3 OTel:** Verify Phase 3's OTLP exporter config is compatible with hostPort DaemonSet pattern
 
 ---
 

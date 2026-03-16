@@ -370,13 +370,44 @@ Tier 3: Kata Sandbox (T-4.2, optional)
 
 ---
 
-## 7. Open Questions
+## 7. Resolved Decisions
 
-1. **Wasm tool compilation:** How do tool authors compile Python/JS tools to .wasm? (Options: Pyodide for Python-in-Wasm, or restrict to Rust/C/Go compiled tools)
-2. **Tool I/O protocol:** How does the agent pass input to and read output from Wasm tools? (Options: stdin/stdout, shared memory, function args)
-3. **gVisor + GPU:** If local model inference is added later, gVisor won't support GPU. Need escape hatch to runc for GPU pods.
-4. **Kata availability:** GKE doesn't support Kata. If multi-cloud, Kata is EKS/bare-metal only.
-5. **WASI Preview 2 timeline:** When stable, tools could make HTTP calls (useful for API-based tools). Monitor progress.
+### Tool Compilation Pipeline (Gap 8 — RESOLVED)
+- **Decision:** Native Wasm targets (Rust/C/Go) as primary compilation path
+- Rust: `cargo build --target wasm32-wasip1` → ~50-500KB per tool
+- Go: `GOARCH=wasm GOOS=wasip1 go build` via TinyGo
+- C: `clang --target=wasm32-wasi`
+- Provide `tool-template/` with minimal Rust JSON-in/JSON-out example
+- **Eliminated:** Pyodide (6.4MB core, 4-5s cold start — disqualifying for server-side sandbox)
+- **Eliminated:** Extism (bundles own runtime via `extism_sys`, conflicts with `wasmtime>=25.0.0` version lock)
+- **Deferred to Phase 5:** componentize-py for typed Python Wasm components (toolchain still maturing)
+
+### Tool I/O Protocol (Gap 9 — RESOLVED)
+- **Decision:** stdin/stdout with JSON serialization
+- Tool contract: read JSON from stdin, write JSON to stdout, exit 0 on success
+- Host uses `WasiCtxBuilder` with `.stdin(pipe)` and `.stdout(pipe)` redirection
+- Language-agnostic (any WASI tool that can print works)
+- Debuggable locally: `echo '{"x":1}' | wasmtime tool.wasm`
+- Negligible overhead vs LLM call latency (microseconds for KB-sized payloads)
+- Migration to Component Model WIT interfaces (Phase 5) is non-breaking addition
+
+### WASI Version (Gap 10 — RESOLVED)
+- **Decision:** Target WASI Preview 1 (`wasm32-wasip1`) for T-4.3
+- P2 Component Model deferred to Phase 5 (spec 0.3.0 shipped Feb 2026, still evolving)
+- wasi:http (P2's main addition) is intentionally blocked by sandbox policy → no benefit now
+- P1→P2 migration non-breaking: host detects module vs component at load time
+- Tighten library pin: `wasmtime>=25.0.0` (first version with formal WASI 0.2.1 compat)
+
+### Kata Containers (Gap 6 — RESOLVED)
+- **Decision:** Defer Kata to Phase 5
+- GKE (primary cloud) doesn't support Kata
+- gVisor sufficient for I/O-bound agent workloads
+- Wasm sandbox handles lightweight tool isolation at application level
+- Helm chart `runtimeClassName` stays configurable for future Kata drop-in
+
+## 8. Remaining Open Questions
+
+1. **gVisor + GPU:** If local model inference is added later, gVisor won't support GPU. Need escape hatch to `runc` RuntimeClass for GPU pods.
 
 ---
 

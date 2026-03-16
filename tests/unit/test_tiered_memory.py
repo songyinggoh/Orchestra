@@ -117,7 +117,7 @@ async def test_stats_cold_count_error_is_logged(mock_cold, caplog):
     # Cold count falls back to 0 — method must not raise
     assert result.cold_count == 0
     # The failure must be visible in logs
-    assert any("cold-tier count" in r.message for r in caplog.records), (
+    assert any("cold-tier count" in r.getMessage() for r in caplog.records), (
         "Expected error log about cold-tier count failure"
     )
 
@@ -178,7 +178,7 @@ async def test_stop_unexpected_task_exception_is_logged(caplog):
     with caplog.at_level(logging.ERROR, logger="orchestra.memory.tiers"):
         await mgr.stop()
 
-    assert any("unexpected exception" in r.message for r in caplog.records), (
+    assert any("unexpected exception" in r.getMessage() for r in caplog.records), (
         "Expected error log about unexpected background task exception"
     )
 

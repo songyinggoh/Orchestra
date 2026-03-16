@@ -49,21 +49,38 @@ These are NON-NEGOTIABLE. Every implementer must follow them exactly.
 
 ---
 
+## Critical Implementation Notes (added 2026-03-13)
+
+**joserfc EdDSA deprecation (RFC 9864):** As of joserfc 1.6.3, EdDSA is deprecated. All
+`jwt.encode()`, `jwt.decode()`, `jws.serialize_compact()`, and `jws.deserialize_compact()`
+calls MUST include `algorithms=["EdDSA"]` or they will raise `UnsupportedAlgorithmError`.
+A `SecurityWarning` is emitted but can be suppressed with `warnings.filterwarnings`.
+
+**UCAN `ucv` claim location:** The `ucv` field belongs in the JWT **payload**, NOT the header.
+joserfc rejects non-standard header claims with `UnsupportedHeaderError`.
+
+**Inventory staleness (corrected below):** Several files were partially or fully implemented
+during Wave 1 scaffolding. The inventory table below reflects the ACTUAL current state as of
+2026-03-13, not the pre-Wave-1 state originally documented. Plans should diff against existing
+code before rewriting.
+
+---
+
 ## Existing Codebase Inventory
 
 Files that ALREADY EXIST and will be REWRITTEN or EXTENDED:
 
 | File | Current State | Wave 2 Action |
 |------|--------------|---------------|
-| `src/orchestra/routing/router.py` | CostAwareRouter + ThompsonModelSelector (basic, no SLA/budget constraints) | REWRITE: add SelectionFallback, SLA constraints, budget-awareness |
-| `src/orchestra/providers/failover.py` | ProviderFailover + inline AsyncCircuitBreaker (duplicate) | REWRITE: use `security.circuit_breaker.AsyncCircuitBreaker`, add error classification, TTFT tracking |
-| `src/orchestra/cost/persistent_budget.py` | PersistentBudgetStore + TenantBudgetManager (sync SQLite, no locking) | REWRITE: async, double-entry ledger, pessimistic locking per DD-2 |
-| `src/orchestra/cost/tenant.py` | BudgetConfig, BudgetState, Tenant (basic dataclasses) | EXTEND: add hierarchy semantics, parent/child budget delegation |
-| `src/orchestra/identity/agent_identity.py` | AgentIdentity + AgentCard + Ed25519Signer (basic) | EXTEND: add did:web support, version/expires_at on AgentCard, JWS Compact signing |
-| `src/orchestra/identity/ucan.py` | UcanManager + UcanAuthenticator (uses broken py-ucan library) | REWRITE: replace py-ucan with joserfc JWT per DD-9 |
-| `src/orchestra/security/acl.py` | ToolACL (no UCAN integration) | EXTEND: add optional `ucan` parameter per DD-4 |
-| `src/orchestra/core/errors.py` | Standard error hierarchy (no routing/identity errors) | EXTEND: add routing, identity, authorization error types |
-| `src/orchestra/core/context.py` | ExecutionContext (no identity/tenant/ucan fields) | EXTEND: add Optional identity, ucan, tenant_id, delegation_context |
+| `src/orchestra/routing/router.py` | CostAwareRouter + ThompsonModelSelector (basic, no SLA/budget constraints) | EXTEND: add SelectionFallback, SLA constraints, budget-awareness |
+| `src/orchestra/providers/failover.py` | Already imports `AsyncCircuitBreaker` from `security.circuit_breaker` (DD-6 done). Has `ProviderFailover` with `allow_request()`/`record_success()`/`record_failure()` pattern and basic `_is_retryable()` string matching. No error classification enum, no TTFT tracking, no budget pre-check (DD-16). | EXTEND: add error classification enum, TTFT-based circuit breaking (DD-14), budget pre-check on failover (DD-16) |
+| `src/orchestra/cost/persistent_budget.py` | Already async (aiosqlite), WAL mode, `BEGIN IMMEDIATE` pessimistic locking (DD-2), microdollar integers (DD-11), idempotency keys with pending/committed states (DD-12), parent hierarchy traversal in `can_afford()`. Has `PersistentBudgetStore` + `TenantBudgetManager`. | EXTEND: add double-entry ledger reconciliation, budget hold/release for failover (DD-16), period reset improvements |
+| `src/orchestra/cost/tenant.py` | BudgetConfig, BudgetState, BudgetStatus, Tenant (basic dataclasses) | EXTEND: add hierarchy semantics, parent/child budget delegation |
+| `src/orchestra/identity/agent_identity.py` | AgentIdentity + AgentCard + Ed25519Signer (basic). Uses raw `cryptography` Ed25519 signing (not joserfc JWS). `to_json()` excludes `signature` field. No `card_hash`, `version`, `expires_at`, `max_delegation_depth`. No `did:web` support. | EXTEND: add did:web support, version/expires_at/card_hash on AgentCard (DD-19), JWS Compact signing via joserfc (DD-3, requires `algorithms=['EdDSA']`), SignedDiscoveryProvider |
+| `src/orchestra/identity/ucan.py` | Already rewritten to `UCANService` using joserfc JWT (DD-9 done). Has `issue()`, `delegate()`, `verify()`, `OrchestraCapability`. Error types: `UCANExpiredError`, `UCANAudienceMismatchError`, `UCANCapabilityError`. `ucv` correctly in payload. `verify()` already passes `algorithms=['EdDSA']`; `issue()` now also passes it. | EXTEND: add capability attenuation validation in `delegate()` (DD-4), delegation chain depth enforcement |
+| `src/orchestra/security/acl.py` | ToolACL with pattern-based allow/deny lists. `is_authorized(tool_name: str)` takes one param only. No UCAN integration. | EXTEND: add optional `ucan` parameter per DD-4 |
+| `src/orchestra/core/errors.py` | Standard error hierarchy: Graph, Agent, Provider, Tool, State, Persistence, MCP, Budget errors. No routing/identity/authorization errors. | EXTEND: add routing, identity, authorization error types |
+| `src/orchestra/core/context.py` | Already has Wave 2 fields: `tenant_id: str | None`, `identity: Any`, `ucan_token: str | None`, `delegation_context: Any`. | EXTEND: add type annotations (replace `Any` with proper types), add `routing_fallback: SelectionFallback` (DD-1) |
 
 Files that DO NOT EXIST yet (will be CREATED):
 
@@ -668,7 +685,7 @@ python -c "from orchestra.identity.types import DelegationContext, UCANCapabilit
        from joserfc.jwk import OKPKey
        payload = self.to_json().encode("utf-8")
        header = {"alg": "EdDSA"}
-       self.signature = jws.serialize_compact(header, payload, signing_key)
+       self.signature = jws.serialize_compact(header, payload, signing_key, algorithms=["EdDSA"])
 
    def verify_jws(self, verification_key: OKPKey) -> bool:
        """Verify JWS Compact signature (DD-3)."""
@@ -877,8 +894,8 @@ class UCANService:
             "prf": proofs or [],
             "nnc": secrets.token_hex(8),
         }
-        header = {"alg": "EdDSA", "typ": "JWT", "ucv": "0.8.1"}
-        return jwt.encode(header, payload, self._key)
+        header = {"alg": "EdDSA", "typ": "JWT"}
+        return jwt.encode(header, payload, self._key, algorithms=["EdDSA"])
 
     @staticmethod
     def verify(

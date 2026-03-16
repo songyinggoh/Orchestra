@@ -544,13 +544,32 @@ authorization {
 
 ---
 
-## 13. Open Questions
+## 13. Resolved Decisions
 
-1. **Stream topology:** One stream (TASKS) for everything, or separate streams per concern (TASKS, EVENTS, HANDOFFS)? Separate streams = independent retention/scaling. One stream = simpler management.
-2. **Exactly-once vs at-least-once:** JetStream provides at-least-once. For exactly-once, need idempotent consumers (check `Nats-Msg-Id` before processing). Is this worth the complexity?
-3. **Message ordering:** Within a subject, messages are ordered. Across subjects, no ordering guarantee. Does Orchestra need cross-subject ordering for workflows?
-4. **NATS vs Redis Streams:** Phase 4 also adds Redis (T-4.8). Should Redis Streams be considered as an alternative to NATS? (Answer: No — NATS is purpose-built for messaging; Redis L2 is for caching/memory.)
-5. **Monitoring endpoint access:** KEDA needs access to NATS monitoring (:8222). Ensure network policy allows this.
+### Stream Topology (Gap 4 — RESOLVED)
+- **Decision:** Separate streams per concern
+
+| Stream | Subjects | Retention | Rationale |
+|--------|----------|-----------|-----------|
+| `TASKS` | `orchestra.tasks.*` | `WORK_QUEUE` | Exclusive assignment — one consumer acks, message removed |
+| `EVENTS` | `orchestra.events.>` | `LIMITS` (7d) | Broadcast, replay for debugging/auditing |
+| `HANDOFFS` | `orchestra.handoffs.*` | `INTEREST` | Delete when all consumers have acked |
+
+- Different retention policies per concern (tasks are work queue, events need replay)
+- Independent scaling (KEDA monitors TASKS consumer lag only, not event noise)
+- Cleaner NATS subject permissions per agent role
+
+### Trace Propagation (Gap 11 — RESOLVED)
+- **Decision:** W3C traceparent/tracestate via NATS message headers
+- Publishing: `opentelemetry.propagators.inject(headers)` before `js.publish()`
+- Consuming: `opentelemetry.propagators.extract(msg.headers)` to restore trace context
+- OTel loadbalancing exporter in agent tier routes by traceID → same gateway for tail sampling
+
+## 14. Remaining Open Questions
+
+1. **Exactly-once vs at-least-once:** JetStream provides at-least-once. For exactly-once, need idempotent consumers (check `Nats-Msg-Id` before processing). Worth the complexity? (Likely no — idempotent task handlers are simpler.)
+2. **Message ordering:** Within a subject, messages are ordered. Across subjects, no guarantee. Does Orchestra need cross-subject ordering for workflows? (Likely no — workflow state machine handles ordering.)
+3. **Monitoring endpoint access:** KEDA needs access to NATS monitoring (:8222). Ensure network policy allows this in Helm chart.
 
 ---
 
