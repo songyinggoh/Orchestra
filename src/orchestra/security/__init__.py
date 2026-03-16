@@ -43,8 +43,10 @@ from orchestra.security.guardrails import (
     GuardedAgent,
     OnFail,
     PIIDetector,
+    PromptShield,
     SchemaValidator,
 )
+from orchestra.security.attenuation import CapabilityAttenuator
 from orchestra.security.validators import (
     MaxLengthGuardrail,
     PIIRedactionGuardrail,
@@ -83,7 +85,9 @@ __all__ = [
     # Built-in validators
     "ContentFilter",
     "PIIDetector",
+    "PromptShield",
     "SchemaValidator",
+    "CapabilityAttenuator",
     # Extended validators
     "MaxLengthGuardrail",
     "RegexGuardrail",

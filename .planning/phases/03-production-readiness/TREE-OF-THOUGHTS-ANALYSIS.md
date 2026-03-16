@@ -21,23 +21,24 @@
 
 ## Q2: Scope Risk — Is Phase 3 too ambitious?
 
-### Winner [0.88]: Manageable with two deferrals
+### Winner [0.88]: Manageable with three deferrals
 
 **Defer to Phase 4:**
 - Redis pub/sub (no distributed deployment until Phase 4)
-- Full multi-tier memory with vector search (speculative, no demonstrated need)
+- Full multi-tier memory with vector search (simplified to 2-method protocol in Phase 3)
+- Prometheus metrics and OTel Collector/Jaeger/Tempo infrastructure
 
 **Keep in Phase 3:**
 
 | Feature | Value | Complexity | Verdict |
 |---------|-------|-----------|---------|
 | 3.1 FastAPI Server | High (primary deliverable) | Medium | Keep |
-| 3.2 OTel | High (production requirement) | Low | Keep |
-| 3.3 LLM Response Cache | Medium | Low (CachedProvider) | Keep |
-| 3.4 MemoryManager protocol | Medium (interface design) | Low | Keep as stub |
+| 3.2 OTel | High (production requirement) | Low | Keep (deferred infra) |
+| 3.3 LLM Response Cache | Medium | Low (TTLCache) | Keep |
+| 3.4 MemoryManager protocol | Medium (interface design) | Low | Keep (2-method) |
 | 3.5 Guardrails | High (safety requirement) | Medium | Keep |
 | 3.6 Cost Tracking | High (already partially done) | Low | Keep |
-| 3.7 Advanced Testing | High | Medium | Keep, reduce scope |
+| 3.7 Advanced Testing | High | Medium | Keep (cut SPRT) |
 
 **Effective scope:** 5 solid deliverables + 2 thin interfaces. Well within 6-week parallel-wave cadence.
 

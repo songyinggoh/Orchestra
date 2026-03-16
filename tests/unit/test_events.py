@@ -87,7 +87,7 @@ class TestEventTypes:
 
     def test_event_type_enum_completeness(self):
         """EventType enum has an entry for every event class."""
-        assert len(EventType) == 20
+        assert len(EventType) == 21
 
 
 # ---- EventBus Tests ----

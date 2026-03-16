@@ -79,6 +79,10 @@ class EventBus:
         self._sequence_counters[run_id] = seq
         return seq
 
+    def set_sequence(self, run_id: str, seq: int) -> None:
+        """Seed the sequence counter for a run (e.g. when resuming from checkpoint)."""
+        self._sequence_counters[run_id] = seq
+
     async def emit(self, event: WorkflowEvent) -> None:
         """Dispatch event to matching subscribers. Async-safe."""
         for type_filter, callback in self._subscribers:

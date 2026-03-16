@@ -49,18 +49,42 @@ telemetry = [
 cache = [
     "cachetools>=5.5",
     "diskcache>=5.6",
+    "ruamel.yaml>=0.18",
 ]
 server = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
     "sse-starlette>=2.1",
+    "pydantic-settings>=2.0",
 ]
+routing = ["numpy>=1.26"]
 security = [
     "wasmtime>=23.0",
-    "joserfc>=1.0",
-    "pynacl>=1.5",
+    "joserfc>=1.6",
 ]
-nats = ["nats-py>=2.8"]
+redis = ["redis[hiredis]>=7.0", "msgpack>=1.0"]
+memory = [
+    "redis[hiredis]>=7.0",
+    "msgpack>=1.0",
+]
+vectordb = [
+    "pgvector>=0.4",
+    "model2vec>=0.6",
+    "pyzstd>=0.17",
+    "msgpack>=1.0",
+]
+promptshield = [
+    "optimum[onnxruntime]>=1.24",
+    "transformers>=4.51,<5.0",
+]
+nats = ["nats-py>=2.14"]
+messaging = [
+    "nats-py>=2.14",
+    "joserfc>=1.6",
+    "base58>=2.1",
+    "cryptography>=42.0",
+    "aiohttp>=3.9",
+]
 ray = ["ray[serve]>=2.10"]
 dev = [
     "pytest>=8.0",
@@ -97,6 +121,7 @@ asyncio_mode = "auto"
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "integration: marks integration tests",
+    "load: marks load/stress tests requiring 1000+ concurrent tasks (deselect with '-m \"not load\"')",
 ]
 
 [tool.ruff]

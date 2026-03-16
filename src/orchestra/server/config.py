@@ -2,15 +2,35 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from pydantic import Field, model_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-class ServerConfig(BaseModel):
-    """Configuration for the Orchestra HTTP server."""
+class ServerConfig(BaseSettings):
+    """Configuration for the Orchestra HTTP server.
+
+    All fields can be set via environment variables prefixed with ``ORCHESTRA_``.
+    For example, ``ORCHESTRA_CORS_ORIGINS='["https://app.example.com"]'``.
+    """
+
+    model_config = SettingsConfigDict(env_prefix="ORCHESTRA_", extra="ignore")
 
     host: str = "0.0.0.0"
     port: int = 8000
-    cors_origins: list[str] = Field(default_factory=lambda: ["*"])
+    cors_origins: list[str] = Field(default_factory=list)
+    cors_credentials: bool = False
     api_prefix: str = "/api/v1"
     sse_heartbeat_interval: int = 15
     sse_retry_ms: int = 5000
+    rate_limit_per_minute: int = 60
+    max_request_body_bytes: int = 1 * 1024 * 1024  # 1 MB
+
+    @model_validator(mode="after")
+    def _reject_wildcard_credentials(self) -> "ServerConfig":
+        if "*" in self.cors_origins and self.cors_credentials:
+            raise ValueError(
+                "CORS misconfiguration: cors_credentials=True cannot be combined "
+                "with cors_origins=['*']. Set ORCHESTRA_CORS_ORIGINS to explicit "
+                "origins, or set ORCHESTRA_CORS_CREDENTIALS=false."
+            )
+        return self

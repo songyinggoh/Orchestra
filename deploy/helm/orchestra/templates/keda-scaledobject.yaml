@@ -1,0 +1,42 @@
+{{- if .Values.keda.enabled -}}
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: {{ include "orchestra.fullname" . }}-scaler
+  labels: {{- include "orchestra.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    name: {{ include "orchestra.fullname" . }}
+  minReplicaCount: {{ .Values.keda.minReplicaCount }}
+  maxReplicaCount: {{ .Values.keda.maxReplicaCount }}
+  pollingInterval: 15
+  cooldownPeriod: 60
+  fallback:
+    failureThreshold: 3
+    replicas: {{ .Values.replicaCount }}
+  advanced:
+    horizontalPodAutoscalerConfig:
+      behavior:
+        scaleUp:
+          stabilizationWindowSeconds: 30
+          policies:
+            - type: Pods
+              value: 4
+              periodSeconds: 60
+        scaleDown:
+          stabilizationWindowSeconds: 300
+          policies:
+            - type: Percent
+              value: 25
+              periodSeconds: 60
+  triggers:
+    - type: nats-jetstream
+      metadata:
+        natsServerMonitoringEndpoint: "orchestra-nats:8222"
+        account: "$G"
+        stream: "ORCHESTRA_TASKS"
+        consumer: "orchestra-workers"
+        lagThreshold: {{ .Values.keda.lagThreshold | quote }}
+        activationLagThreshold: {{ .Values.keda.activationLagThreshold | quote }}
+        useHttps: "false"
+{{- end }}

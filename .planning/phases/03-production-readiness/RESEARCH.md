@@ -28,6 +28,7 @@
 - Graph Registry: how graphs are loaded/registered at server startup (config file vs dynamic registration)
 - Run isolation: each run gets its own EventBus instance (already the case in `CompiledGraph.run()`)
 - Error handling: map Orchestra exceptions to HTTP status codes
+- **Observability**: Defer OTel Collector/Jaeger/Prometheus setup; use OTLP with remote backend or local Console/File exporters for Phase 3.
 
 ---
 
@@ -62,8 +63,8 @@
 ### Recommended Stack
 - `opentelemetry-sdk` 1.40+
 - `opentelemetry-instrumentation-fastapi` for auto HTTP tracing
-- `opentelemetry-exporter-otlp` for Jaeger/Tempo/Zipkin
-- Docker Compose with Jaeger for local dev visualization
+- **Defer**: `opentelemetry-exporter-otlp` infrastructure setup (use remote OTLP or local Console/File exporters)
+- **Defer**: Docker Compose with Jaeger for local dev visualization
 
 ---
 
@@ -105,21 +106,17 @@ class CachedProvider:
 
 ---
 
-## 4. Multi-Tier Memory (3.4)
+## 4. Simple Memory (3.4)
 
-### Key Finding: Defer Full Implementation to Phase 4
-- Full vector-search memory tiering is Phase 4 material (alongside dynamic subgraphs)
-- What Phase 3 needs: a `MemoryManager` protocol stub defining the interface
-- Active run state already lives in EventStore (SQLite/Postgres) — no new storage needed
-- Old runs queryable via `list_runs()` — already implemented
+### Key Finding: Defer Multi-Tier Architecture to Phase 4
+- Full vector-search and multi-tiering (hot/cold) is Phase 4 material.
+- Phase 3 needs a simplified `MemoryManager` protocol for session persistence.
 
-### Phase 3 Scope (Thin Interface Only)
+### Phase 3 Scope (2-Method Interface)
 ```python
 class MemoryManager(Protocol):
-    async def store(self, key: str, value: Any, tier: Literal["hot", "cold"]) -> None: ...
+    async def store(self, key: str, value: Any) -> None: ...
     async def retrieve(self, key: str) -> Any | None: ...
-    async def promote(self, key: str) -> None: ...  # cold → hot
-    async def demote(self, key: str) -> None: ...   # hot → cold
 ```
 
 ### Deferred to Phase 4

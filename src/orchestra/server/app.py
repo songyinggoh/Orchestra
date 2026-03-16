@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from contextlib import asynccontextmanager
 from collections.abc import AsyncGenerator
 from typing import Any
@@ -11,7 +12,12 @@ from fastapi.responses import JSONResponse
 
 from orchestra.server.config import ServerConfig
 from orchestra.server.lifecycle import GraphRegistry, RunManager
-from orchestra.server.middleware import add_cors_middleware, add_request_id_middleware
+from orchestra.server.middleware import (
+    add_body_size_middleware,
+    add_cors_middleware,
+    add_rate_limit_middleware,
+    add_request_id_middleware,
+)
 from orchestra.server.models import ErrorResponse
 
 
@@ -27,24 +33,63 @@ def create_app(config: ServerConfig | None = None) -> FastAPI:
     if config is None:
         config = ServerConfig()
 
+    try:
+        from orchestra.tools.wasm_runtime import WasmToolSandbox
+        WASM_AVAILABLE = True
+    except ImportError:
+        WASM_AVAILABLE = False
+
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         """Initialize shared resources on startup; clean up on shutdown."""
-        from orchestra.storage.store import InMemoryEventStore
+        import os
+        import structlog
+        from orchestra.observability.logging import setup_logging
+        from orchestra.storage.sqlite import SQLiteEventStore
+
+        setup_logging(
+            level=os.environ.get("LOG_LEVEL", "INFO"),
+            json_output=os.environ.get("ORCHESTRA_ENV", "dev") != "dev",
+        )
+
+        log = structlog.get_logger(__name__)
+        api_key = os.environ.get("ORCHESTRA_API_KEY")
+        app.state.api_key = api_key
+        if not api_key:
+            log.warning("orchestra_api_key_not_set", detail="Server is running without authentication. Set ORCHESTRA_API_KEY to enable.")
+
+        event_store = SQLiteEventStore()
+        await event_store.initialize()
 
         app.state.config = config
         app.state.graph_registry = GraphRegistry()
         app.state.run_manager = RunManager()
-        app.state.event_store = InMemoryEventStore()
+        app.state.event_store = event_store
 
-        yield
+        if WASM_AVAILABLE:
+            wasm_sandbox = WasmToolSandbox()
+            app.state.wasm_sandbox = wasm_sandbox
+        else:
+            app.state.wasm_sandbox = None
 
-        # Shutdown: cancel any still-running tasks
-        run_manager: RunManager = app.state.run_manager
-        for run_status in await run_manager.list_runs():
-            active = run_manager.get_run(run_status.run_id)
-            if active and not active.task.done():
-                active.task.cancel()
+        try:
+            yield
+        finally:
+            # Shutdown: cancel tasks, await them, then close the store.
+            # Awaiting is critical — run tasks may be mid-append() and the
+            # store must not be closed while writes are in flight.
+            run_manager: RunManager = app.state.run_manager
+            active_tasks = []
+            for run_status in await run_manager.list_runs():
+                active = run_manager.get_run(run_status.run_id)
+                if active and not active.task.done():
+                    active.task.cancel()
+                    active_tasks.append(active.task)
+            if active_tasks:
+                await asyncio.gather(*active_tasks, return_exceptions=True)
+            if app.state.wasm_sandbox is not None:
+                app.state.wasm_sandbox.shutdown()
+            await event_store.close()
 
     app = FastAPI(
         title="Orchestra Server",
@@ -54,21 +99,30 @@ def create_app(config: ServerConfig | None = None) -> FastAPI:
     )
 
     # --- Middleware ---
-    add_cors_middleware(app, config)
-    add_request_id_middleware(app)
+    # add_middleware prepends, so last call = outermost.
+    # Desired chain: CORS → BodySize → RateLimit → RequestID → route handler
+    add_request_id_middleware(app)           # innermost
+    add_rate_limit_middleware(app, config)
+    add_body_size_middleware(app, config)
+    add_cors_middleware(app, config)         # outermost — OPTIONS preflight before auth
 
     # --- Routes ---
+    from fastapi import Depends
     from orchestra.server.routes.health import router as health_router
     from orchestra.server.routes.runs import router as runs_router
     from orchestra.server.routes.streams import router as streams_router
     from orchestra.server.routes.graphs import router as graphs_router
+    from orchestra.server.dependencies import require_api_key
+
+    _auth = [Depends(require_api_key)]
 
     # Health endpoints are outside the API prefix for standard probe paths
+    # and intentionally unauthenticated (Kubernetes liveness/readiness probes).
     app.include_router(health_router)
 
-    app.include_router(runs_router, prefix=config.api_prefix)
-    app.include_router(streams_router, prefix=config.api_prefix)
-    app.include_router(graphs_router, prefix=config.api_prefix)
+    app.include_router(runs_router, prefix=config.api_prefix, dependencies=_auth)
+    app.include_router(streams_router, prefix=config.api_prefix, dependencies=_auth)
+    app.include_router(graphs_router, prefix=config.api_prefix, dependencies=_auth)
 
     # --- Exception handlers ---
     @app.exception_handler(ValueError)
