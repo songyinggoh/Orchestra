@@ -23,7 +23,7 @@ jobs:
         with:
           python-version: "3.13"
       - name: Install dependencies
-        run: pip install -e ".[dev,server,storage,security]"
+        run: pip install -e ".[dev,server,storage,security,messaging]"
       - name: Run unit tests with coverage
         run: |
           python -m pytest tests/unit/ tests/integration/ tests/security/ \
@@ -41,7 +41,7 @@ jobs:
         with:
           python-version: "3.13"
       - name: Install dependencies
-        run: pip install -e ".[dev,server,storage]"
+        run: pip install -e ".[dev,server,storage,security,messaging]"
       - name: Run chaos tests
         run: python -m pytest tests/chaos/ -v
 
@@ -54,6 +54,6 @@ jobs:
         with:
           python-version: "3.13"
       - name: Install dependencies
-        run: pip install -e ".[dev,server,storage,test-advanced]"
+        run: pip install -e ".[dev,server,storage,security,messaging,test-advanced]"
       - name: Run property tests
         run: python -m pytest tests/property/ -v
