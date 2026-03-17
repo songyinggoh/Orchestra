@@ -122,6 +122,7 @@ markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "integration: marks integration tests",
     "load: marks load/stress tests requiring 1000+ concurrent tasks (deselect with '-m \"not load\"')",
+    "live: marks tests that hit real LLM APIs — requires credentials or Ollama (deselect with '-m \"not live\"')",
 ]
 
 [tool.ruff]

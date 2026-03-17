@@ -1,0 +1,83 @@
+---
+description: Orchestra multi-agent framework usage patterns
+globs: ["**/*.py"]
+alwaysApply: true
+---
+
+# Orchestra — Cursor Guide
+
+Orchestra is a Python multi-agent orchestration framework installed in this project.
+Use `auto_provider()` to get a ready provider from whatever API key is in the environment.
+
+## Zero-config start
+
+```python
+from orchestra.providers import auto_provider
+from orchestra.core.agent import BaseAgent
+from orchestra.core.context import ExecutionContext
+
+provider = auto_provider()  # reads ANTHROPIC_API_KEY / OPENAI_API_KEY / GOOGLE_API_KEY automatically
+
+agent = BaseAgent(name="assistant", system_prompt="You are helpful.")
+ctx = ExecutionContext(provider=provider)
+result = await agent.run("your task here", ctx)
+print(result.output)
+```
+
+## Build a multi-agent graph
+
+```python
+from orchestra.core.graph import WorkflowGraph
+from orchestra.core.runner import run
+from orchestra.core.state import WorkflowState
+from orchestra.core.types import END
+
+class State(WorkflowState):
+    input: str = ""
+    output: str = ""
+
+graph = WorkflowGraph(state_schema=State)
+graph.add_node("agent", BaseAgent(name="agent"), output_key="output")
+graph.set_entry_point("agent")
+graph.add_edge("agent", END)
+
+result = await run(graph, input={"input": "task"}, provider=provider, persist=False)
+print(result.state["output"])
+```
+
+## Conditional routing
+
+```python
+graph.add_conditional_edge(
+    "classifier",
+    lambda state: state["category"],
+    path_map={"a": "path_a", "b": "path_b"},
+)
+```
+
+## Parallel fan-out
+
+```python
+graph.add_parallel("dispatch", ["worker_a", "worker_b"], join_node="join")
+```
+
+## Tool calling
+
+```python
+from orchestra.tools.base import tool
+
+@tool
+async def my_tool(param: str) -> str:
+    """Tool description."""
+    return result
+
+agent = BaseAgent(name="agent", tools=[my_tool], max_iterations=3)
+```
+
+## Switch backends
+
+```bash
+export ORCHESTRA_BASE_URL=https://api.groq.com/openai/v1  # any OpenAI-compatible API
+export ORCHESTRA_API_KEY=...
+export ORCHESTRA_MODEL=llama-3.3-70b-versatile
+```
