@@ -77,14 +77,17 @@ class DiskCacheBackend:
         size_limit: int = 2**30,  # 1 GB
     ) -> None:
         try:
-            import diskcache
+            from diskcache import Cache, JSONDisk
         except ImportError:
             raise ImportError(
                 "diskcache is required for DiskCacheBackend. "
                 "Install it with: pip install orchestra-agents[cache]"
             )
 
-        self._cache = diskcache.Cache(str(directory), size_limit=size_limit)
+        # Use JSONDisk instead of the default pickle-based Disk to avoid
+        # unsafe deserialization (CVE-2025-69872). Orchestra only stores JSON
+        # strings, so JSONDisk is fully compatible.
+        self._cache = Cache(str(directory), disk=JSONDisk, size_limit=size_limit)
 
     async def get(self, key: str) -> LLMResponse | None:
         raw = await asyncio.to_thread(self._cache.get, key)
