@@ -133,6 +133,7 @@ class VectorStore:
         limit: int = 10,
         *,
         filter_metadata: dict | None = None,
+        agent_id: str | None = None,
     ) -> list[tuple[str, float]]:
         """Semantic search. Satisfies ColdTierBackend.
 
@@ -140,10 +141,11 @@ class VectorStore:
             embedding: Query vector.
             limit: Maximum number of results.
             filter_metadata: Optional JSONB containment filter applied via
-                ``metadata @> $4::jsonb``.  Use this to scope results by
-                ``agent_id``, ``session_id``, or any custom tag stored at
-                write time.
+                ``metadata @> $4::jsonb``.
+            agent_id: Override the instance-level ``agent_id`` scope.  Useful
+                in multi-tenant deployments where one pool serves many agents.
         """
+        scope = agent_id or self.agent_id
         async with await self.pool.acquire() as conn:
             if filter_metadata:
                 rows = await conn.fetch(
@@ -155,7 +157,7 @@ class VectorStore:
                     ORDER BY embedding <=> $1
                     LIMIT $3
                     """,
-                    embedding, self.agent_id, limit, json.dumps(filter_metadata),
+                    embedding, scope, limit, json.dumps(filter_metadata),
                 )
             else:
                 rows = await conn.fetch(
@@ -166,10 +168,80 @@ class VectorStore:
                     ORDER BY embedding <=> $1
                     LIMIT $3
                     """,
-                    embedding, self.agent_id, limit,
+                    embedding, scope, limit,
                 )
 
             return [(r["key"], r["score"]) for r in rows]
+
+    async def hybrid_search(
+        self,
+        query_text: str,
+        query_embedding: list[float],
+        limit: int = 10,
+        *,
+        bm25_weight: float = 0.3,
+        agent_id: str | None = None,
+    ) -> list[tuple[str, float]]:
+        """Hybrid vector + full-text search using Reciprocal Rank Fusion (RRF).
+
+        Combines the HNSW vector index (cosine similarity) with the GIN
+        full-text index (``tsvector``) already on the table.  Results from
+        both systems are ranked independently then merged via RRF so neither
+        dominates the other.
+
+        RRF formula: ``score = (1-bm25_weight) * 1/(k+vector_rank)
+                              + bm25_weight    * 1/(k+text_rank)``
+        where ``k=60`` (standard RRF constant).
+
+        Args:
+            query_text: Raw query string for full-text matching.
+            query_embedding: Pre-computed query vector for semantic matching.
+            limit: Maximum results to return.
+            bm25_weight: Weight given to the full-text ranking (0–1).
+                ``0.0`` = pure vector search; ``1.0`` = pure full-text.
+                Default ``0.3`` gives a mild BM25 boost for exact-term matches.
+            agent_id: Override instance-level agent scope.
+
+        Returns:
+            List of ``(key, rrf_score)`` tuples, highest score first.
+        """
+        scope = agent_id or self.agent_id
+        async with await self.pool.acquire() as conn:
+            rows = await conn.fetch(
+                f"""
+                WITH vector_results AS (
+                    SELECT key,
+                           ROW_NUMBER() OVER (ORDER BY embedding <=> $1) AS rank
+                    FROM {self.table_name}
+                    WHERE agent_id = $2
+                      AND embedding IS NOT NULL
+                    ORDER BY embedding <=> $1
+                    LIMIT $3
+                ),
+                text_results AS (
+                    SELECT key,
+                           ROW_NUMBER() OVER (
+                               ORDER BY ts_rank(content_tsv, query) DESC
+                           ) AS rank
+                    FROM {self.table_name},
+                         plainto_tsquery('english', $4) AS query
+                    WHERE agent_id = $2
+                      AND content_tsv @@ query
+                    ORDER BY ts_rank(content_tsv, query) DESC
+                    LIMIT $3
+                )
+                SELECT
+                    COALESCE(v.key, t.key) AS key,
+                    COALESCE(1.0 / (60 + v.rank), 0.0) * (1.0 - $5)
+                    + COALESCE(1.0 / (60 + t.rank), 0.0) * $5 AS score
+                FROM vector_results v
+                FULL OUTER JOIN text_results t ON v.key = t.key
+                ORDER BY score DESC
+                LIMIT $3
+                """,
+                query_embedding, scope, limit, query_text, bm25_weight,
+            )
+            return [(r["key"], float(r["score"])) for r in rows]
 
     async def delete(self, key: str) -> None:
         async with await self.pool.acquire() as conn:

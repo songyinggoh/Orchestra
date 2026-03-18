@@ -67,7 +67,7 @@ class ColdTierBackend(Protocol):
     """Protocol for cold tier storage (pgvector)."""
     async def store(self, key: str, value: Any, embedding: list[float] | None = None) -> None: ...
     async def retrieve(self, key: str) -> Any | None: ...
-    async def search(self, embedding: list[float], limit: int = 10, *, filter_metadata: dict | None = None) -> list[tuple[str, float]]: ...
+    async def search(self, embedding: list[float], limit: int = 10, *, filter_metadata: dict | None = None, agent_id: str | None = None) -> list[tuple[str, float]]: ...
     async def delete(self, key: str) -> None: ...
     async def count(self) -> int: ...
 
@@ -305,6 +305,7 @@ class TieredMemoryManager(MemoryManager):
         limit: int = 10,
         *,
         filter_metadata: dict | None = None,
+        agent_id: str | None = None,
     ) -> list[tuple[str, float]]:
         """Semantic search across cold tier.
 
@@ -315,6 +316,10 @@ class TieredMemoryManager(MemoryManager):
                 whose ``metadata`` column contains all key/value pairs in this
                 dict are returned.  Backends that do not support metadata
                 filtering ignore this argument.
+            agent_id: Override the backend's default ``agent_id`` scope.
+                Pass a different agent's ID to search across agent boundaries
+                in multi-tenant deployments.  When ``None`` (default), the
+                backend's own ``agent_id`` is used.
 
         Returns:
             List of ``(key, score)`` tuples ordered by descending similarity.
@@ -323,7 +328,12 @@ class TieredMemoryManager(MemoryManager):
             return []
 
         embedding = (await self._dedup.embed([query]))[0].tolist()
-        return await self._cold.search(embedding, limit=limit, filter_metadata=filter_metadata)
+        return await self._cold.search(
+            embedding,
+            limit=limit,
+            filter_metadata=filter_metadata,
+            agent_id=agent_id,
+        )
 
     async def stats(self) -> TierStats:
         cold_count = 0

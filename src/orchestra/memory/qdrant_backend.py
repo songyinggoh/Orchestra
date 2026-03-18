@@ -148,14 +148,22 @@ class QdrantColdBackend:
         """Deterministically map a string key to a UUID string point ID."""
         return str(uuid.uuid5(uuid.NAMESPACE_DNS, key))
 
-    def _agent_filter(self, extra: dict | None = None) -> "Filter":
-        """Build a Filter scoped to this agent, with optional extra conditions.
+    def _agent_filter(
+        self,
+        extra: dict | None = None,
+        agent_id: str | None = None,
+    ) -> "Filter":
+        """Build a Filter scoped to an agent, with optional extra conditions.
 
-        Extra conditions use dot-notation on the ``meta`` payload sub-dict, e.g.
-        ``{"session_id": "abc"}`` becomes ``FieldCondition(key="meta.session_id")``.
+        Args:
+            extra: Additional key/value pairs matched against the ``meta``
+                sub-dict (dot-notation), e.g. ``{"session_id": "abc"}``.
+            agent_id: Override the instance-level agent scope.  Defaults to
+                ``self.agent_id`` when ``None``.
         """
+        scope = agent_id or self.agent_id
         conditions: list[FieldCondition] = [
-            FieldCondition(key="agent_id", match=MatchValue(value=self.agent_id)),
+            FieldCondition(key="agent_id", match=MatchValue(value=scope)),
         ]
         if extra:
             for k, v in extra.items():
@@ -229,14 +237,17 @@ class QdrantColdBackend:
         limit: int = 10,
         *,
         filter_metadata: dict | None = None,
+        agent_id: str | None = None,
     ) -> list[tuple[str, float]]:
-        """Semantic search scoped to this agent.
+        """Semantic search scoped to an agent.
 
         Args:
             embedding: Query vector.
             limit: Max results.
             filter_metadata: Optional key/value pairs matched against the
                 ``meta`` sub-dict in each point's payload.
+            agent_id: Override the instance-level ``agent_id`` scope for
+                cross-agent searches in multi-tenant deployments.
 
         Returns:
             List of ``(key, score)`` tuples, highest score first.
@@ -246,7 +257,7 @@ class QdrantColdBackend:
         response = await client.query_points(
             collection_name=self.collection_name,
             query=embedding,
-            query_filter=self._agent_filter(filter_metadata),
+            query_filter=self._agent_filter(filter_metadata, agent_id=agent_id),
             limit=limit,
             with_payload=True,
         )

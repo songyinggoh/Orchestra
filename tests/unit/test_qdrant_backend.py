@@ -256,3 +256,26 @@ def test_raises_import_error_when_qdrant_missing():
                 qb.QdrantColdBackend()
         finally:
             qb.HAS_QDRANT = orig
+
+
+# ---------------------------------------------------------------------------
+# #3 — Multi-tenant agent_id override
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_search_uses_instance_agent_id_by_default(backend, mock_client):
+    mock_client.query_points = AsyncMock(return_value=MagicMock(points=[]))
+    await backend.search([0.0] * 4)
+    call_kwargs = mock_client.query_points.call_args.kwargs
+    keys = [c.key for c in call_kwargs["query_filter"].must]
+    values = [c.match.value for c in call_kwargs["query_filter"].must if c.key == "agent_id"]
+    assert values == ["agent-1"]
+
+
+@pytest.mark.asyncio
+async def test_search_overrides_agent_id_when_provided(backend, mock_client):
+    mock_client.query_points = AsyncMock(return_value=MagicMock(points=[]))
+    await backend.search([0.0] * 4, agent_id="agent-99")
+    call_kwargs = mock_client.query_points.call_args.kwargs
+    values = [c.match.value for c in call_kwargs["query_filter"].must if c.key == "agent_id"]
+    assert values == ["agent-99"]
