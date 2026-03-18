@@ -1,0 +1,379 @@
+# OTel Collector 2-Tier Deployment for Orchestra
+#
+# Tier 1 — Agent (DaemonSet): one per node, collects OTLP from local pods,
+#           routes to Gateway via loadbalancing exporter (trace-ID routing for
+#           tail sampling correctness).
+#
+# Tier 2 — Gateway (Deployment): 2 replicas, runs tail sampling + 3-layer PII
+#           redaction, exports to Jaeger/Tempo, Prometheus, Loki.
+#
+# Apply: kubectl apply -f deploy/otel-collector.yaml -n orchestra-system
+#
+# No app code changes needed — existing OTLP HTTP exporter in Orchestra points
+# to the Agent hostPort :4318 which is set via OTEL_EXPORTER_OTLP_ENDPOINT env var.
+
+---
+# ============================================================
+# Namespace
+# ============================================================
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: orchestra-system
+
+---
+# ============================================================
+# Tier 1: Agent DaemonSet ConfigMap
+# ============================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otel-agent-config
+  namespace: orchestra-system
+data:
+  config.yaml: |
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+
+    processors:
+      batch:
+        send_batch_size: 512
+        send_batch_max_size: 1024
+        timeout: 5s
+
+      memory_limiter:
+        check_interval: 1s
+        limit_mib: 400
+        spike_limit_mib: 100
+
+      resourcedetection:
+        detectors: [env, system, gcp, eks]
+        timeout: 5s
+
+    exporters:
+      # Routes all spans of the same trace to the same gateway instance.
+      # This is required for tail sampling to see complete traces.
+      loadbalancing:
+        protocol:
+          otlp:
+            endpoint: otel-gateway-headless:4317
+            tls:
+              insecure: true
+        resolver:
+          dns:
+            hostname: otel-gateway-headless.orchestra-system.svc.cluster.local
+            port: 4317
+        routing_key: "traceID"
+
+    extensions:
+      health_check:
+        endpoint: 0.0.0.0:13133
+
+    service:
+      extensions: [health_check]
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [memory_limiter, resourcedetection, batch]
+          exporters: [loadbalancing]
+        metrics:
+          receivers: [otlp]
+          processors: [memory_limiter, batch]
+          exporters: [loadbalancing]
+        logs:
+          receivers: [otlp]
+          processors: [memory_limiter, batch]
+          exporters: [loadbalancing]
+
+---
+# ============================================================
+# Tier 1: Agent DaemonSet
+# ============================================================
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: otel-agent
+  namespace: orchestra-system
+  labels:
+    app: otel-agent
+spec:
+  selector:
+    matchLabels:
+      app: otel-agent
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: otel-agent
+    spec:
+      serviceAccountName: otel-collector
+      containers:
+        - name: otel-agent
+          image: otel/opentelemetry-collector-contrib:0.115.0
+          args: ["--config=/etc/otel/config.yaml"]
+          ports:
+            - containerPort: 4317
+              hostPort: 4317
+              name: otlp-grpc
+            - containerPort: 4318
+              hostPort: 4318
+              name: otlp-http
+            - containerPort: 13133
+              name: health
+          livenessProbe:
+            httpGet:
+              path: /
+              port: health
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          volumeMounts:
+            - name: config
+              mountPath: /etc/otel
+      volumes:
+        - name: config
+          configMap:
+            name: otel-agent-config
+      tolerations:
+        - operator: Exists
+          effect: NoSchedule
+
+---
+# ============================================================
+# Tier 2: Gateway ConfigMap
+# ============================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otel-gateway-config
+  namespace: orchestra-system
+data:
+  config.yaml: |
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+
+    processors:
+      memory_limiter:
+        check_interval: 1s
+        limit_mib: 1500
+        spike_limit_mib: 400
+
+      # Layer 1: Whitelist allowlist — fail-secure, unknown attrs dropped
+      redaction:
+        allow_all_keys: false
+        allowed_keys:
+          - "service.name"
+          - "service.version"
+          - "orchestra.*"
+          - "http.method"
+          - "http.status_code"
+          - "http.route"
+          - "rpc.method"
+          - "db.system"
+          - "gen_ai.system"
+          - "gen_ai.request.model"
+          - "gen_ai.usage.*"
+        blocked_values:
+          - '\b\d{4}[- ]?\d{4}[- ]?\d{4}[- ]?\d{4}\b'
+          - '\b\d{3}-\d{2}-\d{4}\b'
+          - '\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
+          - '\b(sk|pk|api)[-_][A-Za-z0-9]{20,}\b'
+
+      # Layer 2: Targeted delete/hash of known-sensitive keys
+      attributes/pii:
+        actions:
+          - key: gen_ai.prompt
+            action: delete
+          - key: gen_ai.completion
+            action: delete
+          - key: db.statement
+            action: delete
+          - key: exception.stacktrace
+            action: delete
+          - key: enduser.id
+            action: hash
+
+      # Layer 3: OTTL surgical pattern replacement in URLs
+      transform/pii:
+        trace_statements:
+          - context: span
+            statements:
+              - replace_pattern(attributes["http.url"], "password=[^&]*", "password=***")
+              - replace_pattern(attributes["http.url"], "token=[^&]*", "token=***")
+
+      # Tail sampling — buffers traces for 15s before sampling decision
+      tail_sampling:
+        decision_wait: 15s
+        num_traces: 50000
+        expected_new_traces_per_sec: 100
+        policies:
+          - name: keep-errors
+            type: status_code
+            status_code:
+              status_codes: [ERROR]
+          - name: keep-slow-traces
+            type: latency
+            latency:
+              threshold_ms: 10000
+          - name: keep-expensive
+            type: ottl_condition
+            ottl_condition:
+              error_mode: ignore
+              span:
+                - 'attributes["orchestra.cost_usd"] != nil and Double(attributes["orchestra.cost_usd"]) > 0.10'
+          - name: keep-handoffs
+            type: string_attribute
+            string_attribute:
+              key: orchestra.event_type
+              values: [handoff, delegation, escalation]
+          - name: keep-security-events
+            type: ottl_condition
+            ottl_condition:
+              error_mode: ignore
+              span:
+                - 'attributes["orchestra.security_violation"] != nil'
+          - name: probabilistic-sample
+            type: probabilistic
+            probabilistic:
+              sampling_percentage: 20
+          - name: rate-limit-safety
+            type: rate_limiting
+            rate_limiting:
+              spans_per_second: 500
+
+      batch:
+        send_batch_size: 1024
+        timeout: 10s
+
+    exporters:
+      otlp/traces:
+        endpoint: tempo.orchestra-system:4317
+        tls:
+          insecure: true
+      prometheusremotewrite:
+        endpoint: http://prometheus.orchestra-system:9090/api/v1/write
+        resource_to_telemetry_conversion:
+          enabled: true
+      loki:
+        endpoint: http://loki.orchestra-system:3100/loki/api/v1/push
+
+    extensions:
+      health_check:
+        endpoint: 0.0.0.0:13133
+      zpages:
+        endpoint: 0.0.0.0:55679
+
+    service:
+      extensions: [health_check, zpages]
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [memory_limiter, redaction, attributes/pii, transform/pii, tail_sampling, batch]
+          exporters: [otlp/traces]
+        metrics:
+          receivers: [otlp]
+          processors: [memory_limiter, batch]
+          exporters: [prometheusremotewrite]
+        logs:
+          receivers: [otlp]
+          processors: [memory_limiter, redaction, attributes/pii, batch]
+          exporters: [loki]
+
+---
+# ============================================================
+# Tier 2: Gateway Deployment
+# ============================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: otel-gateway
+  namespace: orchestra-system
+  labels:
+    app: otel-gateway
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: otel-gateway
+  template:
+    metadata:
+      labels:
+        app: otel-gateway
+    spec:
+      serviceAccountName: otel-collector
+      containers:
+        - name: otel-gateway
+          image: otel/opentelemetry-collector-contrib:0.115.0
+          args: ["--config=/etc/otel/config.yaml"]
+          ports:
+            - containerPort: 4317
+              name: otlp-grpc
+            - containerPort: 13133
+              name: health
+            - containerPort: 55679
+              name: zpages
+          livenessProbe:
+            httpGet:
+              path: /
+              port: health
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: "2"
+              memory: 2Gi
+          volumeMounts:
+            - name: config
+              mountPath: /etc/otel
+      volumes:
+        - name: config
+          configMap:
+            name: otel-gateway-config
+
+---
+# ============================================================
+# Tier 2: Gateway Headless Service (required for loadbalancing exporter DNS)
+# ============================================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: otel-gateway-headless
+  namespace: orchestra-system
+  labels:
+    app: otel-gateway
+spec:
+  clusterIP: None  # Headless — DNS resolves to individual pod IPs
+  selector:
+    app: otel-gateway
+  ports:
+    - port: 4317
+      targetPort: otlp-grpc
+      name: otlp-grpc
+
+---
+# ============================================================
+# ServiceAccount for OTel Collector (shared by agent and gateway)
+# ============================================================
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: otel-collector
+  namespace: orchestra-system

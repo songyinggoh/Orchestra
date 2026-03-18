@@ -23,6 +23,17 @@ from orchestra.core.errors import (
     ToolNotFoundError,
     ToolPermissionError,
     ToolTimeoutError,
+    # --- Phase 4 Wave 2 additions ---
+    BudgetExceededError,
+    RoutingError,
+    ModelSelectionError,
+    AllProvidersUnavailableError,
+    IdentityError,
+    InvalidSignatureError,
+    DelegationDepthExceededError,
+    AuthorizationError,
+    UCANVerificationError,
+    CapabilityDeniedError,
 )
 from orchestra.core.types import (
     END,
@@ -78,4 +89,15 @@ __all__ = [
     "ToolResult",
     "ToolTimeoutError",
     "WorkflowStatus",
+    # --- Phase 4 Wave 2 additions ---
+    "BudgetExceededError",
+    "RoutingError",
+    "ModelSelectionError",
+    "AllProvidersUnavailableError",
+    "IdentityError",
+    "InvalidSignatureError",
+    "DelegationDepthExceededError",
+    "AuthorizationError",
+    "UCANVerificationError",
+    "CapabilityDeniedError",
 ]

@@ -1,0 +1,60 @@
+name: Phase 3 Quality Gates
+
+on:
+  push:
+    branches: [phase3-production-readiness, master]
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit-tests:
+    name: Unit Tests + Coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install dependencies
+        run: pip install -e ".[dev,server,storage,security,messaging,memory,routing,telemetry,cache]"
+      - name: Run unit tests with coverage
+        run: |
+          python -m pytest tests/unit/ tests/integration/ tests/security/ \
+            --ignore=tests/integration/test_secure_nats.py \
+            --cov=orchestra \
+            --cov-report=term-missing \
+            --cov-fail-under=75 \
+            -q
+
+  chaos-tests:
+    name: Chaos Engineering Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install dependencies
+        run: pip install -e ".[dev,server,storage,security,messaging,memory,routing,telemetry,cache]"
+      - name: Run chaos tests
+        run: python -m pytest tests/chaos/ -v
+
+  property-tests:
+    name: Property-Based Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install dependencies
+        run: pip install -e ".[dev,server,storage,security,messaging,memory,routing,telemetry,cache,test-advanced]"
+      - name: Run property tests
+        run: python -m pytest tests/property/ -v

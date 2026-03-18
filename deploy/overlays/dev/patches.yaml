@@ -1,0 +1,6 @@
+- op: replace
+  path: /spec/minReplicaCount
+  value: 0
+target:
+  kind: ScaledObject
+  name: orchestra-agent-scaler

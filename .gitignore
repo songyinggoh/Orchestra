@@ -40,3 +40,11 @@ htmlcov/
 # OS
 .DS_Store
 Thumbs.db
+
+# Local tooling / runtime
+.hypothesis/
+.claude/worktrees/
+.claude/agent-memory/
+.orchestra/
+.factory/
+pytest_results.txt

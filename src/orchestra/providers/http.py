@@ -2,19 +2,23 @@
 
 Zero extra dependencies beyond httpx (already in core).
 Works with any endpoint that speaks the OpenAI chat completions format:
-OpenAI, Ollama, vLLM, LiteLLM, Azure OpenAI, etc.
+OpenAI, Ollama, vLLM, LiteLLM, Azure OpenAI, Groq, Together, Mistral, etc.
+
+Environment variables (checked in priority order):
+    ORCHESTRA_BASE_URL   — endpoint base URL  (e.g. https://api.groq.com/openai/v1)
+    ORCHESTRA_API_KEY    — API key for the endpoint
+    ORCHESTRA_MODEL      — default model name
+    OPENAI_API_KEY       — fallback key when ORCHESTRA_API_KEY is not set
 
 Usage:
     from orchestra.providers import HttpProvider
 
-    # OpenAI (default)
-    provider = HttpProvider(api_key="sk-...")
+    # Zero-config: reads ORCHESTRA_* env vars
+    provider = HttpProvider()
 
-    # Ollama (local)
+    # Explicit — useful in tests or multi-provider setups
+    provider = HttpProvider(base_url="https://api.groq.com/openai/v1", api_key="gsk_...")
     provider = HttpProvider(base_url="http://localhost:11434/v1", default_model="llama3")
-
-    # Any OpenAI-compatible endpoint
-    provider = HttpProvider(base_url="https://my-endpoint/v1", api_key="...")
 """
 
 from __future__ import annotations
@@ -89,15 +93,25 @@ class HttpProvider:
 
     def __init__(
         self,
-        base_url: str = "https://api.openai.com/v1",
+        base_url: str | None = None,
         api_key: str | None = None,
-        default_model: str = "gpt-4o-mini",
+        default_model: str | None = None,
         max_retries: int = 3,
         timeout: float = 120.0,
     ) -> None:
-        self._base_url = base_url.rstrip("/")
-        self._api_key = api_key or os.environ.get("OPENAI_API_KEY", "")
-        self._default_model = default_model
+        self._base_url = (
+            base_url
+            or os.environ.get("ORCHESTRA_BASE_URL", "https://api.openai.com/v1")
+        ).rstrip("/")
+        self._api_key = (
+            api_key
+            or os.environ.get("ORCHESTRA_API_KEY")
+            or os.environ.get("OPENAI_API_KEY", "")
+        )
+        self._default_model = (
+            default_model
+            or os.environ.get("ORCHESTRA_MODEL", "gpt-4o-mini")
+        )
         self._max_retries = max_retries
         self._client = httpx.AsyncClient(
             base_url=self._base_url,

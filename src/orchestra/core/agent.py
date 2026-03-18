@@ -22,7 +22,7 @@ import structlog
 from pydantic import BaseModel, Field
 
 from orchestra.core.context import ExecutionContext
-from orchestra.core.errors import MaxIterationsError
+from orchestra.core.errors import MaxIterationsError, ProviderError
 from orchestra.core.types import (
     AgentResult,
     LLMResponse,
@@ -61,6 +61,8 @@ class BaseAgent(BaseModel):
         self,
         input: str | list[Message],
         context: ExecutionContext,
+        *,
+        emit_partial_on_max_iterations: bool = False,
     ) -> AgentResult:
         """Execute the agent's reasoning loop.
 
@@ -68,10 +70,22 @@ class BaseAgent(BaseModel):
         2. Call LLM via context.provider
         3. If tool calls, execute tools and loop
         4. Return final response as AgentResult
+
+        Args:
+            input: User message string or list of Message objects.
+            context: Execution context carrying the LLM provider.
+            emit_partial_on_max_iterations: When *True*, hitting
+                ``max_iterations`` returns a partial ``AgentResult``
+                (``result.partial == True``) instead of raising
+                ``MaxIterationsError``.  When *False* (the default),
+                ``MaxIterationsError`` is raised but its
+                ``partial_output`` attribute is populated so callers can
+                inspect accumulated work if they choose to catch the
+                exception.
         """
         llm = context.provider
         if not llm:
-            raise RuntimeError(
+            raise ProviderError(
                 f"Agent '{self.name}' has no LLM provider.\n"
                 f"  Fix: Pass a provider when running the workflow, e.g.:\n"
                 f"  compiled.run(state, provider=HttpProvider())"
@@ -93,6 +107,18 @@ class BaseAgent(BaseModel):
         total_usage = TokenUsage()
 
         for _iteration in range(self.max_iterations):
+            # --- Budget check (optional) ---
+            _budget_policy = context.get_config("budget_policy")
+            if _budget_policy is not None:
+                _agg = context.get_config("_cost_aggregator")
+                _cur_cost = 0.0
+                _cur_tokens = 0
+                if _agg is not None:
+                    _budget_totals = _agg.get_totals(context.run_id)
+                    _cur_cost = _budget_totals.get("total_cost_usd", 0.0)
+                    _cur_tokens = _budget_totals.get("total_tokens", 0)
+                _budget_policy.enforce(_cur_cost, _cur_tokens)
+
             _llm_start = time.monotonic()
             response: LLMResponse = await llm.complete(
                 messages=full_messages,
@@ -213,10 +239,36 @@ class BaseAgent(BaseModel):
                 token_usage=total_usage,
             )
 
-        raise MaxIterationsError(
-            f"Agent '{self.name}' exceeded max_iterations ({self.max_iterations}).\n"
-            f"  Fix: Increase max_iterations or check why the agent keeps calling tools."
+        # Build a partial result from whatever was accumulated during the loop.
+        # The last assistant message (if any) is included so callers have the
+        # most recent LLM content even when no clean finish was reached.
+        partial_messages: list[Message] = [
+            m for m in full_messages if m.role == MessageRole.ASSISTANT
+        ]
+        partial_result = AgentResult(
+            agent_name=self.name,
+            output="",
+            messages=partial_messages,
+            tool_calls_made=all_tool_records,
+            token_usage=total_usage,
+            partial=True,
         )
+
+        if emit_partial_on_max_iterations:
+            logger.warning(
+                "max_iterations_reached_returning_partial",
+                agent=self.name,
+                max_iterations=self.max_iterations,
+                tool_calls_made=len(all_tool_records),
+            )
+            return partial_result
+
+        exc = MaxIterationsError(
+            f"Agent '{self.name}' exceeded max_iterations ({self.max_iterations}).\n"
+            f"  Fix: Increase max_iterations or check why the agent keeps calling tools.",
+            partial_output=partial_result,
+        )
+        raise exc
 
     def _resolve_system_prompt(self, context: ExecutionContext) -> str:
         """Resolve the system prompt, supporting dynamic prompts."""

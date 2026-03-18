@@ -1,0 +1,30 @@
+Orchestra {{ .Chart.AppVersion }} deployed to namespace {{ .Release.Namespace }}.
+
+Service endpoint:
+  kubectl port-forward svc/{{ include "orchestra.fullname" . }} 8000:8000 -n {{ .Release.Namespace }}
+  curl http://localhost:8000/health
+
+NATS JetStream:
+{{- if .Values.nats.enabled }}
+  kubectl port-forward svc/orchestra-nats 4222:4222 -n {{ .Release.Namespace }}
+  nats stream info ORCHESTRA_TASKS
+{{- else }}
+  External NATS: {{ .Values.nats.url }}
+{{- end }}
+
+Runtime sandbox:
+{{- if .Values.runtime.className }}
+  Pods are running in {{ .Values.runtime.className }} sandbox.
+  Verify: kubectl exec -it <pod> -- dmesg | head
+{{- else }}
+  No sandbox configured (standard runc). Set runtime.className=gvisor for production.
+{{- end }}
+
+KEDA autoscaling:
+{{- if .Values.keda.enabled }}
+  kubectl get scaledobject -n {{ .Release.Namespace }}
+  Scale range: {{ .Values.keda.minReplicaCount }}–{{ .Values.keda.maxReplicaCount }} replicas
+  Triggers at {{ .Values.keda.activationLagThreshold }} pending messages.
+{{- else }}
+  KEDA disabled. Enable with: --set keda.enabled=true
+{{- end }}

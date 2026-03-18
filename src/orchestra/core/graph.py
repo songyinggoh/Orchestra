@@ -250,6 +250,46 @@ class WorkflowGraph:
         self._last_node = node_id
         return self
 
+    def subgraph(
+        self,
+        name: str,
+        graph_or_factory: Any,
+        *,
+        input_mapper: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+        output_mapper: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+        interrupt_before: bool = False,
+        interrupt_after: bool = False,
+    ) -> WorkflowGraph:
+        """Add a nested subgraph.
+
+        Usage:
+            graph.subgraph("sub", lambda: WorkflowGraph().then(a).compile())
+        """
+        # If it's a factory function, call it
+        if callable(graph_or_factory) and not hasattr(graph_or_factory, "run"):
+            nested_graph = graph_or_factory()
+        else:
+            nested_graph = graph_or_factory
+
+        # Ensure it's compiled
+        if hasattr(nested_graph, "compile"):
+            nested_graph = nested_graph.compile()
+
+        node = SubgraphNode(
+            graph=nested_graph,
+            input_mapper=input_mapper,
+            output_mapper=output_mapper,
+            interrupt_before=interrupt_before,
+            interrupt_after=interrupt_after,
+        )
+        self.add_node(name, node)
+
+        if self._last_node is not None:
+            self.add_edge(self._last_node, name)
+
+        self._last_node = name
+        return self
+
     def parallel(self, *agents_or_fns: Any, names: list[str] | None = None) -> WorkflowGraph:
         """Fan out to multiple nodes in parallel.
 

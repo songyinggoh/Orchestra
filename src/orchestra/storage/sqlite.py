@@ -36,6 +36,7 @@ from orchestra.storage.store import RunSummary
 
 _DDL = """
 PRAGMA journal_mode = WAL;
+PRAGMA busy_timeout = 5000;
 
 CREATE TABLE IF NOT EXISTS workflow_runs (
     run_id       TEXT PRIMARY KEY,
@@ -96,8 +97,11 @@ class SQLiteEventStore:
     """
 
     def __init__(self, db_path: str | None = None) -> None:
-        self._db_path = db_path if db_path is not None else ".orchestra/runs.db"
+        if db_path is None:
+            db_path = os.environ.get("ORCHESTRA_DB_PATH", ".orchestra/runs.db")
+        self._db_path = db_path
         self._conn: aiosqlite.Connection | None = None
+        self._closed = False
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -122,6 +126,7 @@ class SQLiteEventStore:
 
     async def close(self) -> None:
         """Close the database connection."""
+        self._closed = True
         if self._conn is not None:
             await self._conn.close()
             self._conn = None
@@ -138,6 +143,8 @@ class SQLiteEventStore:
     # ------------------------------------------------------------------
 
     def _require_conn(self) -> aiosqlite.Connection:
+        if self._closed:
+            raise RuntimeError("SQLiteEventStore is closed.")
         if self._conn is None:
             raise RuntimeError(
                 "SQLiteEventStore not initialized. Call await store.initialize() first "
@@ -193,6 +200,8 @@ class SQLiteEventStore:
         Returns:
             List of WorkflowEvent objects ordered by sequence ascending.
         """
+        if self._closed:
+            return []
         conn = self._require_conn()
 
         if event_types:

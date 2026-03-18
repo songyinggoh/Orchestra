@@ -6,11 +6,18 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -21,25 +28,126 @@ jobs:
   type-check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
       - run: pip install -e ".[dev]"
       - run: mypy src/orchestra/
 
-  test:
+  security:
+    name: Security Scanning
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0 # Full history for Gitleaks
+
+      - name: Gitleaks Scan
+        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2.3.9
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Bandit Scan (SAST)
+        run: |
+          pip install bandit
+          bandit -r src/ -ll -ii
+
+      - name: pip-audit Scan (SCA)
+        uses: pypa/gh-action-pip-audit@v1.1.0
+        with:
+          inputs: pyproject.toml
+
+  unit-test:
+    name: Unit Test (${{ matrix.os }}, Py ${{ matrix.python-version }})
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
         python-version: ["3.11", "3.12", "3.13"]
     runs-on: ${{ matrix.os }}
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - run: pip install -e ".[dev]"
-      - run: pytest tests/ --cov=orchestra --cov-report=xml -x
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          pip install -e ".[dev,server,telemetry,cache,storage,postgres,nats,security]"
+
+      - name: Run unit tests
+        run: |
+          pytest tests/ -m "not integration" --cov=orchestra --cov-report=xml -x
+
       - uses: codecov/codecov-action@v4
         if: matrix.python-version == '3.12' && matrix.os == 'ubuntu-latest'
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+  integration-test:
+    name: Integration & Security Tests (Linux)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: test_db
+          POSTGRES_USER: user
+          POSTGRES_PASSWORD: password # gitleaks:allow
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      nats:
+        image: nats:2.10-alpine
+        ports:
+          - 4222:4222
+          - 8222:8222 # monitoring
+        options: >-
+          --health-cmd "nc -z 127.0.0.1 4222"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          pip install -e ".[dev,server,telemetry,cache,storage,postgres,nats,security]"
+
+      - name: Run integration & security tests
+        env:
+          DATABASE_URL: "postgresql://user:password@localhost:5432/test_db"
+          REDIS_URL: "redis://localhost:6379"
+          NATS_URL: "nats://localhost:4222"
+        run: |
+          pytest tests/integration/ tests/security/ -x

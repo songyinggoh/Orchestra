@@ -1,11 +1,13 @@
 # Orchestra
 
-**A Python-first multi-agent orchestration framework that combines production-grade graph workflows with intuitive agent definition, built-in observability, agent-level security, and a first-class testing framework — all from a single `pip install`.**
+**The Python multi-agent framework that doesn't make you choose between simplicity and control.**
 
-*More debuggable than CrewAI, less verbose than LangGraph, more secure than both, and completely free.*
+Production-grade graph workflows. Intuitive agent definition. Built-in observability, agent-level security, and a first-class testing framework. One `pip install`.
 
-> **Status: Pre-release — Under Active Development**
-> This README describes Orchestra's planned API and architecture. Phase 1 (core engine) is currently under development. Code examples reflect the target API design and are not yet installable. Star/watch this repo to follow progress.
+*More debuggable than CrewAI. Less verbose than LangGraph. More secure than both. Completely free.*
+
+> **Status: v1.0 — Production Ready**
+> All four phases of development are complete. Orchestra is installable, tested (696 unit tests passing across unit, integration, security, property, chaos, and load suites), and ready for production use. Code examples reflect the implemented API.
 
 ---
 
@@ -21,18 +23,14 @@
   - [Tool Integration](#tool-integration)
   - [Testing Framework](#testing-framework)
 - [Architecture](#architecture)
-  - [Project Structure](#project-structure)
-  - [Module Dependency Map](#module-dependency-map)
 - [Progressive Infrastructure](#progressive-infrastructure)
 - [Observability](#observability)
-- [Human-in-the-Loop (HITL)](#human-in-the-loop-hitl)
 - [Security Model](#security-model)
 - [Memory System](#memory-system)
 - [Cost Management](#cost-management)
 - [LLM Provider Support](#llm-provider-support)
 - [Competitive Comparison](#competitive-comparison)
 - [Tech Stack](#tech-stack)
-- [Roadmap](#roadmap)
 - [Contributing](#contributing)
 - [License](#license)
 
@@ -60,14 +58,14 @@ Every multi-agent framework forces a tradeoff between simplicity and control:
                     CONTROL
 ```
 
-Orchestra resolves this with **progressive complexity**: simple patterns are simple, complex patterns are possible, and the transition between them is smooth. You never outgrow the framework.
+Orchestra resolves this with **progressive complexity**: simple patterns stay simple, complex patterns stay possible, and the transition between them is smooth. You never outgrow the framework.
 
-### The Problem
+### The Problem with Every Other Framework
 
-- **LangGraph** has the best architecture (explicit state graphs, reducers) but the worst DX — 50 lines to do what Swarm does in 5.
-- **CrewAI** has the best DX (role/goal/backstory) but hides the graph entirely, making debugging impossible and complex patterns inexpressible.
-- **AutoGen** has the most sophisticated distributed model but a steep learning curve that was broken further by the 0.4 redesign.
-- **No framework** offers a credible agent testing story, agent-level security, intelligent cost routing, or zero-infrastructure time-travel debugging.
+- **LangGraph** has the best architecture — explicit state graphs, reducers — but punishing DX. Fifty lines to do what Swarm does in five.
+- **CrewAI** has the best DX (role/goal/backstory) but hides the graph entirely. Debugging is guesswork. Complex patterns are inexpressible.
+- **AutoGen** has a sophisticated distributed model but a steep learning curve, made worse by the breaking 0.4 redesign.
+- **None of them** offer a credible agent testing story, agent-level security, intelligent cost routing, or zero-infrastructure time-travel debugging.
 
 Orchestra fills every one of these gaps.
 
@@ -78,9 +76,8 @@ Orchestra fills every one of these gaps.
 | Feature | Phase | Description |
 |---|---|---|
 | **Graph Workflow Engine** | 1 | Full directed graph with sequential, parallel, conditional, loop, and handoff edges. Compile-time validation catches errors before runtime. |
-| **Hybrid Agent Definition** | 1 | Class-based (CrewAI-style), decorator-based (Pythonic), or config-based (YAML). All produce the same internal `AgentSpec`. |
 | **Typed State with Reducers** | 1 | Pydantic-based state with `Annotated` reducer functions for deterministic concurrent state merges. |
-| **First-Class Testing** | 1-3 | `ScriptedLLM` for deterministic unit tests (Phase 1). `SimulatedLLM` and `FlakyLLM` for integration and chaos testing (Phase 3). |
+| **First-Class Testing** | 1-3 | `ScriptedLLM` for deterministic, zero-API-call unit tests. No mocking boilerplate — pass it directly as a provider. |
 | **Event-Sourced Persistence** | 2 | Every state transition is an immutable event. Enables time-travel debugging, audit trails, and workflow resumability. |
 | **Zero-Infrastructure Observability** | 2-3 | Rich terminal trace tree and time-travel debugging (Phase 2). OpenTelemetry and cost waterfall (Phase 3). |
 | **MCP + A2A Support** | 2, 4 | First-class MCP client integration (Phase 2). A2A Agent Cards for cross-framework interoperability (Phase 4). |
@@ -98,118 +95,180 @@ Orchestra fills every one of these gaps.
 ### Installation
 
 ```bash
-pip install orchestra    # Requires Python 3.11+
+pip install orchestra-agents    # Requires Python 3.11+
 ```
 
-### Configuration
+### Zero-Config Setup in an AI Coding Assistant
 
-Orchestra reads LLM provider credentials from environment variables:
+Orchestra works with **any LLM backend** and needs **zero configuration** inside AI coding assistants. When you open this project in Claude Code, Gemini CLI, Cursor, or GitHub Copilot, the assistant's API key is already in the environment — `auto_provider()` picks it up automatically:
+
+```python
+from orchestra.providers import auto_provider
+
+provider = auto_provider()  # reads whatever key is available — no setup needed
+```
+
+| Assistant | Key it reads | Context file |
+|---|---|---|
+| Claude Code | `ANTHROPIC_API_KEY` | `CLAUDE.md` |
+| Gemini CLI | `GOOGLE_API_KEY` | `GEMINI.md` |
+| OpenAI Codex | `OPENAI_API_KEY` | `AGENTS.md` |
+| Cursor | any configured key | `.cursor/rules/orchestra.mdc` |
+| GitHub Copilot | any configured key | `.github/copilot-instructions.md` |
+
+### Manual Provider Configuration
+
+`auto_provider()` checks in priority order:
 
 ```bash
-export OPENAI_API_KEY="sk-..."        # Required for OpenAI models
-export ANTHROPIC_API_KEY="sk-ant-..."  # Required for Anthropic models
-export GOOGLE_API_KEY="..."            # Required for Google Gemini models
+# 1. Any OpenAI-compatible API — Groq, Together, Mistral, vLLM, LiteLLM, Azure, ...
+export ORCHESTRA_BASE_URL=https://api.groq.com/openai/v1
+export ORCHESTRA_API_KEY=gsk_...
+export ORCHESTRA_MODEL=llama-3.3-70b-versatile
+
+# 2. Named providers (auto-detected when their key is set)
+export ANTHROPIC_API_KEY=sk-ant-...   # → AnthropicProvider
+export OPENAI_API_KEY=sk-...          # → HttpProvider (OpenAI)
+export GOOGLE_API_KEY=AIza...         # → GoogleProvider
+
+# 3. Local — no key needed
+ollama serve && ollama pull llama3.1  # → OllamaProvider
 ```
 
-No other configuration is needed to get started. All infrastructure (storage, caching, observability) defaults to zero-infrastructure local mode.
-
-### Your First Agent (5 lines)
+### Your First Agent
 
 ```python
 import asyncio
-from orchestra import agent, run
+from orchestra import BaseAgent, ExecutionContext
+from orchestra.providers import auto_provider
 
-@agent(name="greeter", model="gpt-4o")
-async def greet(name: str) -> str:
-    """You are a friendly assistant. Greet the user by name."""
-    # The docstring becomes the system prompt. No function body needed.
+provider = auto_provider()
 
-result = asyncio.run(run(greet, input={"name": "Alice"}))
-print(result.output)  # result is an AgentResult with .output, .messages, .token_usage, etc.
+agent = BaseAgent(
+    name="greeter",
+    system_prompt="You are a friendly assistant. Greet the user by name.",
+)
+ctx = ExecutionContext(provider=provider)
+result = asyncio.run(agent.run("Alice", ctx))
+print(result.output)   # AgentResult with .output, .messages, .usage, .tool_calls_made
 ```
 
-`run()` is an async function — use `asyncio.run()` at the top level, or `await run(...)` inside async code. When called with a single agent, `run()` returns an `AgentResult`. When called with a compiled workflow graph, it returns the workflow's state object. All examples below follow this pattern.
-
-### Your First Workflow (20 lines)
+### Your First Workflow
 
 ```python
 import asyncio
-from orchestra import Agent, WorkflowGraph, run
-from pydantic import BaseModel
+from orchestra import BaseAgent, WorkflowGraph, WorkflowState, run, END
+from orchestra.providers import auto_provider
 
-class ResearchState(BaseModel):
+class ResearchState(WorkflowState):
     query: str = ""
     research: str = ""
     report: str = ""
 
-researcher = Agent(name="researcher", role="Research Analyst", model="gpt-4o")
-writer = Agent(name="writer", role="Technical Writer", model="gpt-4o")
+provider = auto_provider()
+
+researcher = BaseAgent(name="researcher", system_prompt="You are a research analyst.")
+writer = BaseAgent(name="writer", system_prompt="You are a technical writer.")
 
 graph = WorkflowGraph(state_schema=ResearchState)
-graph.add_node("research", researcher)
-graph.add_node("write", writer)
-graph.add_edge("research", "write")
+graph.add_node("research", researcher, output_key="research")
+graph.add_node("write", writer, output_key="report")
 graph.set_entry_point("research")
+graph.add_edge("research", "write")
+graph.add_edge("write", END)
 
-workflow = graph.compile()
-state = asyncio.run(run(workflow, input={"query": "Latest advances in multi-agent systems"}))
-print(state.report)  # state is a ResearchState instance — access any field directly
+result = asyncio.run(
+    run(graph, input={"query": "Latest advances in multi-agent systems"}, provider=provider)
+)
+print(result.state["report"])
 ```
 
 ### Parallel Fan-Out with Conditional Routing
 
 ```python
-from orchestra import WorkflowGraph, END
-from pydantic import BaseModel
+import asyncio
+from typing import Annotated, Any
+from orchestra import BaseAgent, WorkflowGraph, WorkflowState, run, END
+from orchestra.core.state import merge_dict
+from orchestra.core.context import ExecutionContext
+from orchestra.providers import auto_provider
 
-class AnalysisState(BaseModel):
-    text: str = ""
-    sentiment: str = ""
-    entities: list[str] = []
-    summary: str = ""
-    confidence: float = 0.0
+class AnalysisState(WorkflowState):
+    topic: str = ""
+    findings: Annotated[dict[str, str], merge_dict] = {}
+    synthesis: str = ""
+
+provider = auto_provider()
+
+tech = BaseAgent(name="tech", system_prompt="Identify 2-3 key technical trends. Be concise.")
+market = BaseAgent(name="market", system_prompt="Identify 2-3 key market trends. Be concise.")
+synthesizer = BaseAgent(name="synthesizer", system_prompt="Synthesize findings into a brief summary.")
+
+# Fan-out using plain async functions to control state mapping
+async def run_tech(state: dict[str, Any]) -> dict[str, Any]:
+    ctx = ExecutionContext(provider=provider)
+    result = await tech.run(state["topic"], ctx)
+    return {"findings": {"technical": result.output}}
+
+async def run_market(state: dict[str, Any]) -> dict[str, Any]:
+    ctx = ExecutionContext(provider=provider)
+    result = await market.run(state["topic"], ctx)
+    return {"findings": {"market": result.output}}
+
+async def run_synthesizer(state: dict[str, Any]) -> dict[str, Any]:
+    ctx = ExecutionContext(provider=provider)
+    findings = "\n".join(f"[{k}] {v}" for k, v in state["findings"].items())
+    result = await synthesizer.run(findings, ctx)
+    return {"synthesis": result.output}
 
 graph = WorkflowGraph(state_schema=AnalysisState)
+graph.add_node("dispatch", lambda s: {})   # fan-out root
+graph.add_node("tech", run_tech)
+graph.add_node("market", run_market)
+graph.add_node("synthesizer", run_synthesizer)
+graph.set_entry_point("dispatch")
+graph.add_parallel("dispatch", ["tech", "market"], join_node="synthesizer")
+graph.add_edge("synthesizer", END)
 
-graph.add_node("classifier", classifier_agent)
-graph.add_node("sentiment", sentiment_agent)
-graph.add_node("entity_extract", entity_agent)
-graph.add_node("summarizer", summarizer_agent)
-
-graph.set_entry_point("classifier")
-
-# Fan out to parallel analysis
-graph.add_parallel(["sentiment", "entity_extract"], join_node="summarizer")
-
-# Conditional exit
-graph.add_conditional_edge("summarizer", lambda s: "end" if s.confidence > 0.9 else "classifier",
-                           {"end": END, "classifier": "classifier"})
-
-workflow = graph.compile()
+result = asyncio.run(
+    run(graph, input={"topic": "AI agents in production"}, provider=provider)
+)
+print(result.state["synthesis"])
 ```
 
-### Deterministic Testing
+### Deterministic Unit Testing
 
 ```python
 import pytest
-from orchestra import run
-from orchestra.testing import ScriptedLLM, WorkflowAssertions
+from orchestra import BaseAgent, WorkflowGraph, WorkflowState, run, END
+from orchestra.testing import ScriptedLLM
+
+class MyState(WorkflowState):
+    query: str = ""
+    research: str = ""
+    report: str = ""
+
+researcher = BaseAgent(name="researcher", system_prompt="Research analyst.")
+writer = BaseAgent(name="writer", system_prompt="Technical writer.")
+
+graph = WorkflowGraph(state_schema=MyState)
+graph.add_node("research", researcher, output_key="research")
+graph.add_node("write", writer, output_key="report")
+graph.set_entry_point("research")
+graph.add_edge("research", "write")
+graph.add_edge("write", END)
 
 @pytest.mark.asyncio
 async def test_research_workflow():
-    workflow = graph.compile()
+    # ScriptedLLM returns responses in order — no API calls, no mocking
+    provider = ScriptedLLM([
+        "Multi-agent systems have evolved significantly...",  # researcher
+        "## Research Report\n\nKey findings include...",     # writer
+    ])
+    result = await run(graph, input={"query": "test query"}, provider=provider, persist=False)
 
-    # ScriptedLLM is a context manager that intercepts all LLM calls
-    with ScriptedLLM(script={
-        "researcher": ["Multi-agent systems have evolved significantly..."],
-        "writer": ["## Research Report\n\nKey findings include..."],
-    }):
-        result = await run(workflow, input={"query": "test query"})
-
-    assertions = WorkflowAssertions(result)
-    assertions.assert_node_executed("researcher")
-    assertions.assert_node_executed("writer")
-    assertions.assert_output_contains("Key findings")
+    assert "Key findings" in result.state["report"]
+    assert result.node_execution_order == ["research", "write"]
 ```
 
 ---
@@ -218,42 +277,37 @@ async def test_research_workflow():
 
 ### Agent Definition
 
-Orchestra supports three agent definition styles that all produce the same internal representation:
-
-#### Class-Based (Production)
+Define agents with `BaseAgent` — provide a name, system prompt, and optionally tools and model:
 
 ```python
-from orchestra import BaseAgent, Tool
+from orchestra import BaseAgent, tool
 
-class ResearchAgent(BaseAgent):
-    name = "researcher"
-    role = "Senior Research Analyst"
-    goal = "Find accurate, sourced information"
-    backstory = "You have 20 years of experience in investigative research."
-    model = "gpt-4o"
-    tools = [web_search, document_reader]
-    output_type = ResearchReport  # Pydantic model for structured output
+@tool
+async def web_search(query: str) -> str:
+    """Search the web for information."""
+    ...
+
+researcher = BaseAgent(
+    name="researcher",
+    system_prompt="You are a senior research analyst. Find accurate, sourced information.",
+    model="gpt-4o",          # defaults to gpt-4o-mini
+    tools=[web_search],
+    temperature=0.7,
+    max_iterations=10,
+)
 ```
 
-#### Decorator-Based (Prototyping)
+Run an agent directly, outside a workflow:
 
 ```python
-from orchestra import agent
+from orchestra import ExecutionContext
+from orchestra.providers import auto_provider
 
-@agent(name="researcher", model="gpt-4o", tools=[web_search])
-async def research(query: str) -> ResearchReport:
-    """You are a senior research analyst. Find accurate information and cite sources."""
-```
-
-#### Config-Based (No-Code)
-
-```yaml
-# agents/researcher.yaml
-name: researcher
-role: Senior Research Analyst
-goal: Find accurate, sourced information
-model: gpt-4o
-tools: [web_search, document_reader]
+ctx = ExecutionContext(provider=auto_provider())
+result = await researcher.run("What are the latest AI safety techniques?", ctx)
+print(result.output)
+print(result.tool_calls_made)
+print(result.usage)
 ```
 
 ### Workflow Graphs
@@ -261,127 +315,131 @@ tools: [web_search, document_reader]
 The graph engine is Orchestra's core. It can express any orchestration pattern:
 
 ```python
+from orchestra import WorkflowGraph, END
+
 graph = WorkflowGraph(state_schema=MyState)
 
 # Sequential
 graph.add_edge("A", "B")
 
 # Conditional branching
-graph.add_conditional_edge("B", route_fn, {"option1": "C", "option2": "D"})
+def route(state: dict) -> str:
+    return "fast" if state.get("simple") else "thorough"
 
-# Swarm-style handoff
-graph.add_handoff("C", "D", condition=lambda s: s.needs_escalation)
+graph.add_conditional_edge("B", route, path_map={"fast": "C", "thorough": "D"})
 
 # Parallel fan-out with join
-graph.add_parallel(["E", "F", "G"], join_node="H", join_strategy="wait_all")
+graph.add_parallel("E", ["F", "G", "H"], join_node="I")
 
-# Bounded loops
-graph.add_loop(["I", "J"], exit_condition=lambda s: s.is_done, max_iterations=10)
-
-# Human-in-the-loop interrupts
-graph.interrupt_before("review_node")
+# Swarm-style handoff
+graph.add_handoff("C", "D", condition=lambda s: s.get("needs_escalation"))
 
 # Compile validates the graph (unreachable nodes, type mismatches, cycles)
-workflow = graph.compile()
+compiled = graph.compile()
 ```
+
+`run()` accepts both a `WorkflowGraph` and a `CompiledGraph` — it compiles automatically if needed.
 
 **Node Types:**
 
 | Node | Description |
 |---|---|
-| `AgentNode` | Wraps an Agent — executes the agent's reasoning loop |
-| `FunctionNode` | Wraps a plain Python function — deterministic transformations |
+| `AgentNode` | Wraps a `BaseAgent` — executes the agent's reasoning loop |
+| `FunctionNode` | Wraps a plain async Python function — deterministic transformations |
 | `DynamicNode` | Generates sub-nodes and edges at runtime — plan-and-execute, adaptive workflows |
 | `SubgraphNode` | Embeds a pre-compiled graph — reusable workflow composition |
 
 ### Typed State Management
 
-State is defined as Pydantic models with `Annotated` reducer functions for deterministic concurrent merges:
+State is defined as subclasses of `WorkflowState` (a Pydantic `BaseModel`) with `Annotated` reducer functions for deterministic concurrent merges:
 
 ```python
 from typing import Annotated
-from pydantic import BaseModel
-from orchestra.core.state import merge_list, merge_dict, increment
+from orchestra import WorkflowState
+from orchestra.core.state import merge_list, merge_dict, sum_numbers
 
-class MyState(BaseModel):
-    messages: Annotated[list[Message], merge_list] = []
-    current_agent: str = ""
+class MyState(WorkflowState):
+    messages: Annotated[list[str], merge_list] = []
     results: Annotated[dict[str, str], merge_dict] = {}
-    iteration: Annotated[int, increment] = 0
+    step_count: Annotated[int, sum_numbers] = 0
+    current_agent: str = ""
 ```
 
-**Built-in reducers:** `merge_list`, `merge_dict`, `last_write_wins`, `increment`
+**Built-in reducers:** `merge_list`, `merge_dict`, `merge_set`, `sum_numbers`, `last_write_wins`, `concat_str`, `keep_first`
 
-When parallel agents write to the same state field, reducers ensure deterministic, conflict-free merges.
+When parallel agents write to the same state field, reducers guarantee deterministic, conflict-free merges.
 
 ### Tool Integration
 
-Orchestra is **MCP-first** for tool integration, with function-calling and a centralized registry:
+Decorate any async function with `@tool` to make it available to agents:
 
 ```python
-from orchestra.tools import tool, ToolRegistry, MCPClient
+from orchestra import BaseAgent, tool
 
-# Decorator-based tool definition
 @tool
 async def web_search(query: str) -> str:
     """Search the web for information."""
     ...
 
-# MCP server integration
+@tool
+async def read_file(path: str) -> str:
+    """Read a file from the filesystem."""
+    ...
+
+agent = BaseAgent(
+    name="researcher",
+    system_prompt="Research analyst with web access.",
+    tools=[web_search, read_file],
+)
+```
+
+Orchestra is **MCP-first** for external tool integration:
+
+```python
+from orchestra.tools import MCPClient
+
 mcp = MCPClient("npx @modelcontextprotocol/server-github")
 github_tools = await mcp.list_tools()
+```
 
-# Centralized registry with ACLs
-registry = ToolRegistry()
-registry.register(web_search)
-registry.register_mcp(mcp)
-registry.set_acl("researcher", allow=["web_search", "github_*"])
-registry.set_acl("writer", allow=["web_search"], deny=["github_*"])
+Tool-level ACLs restrict which agents can invoke which tools:
+
+```python
+from orchestra.security import ACLEngine
+
+acl = ACLEngine()
+acl.set_acl("researcher", allow=["web_search", "read_file"])
+acl.set_acl("writer", allow=["write_file"], deny=["web_search"])
 ```
 
 ### Testing Framework
 
-Orchestra provides a dedicated agent testing framework built into the orchestration layer — "pytest for agents":
-
-| Mock | Purpose | Speed |
-|---|---|---|
-| `ScriptedLLM` | Deterministic responses for unit tests. Fully reproducible. | < 30s |
-| `SimulatedLLM` | Cheap model with seed + temp=0 for integration tests. | < 10 min |
-| `FlakyLLM` | Chaos testing — simulates timeouts, errors, partial failures. | Variable |
+`ScriptedLLM` is a drop-in provider that returns pre-scripted responses in sequence. Pass it wherever you'd pass a real provider — no monkeypatching, no context managers:
 
 ```python
-# Unit test with ScriptedLLM
-@pytest.mark.asyncio
-async def test_research_workflow():
-    workflow = graph.compile()
+from orchestra.testing import ScriptedLLM
 
-    with ScriptedLLM(script={
-        "researcher": ["Finding 1: ...", "Finding 2: ..."],
-        "writer": ["Final report based on findings..."],
-    }):
-        result = await run(workflow, input={"query": "test"})
+provider = ScriptedLLM([
+    "I'll research that now...",           # response 1 (researcher turn 1)
+    "Here is the final report...",         # response 2 (writer turn 1)
+])
 
-    assert "Final report" in result.report
-
-# Chaos test with FlakyLLM
-@pytest.mark.asyncio
-async def test_resilience():
-    workflow = graph.compile()
-
-    with FlakyLLM(failure_rate=0.3, timeout_rate=0.1):
-        result = await run(workflow, input={"query": "test"})
-
-    assert result is not None  # Workflow recovers gracefully
+result = await run(graph, input={"query": "test"}, provider=provider, persist=False)
 ```
 
-**Workflow Assertions** allow checkpoint-based assertions on any intermediate state:
+For chaos and resilience testing, use `CallableProvider` to simulate failures:
 
 ```python
-assertions = WorkflowAssertions(result)
-assertions.assert_node_executed("researcher")
-assertions.assert_state_at("researcher", lambda s: len(s.messages) > 0)
-assertions.assert_no_errors()
-assertions.assert_total_cost_under(0.50)
+from orchestra.providers import CallableProvider
+import random
+
+async def flaky_model(prompt: str) -> str:
+    if random.random() < 0.3:
+        raise ConnectionError("Simulated timeout")
+    return "Response"
+
+provider = CallableProvider(flaky_model)
+result = await run(graph, input={"query": "test"}, provider=provider, persist=False)
 ```
 
 ---
@@ -391,108 +449,67 @@ assertions.assert_total_cost_under(0.50)
 ### Project Structure
 
 ```
-orchestra/                      # repository root
-  src/
-    orchestra/                  # installable package
-    __init__.py
-    core/                   # Graph engine, agents, state, execution
-        agent.py            # Agent Protocol, BaseAgent, @agent decorator
-        graph.py            # WorkflowGraph, CompiledGraph
-        nodes.py            # AgentNode, FunctionNode, DynamicNode, SubgraphNode
-        edges.py            # Edge, ConditionalEdge, HandoffEdge, ParallelEdge
-        state.py            # WorkflowState, StateReducer, reducer functions
-        context.py          # ExecutionContext, RunContext
-        runner.py           # AgentExecutor Protocol, AsyncioExecutor, RayExecutor
-        types.py            # Message, AgentResult, TokenUsage, END sentinel
-        errors.py           # OrchestraError hierarchy
-    providers/              # LLM provider adapters
-        base.py             # LLMProvider Protocol
-        openai.py           # OpenAI (GPT-4o, GPT-4o-mini)
-        anthropic.py        # Anthropic (Claude Opus, Sonnet, Haiku)
-        google.py           # Google (Gemini)
-        ollama.py           # Ollama (local models)
-        router.py           # CostRouter (intelligent model routing)
-    tools/                  # Tool system
-        base.py             # Tool Protocol, @tool decorator
-        registry.py         # ToolRegistry with ACLs
-        mcp.py              # MCPClient, MCPToolProvider
-    memory/                 # Multi-tier memory
-        working.py          # In-process bounded deque
-        short_term.py       # Session-scoped (SQLite/PostgreSQL)
-        long_term.py        # Semantic search (pgvector)
-        entity.py           # Structured entity-attribute-value
-        manager.py          # Unified MemoryManager
-    storage/                # Persistence layer
-        sqlite.py           # Dev backend
-        postgres.py         # Production backend
-        redis.py            # Hot state cache
-        events.py           # EventStore, event sourcing
-    observability/          # Tracing, metrics, logging
-        tracing.py          # OpenTelemetry span management
-        metrics.py          # CostTracker, token usage
-        console.py          # Rich terminal trace renderer
-        logging.py          # structlog configuration
-    security/               # Agent IAM and guardrails
-        identity.py         # AgentIdentity, Capability
-        acl.py              # ACLEngine, PermissionPolicy
-        guardrails.py       # ContentFilter, PIIDetector, CostLimiter
-    api/                    # HTTP server
-        app.py              # FastAPI application
-        routes/             # /v1/workflows, /v1/runs, /v1/agents
-        websocket.py        # WebSocket for HITL
-    testing/                # Agent testing framework
-        scripted.py         # ScriptedLLM
-        simulated.py        # SimulatedLLM
-        flaky.py            # FlakyLLM
-        assertions.py       # WorkflowAssertions
-        fixtures.py         # pytest fixtures
-    cli/                    # Command-line interface
-        main.py             # orchestra init, run, test, serve
+src/orchestra/                  # installable package
+  __init__.py                   # Public API: BaseAgent, WorkflowGraph, run, WorkflowState, ...
+  core/                         # Graph engine, agents, state, execution
+    agent.py                    # BaseAgent, @agent decorator
+    graph.py                    # WorkflowGraph, fluent API (.then/.parallel/.branch)
+    nodes.py                    # AgentNode, FunctionNode, DynamicNode, SubgraphNode
+    edges.py                    # Edge, ConditionalEdge, HandoffEdge, ParallelEdge
+    state.py                    # WorkflowState, reducer functions
+    context.py                  # ExecutionContext
+    runner.py                   # run(), run_sync(), RunResult
+    types.py                    # Message, AgentResult, TokenUsage, END, START
+  providers/                    # LLM provider adapters
+    __init__.py                 # auto_provider() factory
+    http.py                     # HttpProvider — any OpenAI-compatible API
+    anthropic.py                # AnthropicProvider
+    google.py                   # GoogleProvider (Gemini)
+    ollama.py                   # OllamaProvider (local)
+    callable.py                 # CallableProvider — wrap any function as a provider
+    strategy.py                 # CostRouter
+  tools/                        # Tool system
+    base.py                     # @tool decorator, Tool protocol
+    registry.py                 # ToolRegistry with ACLs
+    mcp.py                      # MCPClient, MCPToolProvider
+  memory/                       # Multi-tier memory
+    working.py                  # In-process bounded deque
+    short_term.py               # Session-scoped (SQLite/PostgreSQL)
+    long_term.py                # Semantic search (pgvector)
+    entity.py                   # Structured entity-attribute-value
+    manager.py                  # Unified MemoryManager
+  storage/                      # Persistence layer
+    sqlite.py                   # Dev backend
+    postgres.py                 # Production backend
+    redis.py                    # Hot state cache
+    events.py                   # EventStore, event sourcing
+  observability/                # Tracing, metrics, logging
+    tracing.py                  # OpenTelemetry span management
+    metrics.py                  # CostTracker, token usage
+    console.py                  # Rich terminal trace renderer
+    logging.py                  # structlog configuration
+  security/                     # Agent IAM and guardrails
+    identity.py                 # AgentIdentity, Capability
+    acl.py                      # ACLEngine, PermissionPolicy
+    guardrails.py               # ContentFilter, PIIDetector, CostLimiter
+  api/                          # HTTP server (FastAPI)
+  testing/                      # ScriptedLLM and test utilities
+  cli/                          # orchestra init, run, test, serve
 ```
 
-### Module Dependency Map
-
-```
-                         +------------------+
-                         |  api/            |
-                         |  (FastAPI server) |
-                         +--------+---------+
-                                  |
-                    +-------------+-------------+
-                    |                           |
-              +-----v------+          +--------v--------+
-              |  cli/       |          |  observability/ |
-              |  (Typer)    |          |  (OTel, Rich)   |
-              +-----+------+          +--------+--------+
-                    |                           |
-        +-----------v---------------------------v-----------+
-        |                   core/                           |
-        |  agent.py  graph.py  nodes.py  edges.py          |
-        |  state.py  context.py  runner.py  types.py       |
-        +-+-------+-------+-------+--------+-------+------+
-          |       |       |       |        |       |
-    +-----v-+ +--v---+ +-v----+ +v------+ v------+v--------+
-    |provid.| |tools/| |memry/| |storag.| |security/       |
-    +-------+ +------+ +------+ +-------+ +--------+-------+
-                                                    |
-                                             +------v------+
-                                             |  testing/   |
-                                             +-------------+
-```
-
-The `core/` module has **zero upward dependencies** — it depends only on Protocol interfaces from `providers/base.py`, `tools/base.py`, `storage/base.py`, and `memory/base.py`.
+The `core/` module has **zero upward dependencies** — it depends only on Protocol interfaces, making it straightforward to test in isolation.
 
 ---
 
 ## Progressive Infrastructure
 
-Orchestra scales from a laptop to a Kubernetes cluster without changing your agent or workflow code:
+Orchestra scales from a laptop to a Kubernetes cluster without touching your agent or workflow code:
 
 | Stage | Storage | Messaging | Observability | Execution |
 |---|---|---|---|---|
 | **Local Dev** | SQLite + in-memory | asyncio.Queue | Rich console | Single process |
 | **Team Staging** | PostgreSQL | NATS JetStream | Jaeger / Grafana | Docker Compose |
-| **Production** | PostgreSQL + Redis | NATS JetStream | OTel + Datadog/Honeycomb | Kubernetes / Ray |
+| **Production** | PostgreSQL + Redis | NATS JetStream | OTel + Datadog/Honeycomb | Kubernetes / KEDA |
 
 **Same code. Same graphs. Same agents. Only configuration changes.**
 
@@ -500,53 +517,21 @@ Orchestra scales from a laptop to a Kubernetes cluster without changing your age
 
 ## Observability
 
-Orchestra provides built-in, zero-infrastructure observability that works out of the box:
-
-- **Rich Console Tracer** — Live terminal trace tree showing agent execution, tool calls, handoffs, and state transitions in real-time during development
-- **Time-Travel Debugging** — Reconstruct and inspect state at any checkpoint. Modify state and resume execution from any point. No external services required.
-- **Cost Waterfall** — Visualize token usage and estimated cost per agent, per turn, in the terminal
-- **OpenTelemetry** — Vendor-neutral traces, metrics, and logs. Export to Jaeger, Datadog, Honeycomb, or any OTel-compatible backend
-- **Structured Logging** — structlog with auto-detection: human-readable in dev, JSON in production
-
----
-
-## Human-in-the-Loop (HITL)
-
-Orchestra supports pausing workflows for human review and resuming with modified state:
-
-```python
-from orchestra import WorkflowGraph, run, resume
-
-# Interrupt before a specific node
-workflow = graph.compile(
-    interrupt_before=["final_decision"],
-)
-
-# Run until the interrupt point
-result = await run(workflow, input={"proposal": "..."})
-# result.status == "interrupted"
-
-# Human inspects the state
-print(result.state.draft_decision)
-
-# Resume with human feedback
-final = await resume(
-    run_id=result.run_id,
-    state_override={"human_approved": True, "reviewer_notes": "Looks good"},
-)
-```
-
-Escalation policies handle timeouts automatically — if a human does not respond within a configured window, the workflow can escalate to a different reviewer or proceed with a fallback.
+- **Rich Console Tracer** — Live terminal trace tree showing agent execution, tool calls, handoffs, and state transitions in real time during development.
+- **Time-Travel Debugging** — Reconstruct and inspect state at any checkpoint. Modify state and resume from any point. No external services required.
+- **Cost Waterfall** — Visualize token usage and estimated cost per agent, per turn, directly in the terminal.
+- **OpenTelemetry** — Vendor-neutral traces, metrics, and logs. Export to Jaeger, Datadog, Honeycomb, or any OTel-compatible backend.
+- **Structured Logging** — structlog with auto-detection: human-readable in dev, JSON in production.
 
 ---
 
 ## Security Model
 
-Orchestra is the first multi-agent framework with a capability-based agent identity and access management system:
+Orchestra provides a capability-based agent identity and access management system.
 
 ### Agent Identity
 
-Each agent has a cryptographic identity with 13 scoped capability types:
+Each agent has a cryptographic identity with scoped capability types:
 
 ```python
 from orchestra.security import AgentIdentity, Capability
@@ -561,18 +546,9 @@ identity = AgentIdentity(
 )
 ```
 
-### Tool-Level ACLs
-
-Agents can only invoke tools they are explicitly granted access to:
-
-```python
-registry.set_acl("researcher", allow=["web_search", "read_file"])
-registry.set_acl("writer", allow=["write_file"], deny=["web_search"])
-```
-
 ### Guardrails Middleware
 
-Composable pre/post hooks applied as decorators:
+Composable pre/post hooks applied as middleware on agent nodes:
 
 ```python
 from orchestra.security import with_guardrails, ContentFilter, PIIDetector, CostLimiter
@@ -582,103 +558,94 @@ class SensitiveAgent(BaseAgent):
     ...
 ```
 
-### Security Modes
+### Two Security Modes
 
-- **Dev mode**: All agents have all permissions. Zero friction during prototyping.
-- **Prod mode**: Explicit grants required. Deny-by-default. Full audit trail.
+- **Dev mode** — All agents have all permissions. Zero friction during prototyping.
+- **Prod mode** — Explicit grants required. Deny-by-default. Full audit trail.
 
 ---
 
 ## Memory System
 
-Four-tier memory architecture adapted from the best patterns across frameworks:
+Four-tier memory architecture:
 
 | Tier | Scope | Backend | Use Case |
 |---|---|---|---|
-| **Working Memory** | Current execution | In-process bounded deque | Active context window with auto-summarization |
-| **Short-Term Memory** | Session | SQLite / PostgreSQL | Conversation history within a session |
-| **Long-Term Memory** | Cross-session | pgvector | Semantic search across all past interactions |
+| **Working Memory** | Current execution | In-process bounded deque | Active context window |
+| **Short-Term Memory** | Session | SQLite / PostgreSQL | Conversation history |
+| **Long-Term Memory** | Cross-session | pgvector | Semantic search across past interactions |
 | **Entity Memory** | Persistent | PostgreSQL | Structured facts about people, projects, concepts |
 
-The `MemoryManager` provides a unified interface that coordinates reads and writes across all tiers.
+`MemoryManager` provides a unified interface that coordinates reads and writes across all tiers.
 
 ---
 
 ## Cost Management
 
-Orchestra is the only framework that actively reduces your LLM bill:
-
-- **Complexity Profiling** — Analyze task complexity before LLM dispatch
-- **Intelligent Cost Router** — Automatically route simple tasks to cheap models (GPT-4o-mini, Haiku) and complex reasoning to expensive models (GPT-4o, Opus)
-- **Budget Enforcement** — Per-workflow and per-agent token budgets. Automatic degradation to cheaper models rather than hard failure.
-- **Cost Attribution** — Track costs per agent, per workflow, per user with real-time dashboards
+- **Complexity Profiling** — Analyze task complexity before dispatching to an LLM.
+- **Intelligent Cost Router** — Route simple tasks to cheap models (GPT-4o-mini, Haiku) and complex reasoning to capable ones (GPT-4o, Opus) — automatically.
+- **Budget Enforcement** — Per-workflow and per-agent token budgets with automatic degradation rather than hard failure.
+- **Cost Attribution** — Track spend per agent, per workflow, per user.
 
 ```python
-from orchestra import WorkflowGraph, run
 from orchestra.providers import CostRouter
 
 router = CostRouter(
     tiers={
-        "simple": "gpt-4o-mini",     # Classification, extraction
-        "moderate": "claude-sonnet-4-6", # Summarization, writing
-        "complex": "gpt-4o",          # Reasoning, planning
+        "simple":   "gpt-4o-mini",       # Classification, extraction
+        "moderate": "claude-haiku-4-5",  # Summarization, writing
+        "complex":  "gpt-4o",            # Reasoning, planning
     },
     budget_per_workflow=5.00,  # USD
 )
 
-# Agents in the workflow use the router as their LLM provider
-analyst = Agent(name="analyst", role="Data Analyst", provider=router)
-writer = Agent(name="writer", role="Report Writer", provider=router)
+result = await run(graph, input={"query": "..."}, provider=router)
 ```
 
 ---
 
 ## LLM Provider Support
 
-Orchestra supports all major LLM providers through a unified `LLMProvider` Protocol:
+Orchestra works with **any LLM backend** through a unified `LLMProvider` Protocol. Backend-agnosticism is a core design principle, not an afterthought.
 
-| Provider | Models | Status |
+### Built-in Providers
+
+| Provider | Activated by | Models |
 |---|---|---|
-| **OpenAI** | GPT-4o, GPT-4o-mini, o1, o3 | Core |
-| **Anthropic** | Claude 4 (Opus, Sonnet), Claude 3.5 (Haiku) | Core |
-| **Google** | Gemini 2.0 Flash, Gemini 1.5 Pro | Optional |
-| **Ollama** | Llama, Mistral, and all local models | Optional |
-| **Any OpenAI-compatible** | Via base URL configuration | Optional |
+| `HttpProvider` | `ORCHESTRA_API_KEY` or `OPENAI_API_KEY` | GPT-4o, o1, o3, and any OpenAI-compatible model |
+| `AnthropicProvider` | `ANTHROPIC_API_KEY` | Claude Opus 4, Sonnet, Haiku |
+| `GoogleProvider` | `GOOGLE_API_KEY` | Gemini 2.0 Flash, Gemini 1.5 Pro |
+| `OllamaProvider` | Ollama running at localhost:11434 | Any `ollama pull` model — completely free |
 
-Providers are optional extras — install only what you need:
+### Any OpenAI-Compatible API
+
+`HttpProvider` speaks the OpenAI chat completions format — the de facto industry standard. That covers Groq, Together, Mistral, vLLM, LiteLLM, Azure OpenAI, Perplexity, and any self-hosted endpoint:
 
 ```bash
-pip install orchestra[openai]       # OpenAI support
-pip install orchestra[anthropic]    # Anthropic support
-pip install orchestra[all]          # Everything
+export ORCHESTRA_BASE_URL=https://api.groq.com/openai/v1
+export ORCHESTRA_API_KEY=gsk_...
+export ORCHESTRA_MODEL=llama-3.3-70b-versatile
 ```
 
----
+```python
+provider = auto_provider()  # done
+```
 
-## Roadmap
+### Wrap Any Callable
 
-Orchestra is built in four phases over 26 weeks:
+```python
+from orchestra.providers import CallableProvider
 
-### Phase 1: Core Engine (Weeks 1-6)
-Graph engine, agent protocol, typed state, LLM adapters, testing harness, CLI, and example workflows. A developer can `pip install orchestra`, define agents, compose them into typed graph workflows, run them against real LLMs, and write deterministic tests.
+# Cohere, HuggingFace, a local model, a LangChain chain — anything callable
+async def my_llm(prompt: str) -> str:
+    return await my_custom_model.generate(prompt)
 
-### Phase 2: Differentiation (Weeks 7-12)
-Event-sourced persistence, human-in-the-loop, time-travel debugging, handoff protocol, MCP integration, and Rich tracing. This is where Orchestra stops being "LangGraph lite" and becomes something new.
+provider = CallableProvider(my_llm)
+```
 
-### Phase 3: Production Readiness (Weeks 13-18)
-FastAPI server, OpenTelemetry, Redis cache, multi-tier memory, advanced test harnesses, guardrails, and cost tracking. Everything needed to deploy in production.
+### Write a Custom Provider
 
-### Phase 4: Enterprise & Scale (Weeks 19-26)
-Cost router, agent IAM, Ray distributed executor, NATS messaging, dynamic subgraphs, TypeScript SDK, and Kubernetes deployment. Enterprise features that create a durable competitive moat.
-
-### Examples
-
-The `examples/` directory contains end-to-end working examples (available once Phase 1 ships):
-
-- `quickstart.py` — Minimal agent and workflow setup
-- `research_pipeline.py` — Multi-agent research with structured output
-- `customer_support_handoff.py` — Swarm-style handoffs between support tiers
-- `parallel_debate.py` — Parallel agents with adversarial review
+Any object implementing `.complete()`, `.stream()`, `.count_tokens()`, and `.get_model_cost()` works as a provider. No base class registration required — pass it directly to `run()`.
 
 ---
 
@@ -689,9 +656,9 @@ The `examples/` directory contains end-to-end working examples (available once P
 | Graph workflows | Full | Full | Basic | None | None |
 | Dynamic subgraphs | Yes | No | No | No | No |
 | Agent DX quality | High | Low | Highest | Medium | Medium |
-| Multi-model support | All providers | All | All (LiteLLM) | All | OpenAI only |
+| Multi-model support | **All backends** | All | All (LiteLLM) | All | OpenAI only |
 | Time-travel debug | Built-in (free) | LangSmith (paid) | No | No | No |
-| Testing framework | Full (3 modes) | Manual | train() only | Manual | Manual |
+| Testing framework | ScriptedLLM | Manual | train() only | Manual | Manual |
 | Agent IAM/security | Capability-based | None | None | Docker only | Guardrails |
 | Cost routing | Intelligent | None | None | None | None |
 | HITL | Full + escalation | Best | Manager | Human input | None |
@@ -706,7 +673,7 @@ The `examples/` directory contains end-to-end working examples (available once P
 | Dimension | Choice | Rationale |
 |---|---|---|
 | Language | Python 3.11+ | LLM ecosystem is Python-first |
-| Async Runtime | asyncio (default), Ray (opt-in) | Zero-infrastructure default; Ray for scale |
+| Async Runtime | asyncio | Zero-infrastructure default |
 | Data Validation | Pydantic v2 | Rust-backed performance, type safety |
 | State Storage | SQLite (dev) / PostgreSQL + pgvector (prod) | Event-sourced workflow state + semantic memory |
 | Hot Cache | In-memory (dev) / Redis 7+ (prod) | Session state, tool result caching |
@@ -715,37 +682,36 @@ The `examples/` directory contains end-to-end working examples (available once P
 | CLI | Typer | Clean command-line interface |
 | Testing | pytest-asyncio | Native async test support |
 
-**Core dependency count:** ~15 required packages. LLM providers, Ray, NATS, and pgvector are optional extras.
+**Core dependency count:** ~15 required packages. LLM providers, NATS, and pgvector are optional extras.
 
 ---
 
 ## Contributing
 
-Orchestra is 100% free and open-source under Apache 2.0. Contributions are welcome.
-
-### Getting Started
+Orchestra is 100% free and open-source under Apache 2.0.
 
 ```bash
 git clone https://github.com/songyinggoh/multi-agent-orchestration-framework.git
 cd multi-agent-orchestration-framework
-pip install -e ".[dev]"    # Install with dev dependencies
-pytest                     # Run the test suite
+pip install -e ".[dev,server,security,storage]"
+pytest
+```
+
+To run the live end-to-end demo against a real model:
+
+```bash
+python examples/live.py                           # auto-detect provider
+python examples/live.py --provider ollama         # local, no API key needed
+python examples/live.py --provider openai --model gpt-4o-mini
 ```
 
 ### Workflow
 
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feature/my-feature`)
-3. Write tests for your changes using `ScriptedLLM` for deterministic assertions
+3. Write tests using `ScriptedLLM` for deterministic assertions
 4. Ensure all tests pass (`pytest`)
 5. Submit a pull request
-
-### Project Layout
-
-- **[planning/](./planning/)** — Architecture decisions, API design, and the detailed roadmap
-- **[planning/API-DESIGN.md](./planning/API-DESIGN.md)** — Canonical API reference for all public interfaces
-- **[planning/ROADMAP.md](./planning/ROADMAP.md)** — Phase-by-phase development plan with success criteria
-- **[research/](./research/)** — Competitive analysis, tech stack rationale, and design research
 
 ### Code Style
 

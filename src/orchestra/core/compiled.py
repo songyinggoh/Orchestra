@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import sqlite3
 import uuid
 import warnings
 from datetime import datetime, timezone
@@ -28,7 +29,7 @@ from orchestra.core.state import (
     extract_reducers,
     merge_parallel_updates,
 )
-from orchestra.core.types import END, AgentResult, WorkflowStatus
+from orchestra.core.types import END, AgentResult, WorkflowStatus, Send
 from orchestra.storage.checkpoint import Checkpoint
 from orchestra.debugging.timetravel import TimeTravelController
 
@@ -183,6 +184,32 @@ class CompiledGraph:
             except ImportError:
                 _renderer = None
 
+        # 2c. OTel trace subscriber (optional)
+        try:
+            from orchestra.observability.tracing import OTelTraceSubscriber
+            _otel_subscriber = OTelTraceSubscriber()
+            event_bus.subscribe(_otel_subscriber.on_event)
+        except ImportError:
+            pass
+
+        # 2d. OTel metrics subscriber (optional)
+        try:
+            from orchestra.observability.metrics import OTelMetricsSubscriber
+            _otel_metrics = OTelMetricsSubscriber()
+            event_bus.subscribe(_otel_metrics.on_event)
+        except ImportError:
+            pass
+
+        # 2e. Cost aggregator (optional)
+        _cost_aggregator = None
+        try:
+            from orchestra.cost.aggregator import CostAggregator
+            _cost_aggregator = CostAggregator()
+            event_bus.subscribe(_cost_aggregator.on_event)
+            context.config["_cost_aggregator"] = _cost_aggregator
+        except ImportError:
+            pass
+
         # 3. Emit RunStarted
         run_start_time = datetime.now(timezone.utc)
         await event_bus.emit(
@@ -195,16 +222,17 @@ class CompiledGraph:
             )
         )
 
-        final_state_dict = await self._run_loop(
-            current_node_id=start_at or self._entry_point,
-            state_dict=raw_state,
-            context=context,
-            event_bus=event_bus,
-            event_store=event_store,
-        )
-
-        if _store_owner and event_store is not None:
-            await event_store.close()  # type: ignore[union-attr]
+        try:
+            final_state_dict = await self._run_loop(
+                current_node_id=start_at or self._entry_point,
+                state_dict=raw_state,
+                context=context,
+                event_bus=event_bus,
+                event_store=event_store,
+            )
+        finally:
+            if _store_owner and event_store is not None:
+                await event_store.close()  # type: ignore[union-attr]
 
         return final_state_dict
 
@@ -236,7 +264,7 @@ class CompiledGraph:
                 from orchestra.storage.sqlite import SQLiteEventStore
                 event_store = SQLiteEventStore()
                 await event_store.initialize()  # type: ignore[attr-defined]
-            except (ImportError, Exception) as e:
+            except (ImportError, OSError, sqlite3.Error) as e:
                 raise AgentError(f"Failed to auto-initialize event store for resume: {e}")
 
         # 1. Load latest checkpoint
@@ -258,7 +286,7 @@ class CompiledGraph:
         )
         event_bus = EventBus()
         # Seed sequence number from checkpoint
-        event_bus._sequence_counters[run_id] = checkpoint.sequence_number
+        event_bus.set_sequence(run_id, checkpoint.sequence_number)
         context.event_bus = event_bus
 
         # Bind store
@@ -404,8 +432,9 @@ class CompiledGraph:
             while (current_node_id != END and not isinstance(current_node_id, type(END))
                    and turns < self._max_turns):
                 turns += 1
-                context.turn_number = turns
-                context.node_id = str(current_node_id)
+                async with context.mutate():
+                    context.turn_number = turns
+                    context.node_id = str(current_node_id)
 
                 node = self._nodes.get(str(current_node_id))
                 if node is None:
@@ -467,12 +496,14 @@ class CompiledGraph:
 
                 # Execute the node
                 state_dict = state.model_dump() if isinstance(state, WorkflowState) else dict(state)
-                context.state = state_dict
+                async with context.mutate():
+                    context.state = state_dict
 
                 node_start = datetime.now(timezone.utc)
                 update = await self._execute_node(str(current_node_id), node, state_dict, context)
                 node_duration_ms = (datetime.now(timezone.utc) - node_start).total_seconds() * 1000
-                context.node_execution_order.append(str(current_node_id))
+                async with context.mutate():
+                    context.node_execution_order.append(str(current_node_id))
 
                 # Apply state update
                 if update:
@@ -561,12 +592,24 @@ class CompiledGraph:
                     error_message=str(exc),
                 )
             )
+
+            totals = context.config.get("_usage_totals", {}) if context is not None else {}
+            _tok = int(totals.get("total_tokens", 0) or 0)
+            _cost = float(totals.get("total_cost_usd", 0.0) or 0.0)
+            # Prefer cost aggregator data when available
+            _agg = context.config.get("_cost_aggregator") if context is not None else None
+            if _agg is not None:
+                _agg_totals = _agg.get_totals(effective_run_id)
+                _tok = _tok or int(_agg_totals.get("total_tokens", 0))
+                _cost = _cost or float(_agg_totals.get("total_cost_usd", 0.0))
             await event_bus.emit(
                 ExecutionCompleted(
                     run_id=effective_run_id,
                     sequence=event_bus.next_sequence(effective_run_id),
                     final_state={},
                     duration_ms=duration_ms,
+                    total_tokens=_tok,
+                    total_cost_usd=_cost,
                     status="failed",
                 )
             )
@@ -585,12 +628,23 @@ class CompiledGraph:
         # 5a. Emit RunCompleted
         final_state_dict = state.model_dump() if isinstance(state, WorkflowState) else dict(state)
         duration_ms = (datetime.now(timezone.utc) - run_start_time).total_seconds() * 1000
+        totals = context.config.get("_usage_totals", {}) if context is not None else {}
+        _tok = int(totals.get("total_tokens", 0) or 0)
+        _cost = float(totals.get("total_cost_usd", 0.0) or 0.0)
+        # Prefer cost aggregator data when available
+        _agg = context.config.get("_cost_aggregator") if context is not None else None
+        if _agg is not None:
+            _agg_totals = _agg.get_totals(effective_run_id)
+            _tok = _tok or int(_agg_totals.get("total_tokens", 0))
+            _cost = _cost or float(_agg_totals.get("total_cost_usd", 0.0))
         await event_bus.emit(
             ExecutionCompleted(
                 run_id=effective_run_id,
                 sequence=event_bus.next_sequence(effective_run_id),
                 final_state=final_state_dict,
                 duration_ms=duration_ms,
+                total_tokens=_tok,
+                total_cost_usd=_cost,
                 status="completed",
             )
         )
@@ -680,7 +734,76 @@ class CompiledGraph:
                 agent_input = input_text
 
         # Execute agent
+        # --- Guardrails (pre) ---
+        guardrails = context.get_config("guardrails")
+        guard_fail = context.get_config("guardrails_fail", "refuse")
+        if guardrails:
+            from orchestra.security.guardrails import Guardrail
+
+            messages = []
+            if isinstance(agent_input, list):
+                messages = agent_input
+            elif isinstance(agent_input, str):
+                from orchestra.core.types import Message, MessageRole
+                messages = [Message(role=MessageRole.USER, content=agent_input)]
+
+            violations: list[str] = []
+            for g in guardrails:
+                if (isinstance(g, Guardrail) or hasattr(g, "validate_input")) and messages:
+                    v = await g.validate_input(messages=messages, model=getattr(agent, "model", None))
+                    violations.extend([getattr(vv, "message", str(vv)) for vv in v])
+
+            if violations:
+                try:
+                    from orchestra.storage.events import InputRejected
+                    if context.event_bus is not None and not context.replay_mode:
+                        await context.event_bus.emit(
+                            InputRejected(
+                                run_id=context.run_id,
+                                sequence=context.event_bus.next_sequence(context.run_id),
+                                node_id=node_id,
+                                agent_name=getattr(agent, "name", ""),
+                                guardrail=getattr(guardrails[0], "name", "guardrail"),
+                                violation_messages=violations,
+                            )
+                        )
+                except Exception:
+                    pass
+                if str(guard_fail) == "raise":
+                    raise AgentError("Guardrail rejected input")
+                return {"output": "Guardrail rejected input", "guardrails": {"violations": violations}}
+
         result: AgentResult = await agent.run(agent_input, context)
+
+        # --- Guardrails (post) ---
+        if guardrails and result.output:
+            from orchestra.security.guardrails import Guardrail
+
+            post_violations: list[str] = []
+            for g in guardrails:
+                if isinstance(g, Guardrail) or hasattr(g, "validate_output"):
+                    v = await g.validate_output(output_text=result.output, model=getattr(agent, "model", None))
+                    post_violations.extend([getattr(vv, "message", str(vv)) for vv in v])
+
+            if post_violations:
+                try:
+                    from orchestra.storage.events import OutputRejected
+                    if context.event_bus is not None and not context.replay_mode:
+                        await context.event_bus.emit(
+                            OutputRejected(
+                                run_id=context.run_id,
+                                sequence=context.event_bus.next_sequence(context.run_id),
+                                node_id=node_id,
+                                agent_name=getattr(agent, "name", ""),
+                                contract_name=getattr(guardrails[0], "name", "guardrail"),
+                                validation_errors=post_violations,
+                            )
+                        )
+                except Exception:
+                    pass
+                if str(guard_fail) == "raise":
+                    raise AgentError("Guardrail rejected output")
+                return {"output": "Guardrail rejected output", "guardrails": {"violations": post_violations}}
 
         # Custom output mapper overrides everything
         if node.output_mapper:
@@ -739,6 +862,12 @@ class CompiledGraph:
             elif isinstance(edge, ConditionalEdge):
                 state_dict["__loop_counters__"] = context.loop_counters
                 result = edge.resolve(state_dict)
+
+                # NEW: Handle Send API (T-4.12)
+                if isinstance(result, list) and result and isinstance(result[0], Send):
+                    new_state = await self._execute_sends(result, state_dict, state, context)
+                    return END, new_state
+
                 return result, state
 
             elif isinstance(edge, ParallelEdge):
@@ -833,6 +962,40 @@ class CompiledGraph:
                 f"Parallel execution failed.\n"
                 f"  Failed nodes: {[str(e) for e in errors]}"
             ) from errors[0]
+
+        updates = [r for r in results if isinstance(r, dict)]
+
+        if isinstance(state, WorkflowState):
+            return merge_parallel_updates(state, updates, self._reducers)
+        else:
+            merged = dict(state)
+            for update in updates:
+                merged.update(update)
+            return merged
+
+    async def _execute_sends(
+        self,
+        sends: list[Send],
+        state_dict: dict[str, Any],
+        state: WorkflowState | dict[str, Any],
+        context: ExecutionContext,
+    ) -> WorkflowState | dict[str, Any]:
+        """Execute dynamic Send targets concurrently and merge results."""
+        tasks = []
+        for send in sends:
+            node = self._nodes[send.node]
+            # Each send gets its own state slice (shallow copy of base state + its specific state)
+            scoped_state = dict(state_dict)
+            scoped_state.update(send.state)
+            tasks.append(
+                self._execute_node(send.node, node, scoped_state, context)
+            )
+
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        errors = [r for r in results if isinstance(r, Exception)]
+        if errors:
+            raise AgentError(f"Send execution failed: {errors[0]}") from errors[0]
 
         updates = [r for r in results if isinstance(r, dict)]
 

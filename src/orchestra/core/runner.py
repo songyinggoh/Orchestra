@@ -44,6 +44,7 @@ async def run(
     initial_state: dict[str, Any] | None = None,
     provider: Any = None,
     config: dict[str, Any] | None = None,
+    persist: bool = True,
 ) -> RunResult:
     """Run a workflow graph (or compiled graph) and return a RunResult.
 
@@ -53,6 +54,8 @@ async def run(
         initial_state: Full initial state dict.
         provider: LLM provider instance.
         config: Additional configuration.
+        persist: Whether to persist events to SQLite (default True).
+            Set False to disable persistence (useful in tests).
 
     Returns:
         RunResult with output, state, metrics.
@@ -84,6 +87,7 @@ async def run(
         input=input,
         context=context,
         provider=provider,
+        persist=persist,
     )
     duration_ms = (time.monotonic() - start) * 1000
 

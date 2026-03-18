@@ -1,0 +1,13 @@
+# Gitleaks ignore file
+# Use this to ignore intentional test secrets or false positives
+
+[allowlist]
+description = "Ignore test DIDs and placeholder keys"
+regexes = [
+    '''did:peer:[0-9a-z]+''',
+    '''did:web:example\.com''',
+]
+paths = [
+    '''tests/security/''',
+    '''examples/''',
+]

@@ -10,50 +10,38 @@ Orchestra already has a well-structured EventBus (18 typed events) and a `RichTr
 
 The key architectural insight is that Orchestra should NOT auto-instrument LLM provider SDKs (OpenLLMetry already does that). Instead, Orchestra should emit its own spans for **workflow execution**, **node execution**, **agent handoffs**, and **parallel fan-out**, enriching them with `gen_ai.*` semantic convention attributes from its existing event data. The EventBus subscriber pattern already used by `RichTraceRenderer` is the correct integration point -- an `OTelTraceSubscriber` follows the same pattern.
 
-**Primary recommendation:** Use OpenTelemetry Python SDK 1.40.x with OTLP/HTTP exporters, implement a single `OTelTraceSubscriber` class that subscribes to EventBus and emits spans + metrics following the official `gen_ai.*` semantic conventions, and integrate trace IDs into the existing structlog setup.
+**Primary recommendation:** Use OpenTelemetry Python SDK 1.40.x with OTLP/HTTP exporters, implement a single `OTelTraceSubscriber` class that subscribes to EventBus and emits spans following the official `gen_ai.*` semantic conventions, and integrate trace IDs into the existing structlog setup. Defer metrics and collector infrastructure to Phase 4.
 
 ## Standard Stack
 
 ### Core
 | Library | Version | Purpose | Why Standard |
 |---------|---------|---------|--------------|
-| `opentelemetry-api` | 1.40.0 | Tracing/metrics API | Official OTel Python API, stable |
-| `opentelemetry-sdk` | 1.40.0 | TracerProvider, MeterProvider | Official SDK implementation |
-| `opentelemetry-exporter-otlp-proto-http` | 1.40.x | OTLP/HTTP span + metric export | HTTP is simpler than gRPC, no grpcio dep, firewall-friendly |
-| `opentelemetry-exporter-prometheus` | 0.49b0 | Prometheus /metrics endpoint | Direct scrape support for Prometheus |
+| `opentelemetry-api` | 1.40.0 | Tracing API | Official OTel Python API, stable |
+| `opentelemetry-sdk` | 1.40.0 | TracerProvider | Official SDK implementation |
+| `opentelemetry-exporter-otlp-proto-http` | 1.40.x | OTLP/HTTP span export | HTTP is simpler than gRPC, no grpcio dep, firewall-friendly |
 | `structlog` | >=24.0 | Structured logging (ALREADY in deps) | Already used by Orchestra |
 
-### Supporting
+### Supporting (Deferred to Phase 4)
 | Library | Version | Purpose | When to Use |
 |---------|---------|---------|-------------|
-| `opentelemetry-exporter-otlp-proto-grpc` | 1.40.x | OTLP/gRPC export | High-throughput production; optional extra |
+| `opentelemetry-exporter-prometheus` | 0.49b0 | Prometheus /metrics endpoint | Phase 4 metrics |
+| `opentelemetry-exporter-otlp-proto-grpc` | 1.40.x | OTLP/gRPC export | High-throughput production |
 | `opentelemetry-instrumentation-asyncio` | 0.49b0 | Auto-instrument asyncio tasks | Context propagation in parallel fan-out |
 | `opentelemetry-semantic-conventions` | 0.49b0 | `gen_ai.*` attribute constants | Type-safe attribute names |
-| `opentelemetry-instrumentation-openai` | 0.33.x | Auto-instrument OpenAI SDK | Users who want provider-level spans (via OpenLLMetry) |
-| `opentelemetry-instrumentation-anthropic` | 0.33.x | Auto-instrument Anthropic SDK | Users who want provider-level spans (via OpenLLMetry) |
 
 ### Alternatives Considered
 | Instead of | Could Use | Tradeoff |
 |------------|-----------|----------|
 | OTLP/HTTP | OTLP/gRPC | gRPC is faster for high volume but adds `grpcio` (~50MB) dependency; HTTP works everywhere |
-| Prometheus exporter | OTLP metrics exporter | Prometheus exporter gives direct scrape; OTLP needs a collector but is more flexible |
-| OpenLLMetry auto-instrument | Manual spans only | OpenLLMetry gives SDK-level detail for free, but adds dependency; make it optional |
-| Jaeger all-in-one | Grafana Tempo | Jaeger is simpler for dev; Tempo is better for prod (S3 backend, cheaper) |
+| Console exporter | OTLP metrics exporter | Console/File exporters provide zero-infra observability for Phase 3 |
+| Jaeger all-in-one | Grafana Tempo | Jaeger is simpler for dev; Tempo is better for prod. Defer both to Phase 4. |
 
 ### Installation
 
 ```bash
 # Core (add to pyproject.toml [project.optional-dependencies])
 pip install opentelemetry-api opentelemetry-sdk opentelemetry-exporter-otlp-proto-http opentelemetry-semantic-conventions
-
-# Metrics (optional)
-pip install opentelemetry-exporter-prometheus
-
-# Asyncio context propagation (optional)
-pip install opentelemetry-instrumentation-asyncio
-
-# LLM auto-instrumentation (optional, user installs separately)
-pip install opentelemetry-instrumentation-openai opentelemetry-instrumentation-anthropic
 ```
 
 **pyproject.toml optional dependency group:**
@@ -64,10 +52,6 @@ telemetry = [
     "opentelemetry-sdk>=1.30",
     "opentelemetry-exporter-otlp-proto-http>=1.30",
     "opentelemetry-semantic-conventions>=0.45b0",
-]
-telemetry-prometheus = [
-    "orchestra-agents[telemetry]",
-    "opentelemetry-exporter-prometheus>=0.45b0",
 ]
 ```
 
@@ -262,52 +246,38 @@ shared_processors = [
 **Example:**
 ```python
 import os
-from opentelemetry import trace, metrics
+from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from opentelemetry.sdk.metrics import MeterProvider
-from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
+from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
 from opentelemetry.sdk.resources import Resource, SERVICE_NAME
 
 
 def setup_telemetry(
     service_name: str = "orchestra",
     endpoint: str | None = None,
-    enable_metrics: bool = True,
+    use_console: bool = False,
 ) -> None:
-    """Initialize OpenTelemetry tracing and metrics.
+    """Initialize OpenTelemetry tracing.
 
     Reads OTEL_EXPORTER_OTLP_ENDPOINT env var if endpoint not provided.
     Default: http://localhost:4318 (OTLP/HTTP).
     """
     resource = Resource.create({SERVICE_NAME: service_name})
-    endpoint = endpoint or os.getenv(
-        "OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318"
-    )
-
-    # Tracing
-    from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
-
+    
     tracer_provider = TracerProvider(resource=resource)
-    tracer_provider.add_span_processor(
-        BatchSpanProcessor(OTLPSpanExporter(endpoint=f"{endpoint}/v1/traces"))
+    
+    if use_console:
+        tracer_provider.add_span_processor(BatchSpanProcessor(ConsoleSpanExporter()))
+    else:
+        from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+        endpoint = endpoint or os.getenv(
+            "OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318"
     )
+        tracer_provider.add_span_processor(
+            BatchSpanProcessor(OTLPSpanExporter(endpoint=f"{endpoint}/v1/traces"))
+        )
+    
     trace.set_tracer_provider(tracer_provider)
-
-    # Metrics (optional)
-    if enable_metrics:
-        from opentelemetry.exporter.otlp.proto.http.metric_exporter import (
-            OTLPMetricExporter,
-        )
-
-        metric_reader = PeriodicExportingMetricReader(
-            OTLPMetricExporter(endpoint=f"{endpoint}/v1/metrics"),
-            export_interval_millis=10000,
-        )
-        meter_provider = MeterProvider(
-            resource=resource, metric_readers=[metric_reader]
-        )
-        metrics.set_meter_provider(meter_provider)
 ```
 
 ### Pattern 5: Async Context Propagation in Parallel Fan-Out
@@ -472,58 +442,7 @@ def create_sampler(sample_rate: float = 1.0) -> "Sampler":
 
 ## Docker Compose Setup (Local Dev)
 
-### Option A: Jaeger All-in-One (Simplest)
-
-```yaml
-# docker-compose.otel.yml
-services:
-  jaeger:
-    image: jaegertracing/all-in-one:1.65
-    ports:
-      - "16686:16686"   # Jaeger UI
-      - "4317:4317"     # OTLP gRPC
-      - "4318:4318"     # OTLP HTTP
-    environment:
-      COLLECTOR_OTLP_ENABLED: "true"
-```
-
-Run: `docker compose -f docker-compose.otel.yml up -d`
-Then: `OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 orchestra run ...`
-
-### Option B: Grafana Tempo + Grafana + Prometheus (Full Stack)
-
-```yaml
-# docker-compose.observability.yml
-services:
-  tempo:
-    image: grafana/tempo:2.7
-    command: ["-config.file=/etc/tempo.yaml"]
-    volumes:
-      - ./etc/tempo.yaml:/etc/tempo.yaml
-    ports:
-      - "4317:4317"     # OTLP gRPC
-      - "4318:4318"     # OTLP HTTP
-      - "3200:3200"     # Tempo query API
-
-  prometheus:
-    image: prom/prometheus:v2.55
-    volumes:
-      - ./etc/prometheus.yml:/etc/prometheus/prometheus.yml
-    ports:
-      - "9090:9090"
-
-  grafana:
-    image: grafana/grafana:11.5
-    ports:
-      - "3000:3000"
-    environment:
-      GF_AUTH_ANONYMOUS_ENABLED: "true"
-      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
-    volumes:
-      - ./etc/grafana-datasources.yml:/etc/grafana/provisioning/datasources/ds.yml
-```
-
-**Recommendation:** Ship Option A (Jaeger all-in-one) in `examples/docker-compose.otel.yml`. It is a single container, requires zero config files, and accepts OTLP natively. Mention Option B in docs for users who want metrics + traces together.
+**DEFERRED TO PHASE 4**: Infrastructure for Jaeger, Tempo, Prometheus, and Grafana is deferred to Phase 4. For Phase 3, use the `ConsoleSpanExporter` or a remote OTLP target (e.g., Honeycomb/Datadog/Langfuse).
 
 ## EventBus to OTel Mapping (Complete)
 

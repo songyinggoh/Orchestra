@@ -1,0 +1,167 @@
+# GitLab CI — mirrors GitHub Actions CI (Linux-only, Python matrix)
+# This file lives in GitHub and is mirrored to GitLab via pull mirroring.
+
+stages:
+  - lint
+  - typecheck
+  - test
+  - smoke-test
+  - security
+
+variables:
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.pip-cache"
+  OTEL_SDK_DISABLED: "true"
+  OTEL_TRACES_EXPORTER: "none"
+  OTEL_METRICS_EXPORTER: "none"
+
+# ---------------------------------------------------------------------------
+# Lint
+# ---------------------------------------------------------------------------
+lint:
+  stage: lint
+  image: python:3.12
+  cache:
+    key: pip-3.12
+    paths:
+      - .pip-cache/
+  script:
+    - pip install -e ".[dev]"
+    - ruff check src/ tests/
+    - ruff format --check src/ tests/
+
+# ---------------------------------------------------------------------------
+# Type-check
+# ---------------------------------------------------------------------------
+typecheck:
+  stage: typecheck
+  image: python:3.12
+  cache:
+    key: pip-3.12
+    paths:
+      - .pip-cache/
+  script:
+    - pip install -e ".[dev]"
+    - mypy src/orchestra/
+
+# ---------------------------------------------------------------------------
+# Unit tests — Python matrix
+# ---------------------------------------------------------------------------
+.test-base:
+  stage: test
+  services:
+    - name: postgres:16-alpine
+      alias: postgres
+    - name: redis:7-alpine
+      alias: redis
+    - name: nats:2.10-alpine
+      alias: nats
+  variables:
+    POSTGRES_DB: test_db
+    POSTGRES_USER: user
+    POSTGRES_PASSWORD: password
+    DATABASE_URL: "postgresql://user:password@postgres:5432/test_db"
+    REDIS_URL: "redis://redis:6379"
+    NATS_URL: "nats://nats:4222"
+  cache:
+    key: pip-${PYTHON_VERSION}
+    paths:
+      - .pip-cache/
+  script:
+    - pip install -e ".[dev,server,telemetry,cache,storage,postgres,nats,ray,security]"
+    - pytest tests/ -m "not integration" -x --junitxml=report.xml --cov=orchestra --cov-report=xml
+  artifacts:
+    when: always
+    reports:
+      junit: report.xml
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage.xml
+
+test-py311:
+  extends: .test-base
+  image: python:3.11
+  variables:
+    PYTHON_VERSION: "3.11"
+
+test-py312:
+  extends: .test-base
+  image: python:3.12
+  variables:
+    PYTHON_VERSION: "3.12"
+
+test-py313:
+  extends: .test-base
+  image: python:3.13
+  variables:
+    PYTHON_VERSION: "3.13"
+
+# ---------------------------------------------------------------------------
+# Integration tests
+# ---------------------------------------------------------------------------
+integration-test:
+  stage: test
+  image: python:3.12
+  services:
+    - name: postgres:16-alpine
+      alias: postgres
+    - name: redis:7-alpine
+      alias: redis
+    - name: nats:2.10-alpine
+      alias: nats
+  variables:
+    POSTGRES_DB: test_db
+    POSTGRES_USER: user
+    POSTGRES_PASSWORD: password
+    DATABASE_URL: "postgresql://user:password@postgres:5432/test_db"
+    REDIS_URL: "redis://redis:6379"
+    NATS_URL: "nats://nats:4222"
+  cache:
+    key: pip-3.12
+    paths:
+      - .pip-cache/
+  script:
+    - pip install -e ".[dev,server,telemetry,cache,storage,postgres,nats,ray,security]"
+    - pytest tests/ -m integration -x --junitxml=report-integration.xml
+  artifacts:
+    when: always
+    reports:
+      junit: report-integration.xml
+  allow_failure: true  # integration tests may need external services
+
+# ---------------------------------------------------------------------------
+# Security Smoke Tests (Phase 4 Foundation)
+# ---------------------------------------------------------------------------
+security-smoke-tests:
+  stage: smoke-test
+  image: python:3.12
+  services:
+    - name: nats:2.10-alpine
+      alias: nats
+  cache:
+    key: pip-3.12
+    paths:
+      - .pip-cache/
+  script:
+    - pip install -e ".[dev,security,nats,ray]"
+    - pytest tests/security/ -x --junitxml=report-smoke.xml
+  artifacts:
+    when: always
+    reports:
+      junit: report-smoke.xml
+
+# ---------------------------------------------------------------------------
+# Security — Secret Detection
+# ---------------------------------------------------------------------------
+include:
+  - template: Jobs/Secret-Detection.gitlab-ci.yml
+  - template: Jobs/Dependency-Scanning.gitlab-ci.yml
+
+secret_detection:
+  stage: security
+  needs:
+    - security-smoke-tests
+
+dependency_scanning:
+  stage: security
+  needs:
+    - security-smoke-tests

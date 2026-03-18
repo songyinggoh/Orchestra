@@ -7,6 +7,31 @@ import sys
 
 import structlog
 
+from typing import Any
+
+
+def add_otel_context(
+    logger: Any,  # noqa: ANN401
+    method_name: str,
+    event_dict: dict[str, Any],
+) -> dict[str, Any]:
+    """Inject OTel trace_id and span_id into log entries when active.
+
+    This processor is safe to include even when OTel is not installed —
+    it silently returns the event dict unchanged on ImportError.
+    """
+    try:
+        from opentelemetry import trace
+
+        span = trace.get_current_span()
+        ctx = span.get_span_context()
+        if ctx.is_valid:
+            event_dict["trace_id"] = format(ctx.trace_id, "032x")
+            event_dict["span_id"] = format(ctx.span_id, "016x")
+    except ImportError:
+        pass
+    return event_dict
+
 
 def setup_logging(
     level: str = "INFO",
@@ -26,6 +51,7 @@ def setup_logging(
         structlog.stdlib.add_logger_name,
         structlog.stdlib.add_log_level,
         structlog.processors.TimeStamper(fmt="iso"),
+        add_otel_context,
         structlog.processors.StackInfoRenderer(),
         structlog.processors.UnicodeDecoder(),
     ]

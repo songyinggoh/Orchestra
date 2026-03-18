@@ -109,5 +109,75 @@ def run(
         raise typer.Exit(1)
 
 
+@app.command()
+def resume(
+    run_id: str = typer.Argument(..., help="Run ID of the interrupted workflow to resume"),
+    set_state: list[str] = typer.Option(
+        [], "--set", "-s",
+        help="State overrides as key=value pairs (e.g. --set approved=true)",
+    ),
+) -> None:
+    """Resume an interrupted workflow from its latest checkpoint."""
+    import asyncio
+    import json
+
+    # Parse key=value overrides
+    state_updates: dict[str, object] = {}
+    for item in set_state:
+        if "=" not in item:
+            console.print(f"[red]Error:[/red] Invalid --set format: {item!r} (expected key=value)")
+            raise typer.Exit(1)
+        key, _, raw_value = item.partition("=")
+        # Try JSON decode so booleans/numbers work; fall back to string
+        try:
+            state_updates[key.strip()] = json.loads(raw_value)
+        except json.JSONDecodeError:
+            state_updates[key.strip()] = raw_value
+
+    async def _resume() -> None:
+        from orchestra.core.graph import WorkflowGraph
+        from orchestra.core.compiled import CompiledGraph
+
+        # Build a minimal CompiledGraph with no nodes -- resume() only needs the store
+        graph = WorkflowGraph()
+        compiled = graph.compile()
+
+        try:
+            final_state = await compiled.resume(
+                run_id,
+                state_updates=state_updates or None,
+            )
+            console.print(f"[green]Resumed run:[/green] {run_id}")
+            console.print(f"Final state: {final_state}")
+        except Exception as exc:
+            console.print(f"[red]Error:[/red] {exc}")
+            raise typer.Exit(1)
+
+    asyncio.run(_resume())
+
+
+@app.command()
+def serve(
+    host: str = typer.Option("0.0.0.0", help="Host to bind to"),
+    port: int = typer.Option(8000, help="Port to bind to"),
+    reload: bool = typer.Option(False, help="Enable auto-reload"),
+) -> None:
+    """Start the Orchestra HTTP server."""
+    try:
+        import uvicorn
+
+        from orchestra.server.app import create_app
+        from orchestra.server.config import ServerConfig
+    except ImportError:
+        console.print("[red]Error:[/red] Server dependencies not installed.")
+        console.print("Install with: pip install orchestra-agents[server]")
+        raise typer.Exit(1)
+
+    config = ServerConfig(host=host, port=port)
+    app_instance = create_app(config)
+    console.print(f"[green]Starting Orchestra server on {host}:{port}[/green]")
+    uvicorn.run(app_instance, host=host, port=port, reload=reload)
+
+
 if __name__ == "__main__":
     app()

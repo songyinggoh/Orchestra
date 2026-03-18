@@ -1,0 +1,20 @@
+replicaCount: 1
+
+keda:
+  enabled: false
+  minReplicaCount: 1
+  maxReplicaCount: 3
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: "1"
+    memory: 512Mi
+
+nats:
+  enabled: true
+  jetstream:
+    fileStorage:
+      size: 1Gi

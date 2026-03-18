@@ -1,0 +1,40 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: orchestra-environments
+  namespace: argocd
+spec:
+  generators:
+  - list:
+      elements:
+      - env: dev
+        cluster: https://kubernetes.default.svc
+      - env: prod
+        cluster: https://kubernetes.default.svc
+  template:
+    metadata:
+      name: 'orchestra-{{env}}'
+    spec:
+      project: orchestra
+      source:
+        repoURL: https://github.com/songyinggoh/multi-agent-orchestration-framework.git
+        targetRevision: HEAD
+        path: 'deploy/overlays/{{env}}'
+      destination:
+        server: '{{cluster}}'
+        namespace: 'orchestra-{{env}}'
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+        - CreateNamespace=true
+      ignoreDifferences:
+      - group: apps
+        kind: Deployment
+        jsonPointers:
+        - /spec/replicas # Ignore KEDA scaling
+      - group: ray.io
+        kind: RayCluster
+        jsonPointers:
+        - /spec/workerGroupSpecs/0/replicas # Ignore Ray autoscaler

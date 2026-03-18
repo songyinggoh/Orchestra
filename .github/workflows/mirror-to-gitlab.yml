@@ -1,0 +1,22 @@
+name: Mirror to GitLab
+
+on:
+  push:
+    branches: ["*"]
+    tags: ["*"]
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - run: |
+          CLEAN_PAT=$(echo -n "$GITLAB_PAT" | tr -d '\n\r ')
+          ENCODED_PAT=$(echo -n "$CLEAN_PAT" | python3 -c "import urllib.parse, sys; print(urllib.parse.quote(sys.stdin.read(), safe=''))")
+          git remote add gitlab "https://oauth2:${ENCODED_PAT}@gitlab.com/songyinggoh/multi-agent-orchestration-framework.git"
+          git -c http.postBuffer=524288000 push gitlab --all --force
+          git -c http.postBuffer=524288000 push gitlab --tags
+        env:
+          GITLAB_PAT: ${{ secrets.GITLAB }}

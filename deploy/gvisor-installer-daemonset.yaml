@@ -1,0 +1,61 @@
+# gVisor DaemonSet installer for EKS (and other non-GKE clusters).
+# GKE users: use the native sandbox_config in Terraform node pool definition instead.
+#
+# This DaemonSet installs runsc (gVisor) on nodes labelled
+# orchestra.dev/sandbox=gvisor, then stays running as a pause container so
+# Kubernetes knows the node is ready for gVisor pods.
+#
+# Apply: kubectl apply -f deploy/gvisor-installer-daemonset.yaml
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: gvisor-installer
+  namespace: kube-system
+  labels:
+    app: gvisor-installer
+spec:
+  selector:
+    matchLabels:
+      app: gvisor-installer
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: gvisor-installer
+    spec:
+      nodeSelector:
+        orchestra.dev/sandbox: "gvisor"
+      hostPID: true
+      hostIPC: false
+      hostNetwork: false
+      initContainers:
+        - name: install-runsc
+          image: gvisor.dev/gvisor/installer:latest
+          imagePullPolicy: Always
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: host-root
+              mountPath: /host
+          env:
+            - name: INSTALL_PREFIX
+              value: /host/usr/local
+      containers:
+        # Pause container keeps the DaemonSet pod running after installation
+        - name: pause
+          image: registry.k8s.io/pause:3.9
+          resources:
+            requests:
+              cpu: 1m
+              memory: 8Mi
+            limits:
+              cpu: 10m
+              memory: 16Mi
+      volumes:
+        - name: host-root
+          hostPath:
+            path: /
+      tolerations:
+        - operator: Exists
+          effect: NoSchedule
