@@ -13,7 +13,7 @@ from orchestra.memory.tiers import (
     create_tiered_memory,
 )
 
-# Optional/Extra components — require asyncpg + pgvector (and optionally model2vec)
+# Optional: pgvector backend — requires asyncpg + pgvector (+ model2vec for dedup)
 try:
     from orchestra.memory.vector_store import VectorStore
     from orchestra.memory.dedup import SemanticDeduplicator
@@ -21,6 +21,13 @@ try:
     HAS_VECTORDB = True
 except ImportError:
     HAS_VECTORDB = False
+
+# Optional: Qdrant backend — requires qdrant-client
+try:
+    from orchestra.memory.qdrant_backend import QdrantColdBackend
+    HAS_QDRANT = True
+except ImportError:
+    HAS_QDRANT = False
 
 __all__ = [
     # Core protocols
@@ -39,9 +46,12 @@ __all__ = [
     "Tier",
     "MemoryEntry",
     "TierStats",
-    # Vector DB (optional — requires asyncpg + pgvector)
+    # pgvector backend (optional — pip install orchestra-agents[vectordb])
     "VectorStore",
     "SemanticDeduplicator",
     "StateCompressor",
     "HAS_VECTORDB",
+    # Qdrant backend (optional — pip install orchestra-agents[qdrant])
+    "QdrantColdBackend",
+    "HAS_QDRANT",
 ]

@@ -73,6 +73,9 @@ vectordb = [
     "pyzstd>=0.17",
     "msgpack>=1.0",
 ]
+qdrant = [
+    "qdrant-client>=1.14",
+]
 promptshield = [
     "optimum[onnxruntime]>=1.24",
     "transformers>=4.51,<5.0",
