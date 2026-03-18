@@ -128,20 +128,47 @@ class VectorStore:
                 return row["content"]
 
     async def search(
-        self, 
-        embedding: list[float], 
-        limit: int = 10
+        self,
+        embedding: list[float],
+        limit: int = 10,
+        *,
+        filter_metadata: dict | None = None,
     ) -> list[tuple[str, float]]:
-        """Semantic search. Satisfies ColdTierBackend."""
+        """Semantic search. Satisfies ColdTierBackend.
+
+        Args:
+            embedding: Query vector.
+            limit: Maximum number of results.
+            filter_metadata: Optional JSONB containment filter applied via
+                ``metadata @> $4::jsonb``.  Use this to scope results by
+                ``agent_id``, ``session_id``, or any custom tag stored at
+                write time.
+        """
         async with await self.pool.acquire() as conn:
-            rows = await conn.fetch(f"""
-                SELECT key, 1 - (embedding <=> $1) as score
-                FROM {self.table_name}
-                WHERE agent_id = $2
-                ORDER BY embedding <=> $1
-                LIMIT $3
-            """, embedding, self.agent_id, limit)
-            
+            if filter_metadata:
+                rows = await conn.fetch(
+                    f"""
+                    SELECT key, 1 - (embedding <=> $1) as score
+                    FROM {self.table_name}
+                    WHERE agent_id = $2
+                      AND metadata @> $4::jsonb
+                    ORDER BY embedding <=> $1
+                    LIMIT $3
+                    """,
+                    embedding, self.agent_id, limit, json.dumps(filter_metadata),
+                )
+            else:
+                rows = await conn.fetch(
+                    f"""
+                    SELECT key, 1 - (embedding <=> $1) as score
+                    FROM {self.table_name}
+                    WHERE agent_id = $2
+                    ORDER BY embedding <=> $1
+                    LIMIT $3
+                    """,
+                    embedding, self.agent_id, limit,
+                )
+
             return [(r["key"], r["score"]) for r in rows]
 
     async def delete(self, key: str) -> None:

@@ -46,14 +46,28 @@ class SemanticDeduplicator:
                 logger.warning("model2vec_not_installed", action="falling_back_to_exact_match")
                 self._model = False # Sentinel for fallback
 
-    async def embed(self, texts: Sequence[str]) -> np.ndarray:
-        """Generate embeddings for a list of texts."""
+    @property
+    def dimensions(self) -> int:
+        """Dimensionality of the model2vec embeddings (256)."""
+        return 256
+
+    async def embed_texts(self, texts: Sequence[str]) -> np.ndarray:
+        """Embed a batch of texts. Satisfies :class:`~orchestra.memory.embeddings.EmbeddingProvider`.
+
+        Returns array of shape ``(len(texts), 256)``.
+        """
         await self._ensure_model()
         if not self._model:
-            # Fallback: cannot embed without model
-            return np.zeros((len(texts), 256))
-
+            return np.zeros((len(texts), self.dimensions))
         return await asyncio.to_thread(self._model.encode, texts)
+
+    async def embed_query(self, query: str) -> np.ndarray:
+        """Embed a single query string. Returns array of shape ``(256,)``."""
+        return (await self.embed_texts([query]))[0]
+
+    async def embed(self, texts: Sequence[str]) -> np.ndarray:
+        """Alias for :meth:`embed_texts`. Kept for backward compatibility."""
+        return await self.embed_texts(texts)
 
     async def is_duplicate(
         self, 

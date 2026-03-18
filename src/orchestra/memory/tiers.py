@@ -67,7 +67,7 @@ class ColdTierBackend(Protocol):
     """Protocol for cold tier storage (pgvector)."""
     async def store(self, key: str, value: Any, embedding: list[float] | None = None) -> None: ...
     async def retrieve(self, key: str) -> Any | None: ...
-    async def search(self, embedding: list[float], limit: int = 10) -> list[tuple[str, float]]: ...
+    async def search(self, embedding: list[float], limit: int = 10, *, filter_metadata: dict | None = None) -> list[tuple[str, float]]: ...
     async def delete(self, key: str) -> None: ...
     async def count(self) -> int: ...
 
@@ -299,13 +299,31 @@ class TieredMemoryManager(MemoryManager):
                 if self._warm:
                     await self._warm.delete(key)
 
-    async def search_memories(self, query: str, limit: int = 10) -> list[tuple[str, float]]:
-        """Semantic search across cold tier."""
+    async def search_memories(
+        self,
+        query: str,
+        limit: int = 10,
+        *,
+        filter_metadata: dict | None = None,
+    ) -> list[tuple[str, float]]:
+        """Semantic search across cold tier.
+
+        Args:
+            query: Natural-language query to embed and search.
+            limit: Maximum number of results to return.
+            filter_metadata: Optional JSONB containment filter. Only entries
+                whose ``metadata`` column contains all key/value pairs in this
+                dict are returned.  Backends that do not support metadata
+                filtering ignore this argument.
+
+        Returns:
+            List of ``(key, score)`` tuples ordered by descending similarity.
+        """
         if not self._cold or not self._dedup:
             return []
-        
+
         embedding = (await self._dedup.embed([query]))[0].tolist()
-        return await self._cold.search(embedding, limit=limit)
+        return await self._cold.search(embedding, limit=limit, filter_metadata=filter_metadata)
 
     async def stats(self) -> TierStats:
         cold_count = 0

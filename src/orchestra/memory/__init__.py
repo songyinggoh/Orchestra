@@ -2,9 +2,17 @@
 
 from orchestra.memory.manager import InMemoryMemoryManager, MemoryManager
 from orchestra.memory.backends import MemoryBackend, InMemoryMemoryBackend, RedisMemoryBackend
-from orchestra.memory.tiers import TieredMemoryManager, Tier, MemoryEntry, TierStats
+from orchestra.memory.embeddings import EmbeddingProvider
+from orchestra.memory.tiers import (
+    TieredMemoryManager,
+    ColdTierBackend,
+    Tier,
+    MemoryEntry,
+    TierStats,
+    create_tiered_memory,
+)
 
-# Optional/Extra components
+# Optional/Extra components — require asyncpg + pgvector (and optionally model2vec)
 try:
     from orchestra.memory.vector_store import VectorStore
     from orchestra.memory.dedup import SemanticDeduplicator
@@ -14,16 +22,24 @@ except ImportError:
     HAS_VECTORDB = False
 
 __all__ = [
+    # Core protocols
     "MemoryManager",
-    "InMemoryMemoryManager",
     "MemoryBackend",
+    "ColdTierBackend",
+    "EmbeddingProvider",
+    # Implementations
+    "InMemoryMemoryManager",
     "InMemoryMemoryBackend",
     "RedisMemoryBackend",
+    # Tiered memory
     "TieredMemoryManager",
+    "create_tiered_memory",
     "Tier",
     "MemoryEntry",
     "TierStats",
+    # Vector DB (optional — requires asyncpg + pgvector)
     "VectorStore",
     "SemanticDeduplicator",
     "StateCompressor",
+    "HAS_VECTORDB",
 ]
