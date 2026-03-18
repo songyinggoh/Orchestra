@@ -46,3 +46,5 @@ Thumbs.db
 .claude/worktrees/
 .claude/agent-memory/
 .orchestra/
+.factory/
+pytest_results.txt
