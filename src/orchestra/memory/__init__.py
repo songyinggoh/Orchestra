@@ -3,6 +3,7 @@
 from orchestra.memory.manager import InMemoryMemoryManager, MemoryManager
 from orchestra.memory.backends import MemoryBackend, InMemoryMemoryBackend, RedisMemoryBackend
 from orchestra.memory.embeddings import EmbeddingProvider
+from orchestra.memory.tools import rag_tool
 from orchestra.memory.tiers import (
     TieredMemoryManager,
     ColdTierBackend,
@@ -34,6 +35,7 @@ __all__ = [
     # Tiered memory
     "TieredMemoryManager",
     "create_tiered_memory",
+    "rag_tool",
     "Tier",
     "MemoryEntry",
     "TierStats",
