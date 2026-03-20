@@ -57,6 +57,16 @@ def load_agent(
     if not data or not isinstance(data, dict):
         raise AgentLoadError(f"Agent YAML {yaml_path} is empty or not a mapping")
 
+    # Guard: output_type_ref / output_type are not yet supported in YAML agent
+    # definitions.  Silently ignoring them would make users believe structured
+    # output is active when it is not — a correctness hazard.
+    for _unsupported_key in ("output_type_ref", "output_type"):
+        if _unsupported_key in data:
+            raise AgentLoadError(
+                f"'{_unsupported_key}' is not yet supported in YAML agent definitions. "
+                "Define the agent in Python and register it manually."
+            )
+
     # Resolve tool references
     tool_names: list[str] = data.get("tools", [])
     resolved_tools: list[ToolWrapper] = []

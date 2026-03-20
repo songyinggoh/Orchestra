@@ -195,3 +195,111 @@ entry_point: myagent
 
     await reloader._recompile_affected_workflows("myagent")
     registry.register.assert_called_once()
+
+
+# ---- Atomicity tests (Gap-6 fix) ----
+
+_WORKFLOW_YAML_TEMPLATE = """\
+name: {name}
+nodes:
+  {agent}:
+    type: agent
+    ref: {agent}
+    output_key: out
+edges:
+  - source: {agent}
+    target: __end__
+entry_point: {agent}
+"""
+
+
+def _make_reloader(tmp_path: Path, agent_name: str) -> tuple[DiscoveryHotReloader, MagicMock]:
+    """Helper: build a DiscoveryHotReloader with a pre-configured registry mock."""
+    agents_dir = tmp_path / "agents"
+    agents_dir.mkdir(exist_ok=True)
+    wf_dir = tmp_path / "workflows"
+    wf_dir.mkdir(exist_ok=True)
+    registry = _make_registry()
+    agent_registry = {agent_name: BaseAgent(name=agent_name)}
+    reloader = DiscoveryHotReloader(
+        agents_dir=agents_dir,
+        tools_dir=tmp_path / "tools",
+        workflows_dir=wf_dir,
+        registry=registry,
+        agent_registry=agent_registry,
+        tool_registry={},
+    )
+    return reloader, registry
+
+
+@pytest.mark.asyncio
+async def test_atomic_commit_both_workflows_registered(tmp_path: Path):
+    """Test 1: Two workflows reference same agent; both compile OK → both registered."""
+    reloader, registry = _make_reloader(tmp_path, "shared_agent")
+    wf_dir = tmp_path / "workflows"
+
+    # Create two valid workflow YAML files that both reference 'shared_agent'
+    for wf_name in ("wf_alpha", "wf_beta"):
+        (wf_dir / f"{wf_name}.yaml").write_text(
+            _WORKFLOW_YAML_TEMPLATE.format(name=wf_name, agent="shared_agent"),
+            encoding="utf-8",
+        )
+        reloader._workflow_files[wf_name] = wf_dir / f"{wf_name}.yaml"
+
+    result = await reloader._recompile_affected_workflows("shared_agent")
+
+    assert result is True, "Expected success when all workflows compile"
+    assert registry.register.call_count == 2, (
+        "Both workflows should be registered after a fully successful recompile"
+    )
+    registered_names = {call[0][0] for call in registry.register.call_args_list}
+    assert registered_names == {"wf_alpha", "wf_beta"}
+
+
+@pytest.mark.asyncio
+async def test_atomic_abort_neither_workflow_registered_on_failure(tmp_path: Path):
+    """Test 2: Two workflows reference same agent; one fails → NEITHER is updated."""
+    reloader, registry = _make_reloader(tmp_path, "shared_agent")
+    wf_dir = tmp_path / "workflows"
+
+    # wf_good: valid YAML that should compile fine
+    (wf_dir / "wf_good.yaml").write_text(
+        _WORKFLOW_YAML_TEMPLATE.format(name="wf_good", agent="shared_agent"),
+        encoding="utf-8",
+    )
+    reloader._workflow_files["wf_good"] = wf_dir / "wf_good.yaml"
+
+    # wf_bad: deliberately malformed YAML that will fail to compile
+    (wf_dir / "wf_bad.yaml").write_text(
+        "name: wf_bad\nnodes: {shared_agent: !!python/object/apply:os.system ['echo pwned']}\n",
+        encoding="utf-8",
+    )
+    reloader._workflow_files["wf_bad"] = wf_dir / "wf_bad.yaml"
+
+    result = await reloader._recompile_affected_workflows("shared_agent")
+
+    assert result is False, "Expected failure when any workflow fails to compile"
+    registry.register.assert_not_called(), (
+        "No workflow should be registered when the batch compilation fails"
+    )
+
+
+@pytest.mark.asyncio
+async def test_no_op_when_no_workflows_reference_agent(tmp_path: Path):
+    """Test 3: Agent changes but no workflow references it → no-op, no errors."""
+    reloader, registry = _make_reloader(tmp_path, "unused_agent")
+    wf_dir = tmp_path / "workflows"
+
+    # A workflow that does NOT mention 'unused_agent'
+    (wf_dir / "wf_other.yaml").write_text(
+        _WORKFLOW_YAML_TEMPLATE.format(name="wf_other", agent="other_agent"),
+        encoding="utf-8",
+    )
+    reloader._workflow_files["wf_other"] = wf_dir / "wf_other.yaml"
+
+    result = await reloader._recompile_affected_workflows("unused_agent")
+
+    assert result is True, "No-op counts as success — nothing to update"
+    registry.register.assert_not_called(), (
+        "Registry must not be touched when no workflows reference the changed agent"
+    )

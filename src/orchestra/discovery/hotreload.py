@@ -163,30 +163,63 @@ class DiscoveryHotReloader:
         except Exception as exc:
             logger.error("workflow_reload_failed", path=str(path), error=str(exc))
 
-    async def _recompile_affected_workflows(self, agent_name: str) -> None:
-        """Re-compile all workflows that may reference the changed agent."""
+    async def _recompile_affected_workflows(self, agent_name: str) -> bool:
+        """Re-compile all workflows that may reference the changed agent.
+
+        Uses a stage-then-commit pattern to ensure atomicity:
+
+        1. **Stage**: compile every affected workflow into a temporary list.
+        2. **Commit**: only if ALL compilations succeed, register all new
+           graphs in one pass.
+        3. **Abort**: if any compilation fails, log the error and leave the
+           registry untouched — old graphs remain in service.
+
+        Returns:
+            ``True`` when all affected workflows were successfully recompiled
+            and registered; ``False`` when a compilation error prevented the
+            update (no graphs were changed in that case).
+        """
+        # --- Pass 1: collect affected workflows and compile them into staging ---
+        staged: list[tuple[str, object]] = []  # (registry_name, compiled_graph)
+
         for wf_stem, wf_path in self._workflow_files.items():
             if not wf_path.exists():
                 continue
+
+            content = wf_path.read_text(encoding="utf-8")
+            if agent_name not in content:
+                continue
+
             try:
-                content = wf_path.read_text(encoding="utf-8")
-                if agent_name in content:
-                    compiled = load_workflow(
-                        wf_path,
-                        agent_registry=self._agent_registry,
-                        tool_registry=self._tool_registry,
-                        builder=self._builder,
-                    )
-                    name = compiled._name or wf_stem
-                    self._registry.register(name, compiled)
-                    logger.info(
-                        "workflow_recompiled_after_agent_change",
-                        workflow=name,
-                        agent=agent_name,
-                    )
+                compiled = load_workflow(
+                    wf_path,
+                    agent_registry=self._agent_registry,
+                    tool_registry=self._tool_registry,
+                    builder=self._builder,
+                )
+                name = compiled._name or wf_stem
+                staged.append((name, compiled))
             except Exception as exc:
                 logger.error(
                     "workflow_recompile_failed",
                     workflow=wf_stem,
+                    agent=agent_name,
                     error=str(exc),
+                    detail=(
+                        "No workflows were updated — old graphs remain in service "
+                        "until all affected workflows compile successfully."
+                    ),
                 )
+                # Abort: leave the registry completely unchanged.
+                return False
+
+        # --- Pass 2: all compilations succeeded — commit atomically ---
+        for name, compiled in staged:
+            self._registry.register(name, compiled)
+            logger.info(
+                "workflow_recompiled_after_agent_change",
+                workflow=name,
+                agent=agent_name,
+            )
+
+        return True

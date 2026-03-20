@@ -222,3 +222,44 @@ def test_load_agent_max_iterations_from_yaml(tmp_path: Path):
 
     agent = load_agent(agent_file, tool_registry={}, defaults=None)
     assert agent.max_iterations == 2
+
+
+# ---- Gap 3: output_type_ref / output_type guard ----
+
+
+def test_load_agent_output_type_ref_raises_clear_error(tmp_path: Path):
+    """output_type_ref in YAML must raise AgentLoadError with an actionable message.
+
+    Silently ignoring the field would let users believe structured output is
+    active when it is not (correctness hazard).
+    """
+    yaml_text = """\
+name: structured_agent
+system_prompt: Return structured data.
+output_type_ref: myapp.schemas.Result
+"""
+    agent_file = tmp_path / "structured.yaml"
+    agent_file.write_text(yaml_text, encoding="utf-8")
+
+    with pytest.raises(AgentLoadError, match="output_type_ref"):
+        load_agent(agent_file, tool_registry={})
+
+
+def test_load_agent_output_type_raises_clear_error(tmp_path: Path):
+    """output_type in YAML must also raise AgentLoadError."""
+    yaml_text = "name: typed\noutput_type: myapp.schemas.Result\n"
+    agent_file = tmp_path / "typed.yaml"
+    agent_file.write_text(yaml_text, encoding="utf-8")
+
+    with pytest.raises(AgentLoadError, match="output_type"):
+        load_agent(agent_file, tool_registry={})
+
+
+def test_load_agent_output_type_error_mentions_python_workaround(tmp_path: Path):
+    """The error message should direct users to the Python-level workaround."""
+    yaml_text = "name: typed\noutput_type_ref: some.module.MyModel\n"
+    agent_file = tmp_path / "typed2.yaml"
+    agent_file.write_text(yaml_text, encoding="utf-8")
+
+    with pytest.raises(AgentLoadError, match="Python"):
+        load_agent(agent_file, tool_registry={})
