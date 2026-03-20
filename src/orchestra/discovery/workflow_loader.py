@@ -44,6 +44,24 @@ def _resolve_target(target: str) -> Any:
     return target
 
 
+def _check_lib_ref(ref: str) -> None:
+    """Raise WorkflowLoadError with a clear message for any ``lib.*`` ref.
+
+    ``lib.*`` refs require the project's ``lib/`` directory to be on
+    ``sys.path``, which Orchestra never does automatically (doing so would
+    allow a malicious ``lib/os.py`` to shadow the stdlib module for the
+    entire process — see CVE-2025-50817).  Users who need to load code from
+    ``lib/`` must configure ``PYTHONPATH`` themselves before starting the
+    server.
+    """
+    if ref.startswith("lib."):
+        raise WorkflowLoadError(
+            f"Ref '{ref}' starts with 'lib.' which requires manual PYTHONPATH "
+            "configuration. Orchestra does not modify sys.path automatically. "
+            "See documentation for safe lib/ usage."
+        )
+
+
 # Maps YAML type strings -> Python types
 TYPE_MAP: dict[str, type] = {
     "str": str,
@@ -123,6 +141,7 @@ def _resolve_state(
     """
     if "state_ref" in data:
         ref = data["state_ref"]
+        _check_lib_ref(ref)
         try:
             cls = builder.resolve_ref(ref)
             if not (isinstance(cls, type) and issubclass(cls, WorkflowState)):
@@ -196,6 +215,7 @@ def load_workflow(
             if ref in agent_registry:
                 agent = agent_registry[ref]
             else:
+                _check_lib_ref(ref)
                 try:
                     agent = builder.resolve_ref(ref)
                 except ImportError:
@@ -207,6 +227,7 @@ def load_workflow(
                     )
             graph.add_node(node_id, agent, output_key=output_key)
         elif node_type == "function":
+            _check_lib_ref(ref)
             try:
                 func = builder.resolve_ref(ref)
             except ImportError as exc:
@@ -236,6 +257,7 @@ def load_workflow(
                 raise WorkflowLoadError(
                     f"Conditional edge from '{source}' missing 'condition_ref'"
                 )
+            _check_lib_ref(condition_ref)
             try:
                 condition_fn = builder.resolve_ref(condition_ref)
             except ImportError as exc:

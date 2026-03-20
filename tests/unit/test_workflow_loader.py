@@ -316,3 +316,122 @@ entry_point: step_one
     }
     compiled = load_workflow(wf_file, agent_registry=agents)
     assert isinstance(compiled, CompiledGraph)
+
+
+# ---------------------------------------------------------------------------
+# Gap 4: lib.* ref guard — sys.path safety (CVE-2025-50817)
+# ---------------------------------------------------------------------------
+
+
+def test_load_workflow_lib_ref_agent_raises_clear_error(tmp_path: Path):
+    """A node ref starting with 'lib.' must raise WorkflowLoadError, not ImportError.
+
+    Orchestra never modifies sys.path automatically.  Allowing lib.* refs to
+    fall through to importlib.import_module would either silently fail or — if
+    the user has a lib/os.py — shadow stdlib modules for the whole process.
+    """
+    yaml_text = """\
+name: lib_agent
+nodes:
+  custom:
+    type: agent
+    ref: lib.routing.MyAgent
+edges:
+  - source: custom
+    target: __end__
+entry_point: custom
+"""
+    wf_file = tmp_path / "lib_agent.yaml"
+    wf_file.write_text(yaml_text, encoding="utf-8")
+
+    with pytest.raises(WorkflowLoadError, match="lib\\."):
+        load_workflow(wf_file, agent_registry={})
+
+
+def test_load_workflow_lib_ref_function_raises_clear_error(tmp_path: Path):
+    """A function node ref starting with 'lib.' must also raise WorkflowLoadError."""
+    yaml_text = """\
+name: lib_func
+nodes:
+  step:
+    type: function
+    ref: lib.utils.transform
+edges:
+  - source: step
+    target: __end__
+entry_point: step
+"""
+    wf_file = tmp_path / "lib_func.yaml"
+    wf_file.write_text(yaml_text, encoding="utf-8")
+
+    with pytest.raises(WorkflowLoadError, match="lib\\."):
+        load_workflow(wf_file, agent_registry={})
+
+
+def test_load_workflow_lib_ref_state_ref_raises_clear_error(tmp_path: Path):
+    """A state_ref starting with 'lib.' must raise WorkflowLoadError."""
+    yaml_text = """\
+name: lib_state
+state_ref: lib.states.MyState
+nodes:
+  a:
+    type: agent
+    ref: a
+edges:
+  - source: a
+    target: __end__
+entry_point: a
+"""
+    wf_file = tmp_path / "lib_state.yaml"
+    wf_file.write_text(yaml_text, encoding="utf-8")
+
+    agents = {"a": BaseAgent(name="a")}
+    with pytest.raises(WorkflowLoadError, match="lib\\."):
+        load_workflow(wf_file, agent_registry=agents)
+
+
+def test_load_workflow_lib_ref_error_mentions_pythonpath(tmp_path: Path):
+    """The lib.* error message must mention PYTHONPATH so the user knows the fix."""
+    yaml_text = """\
+name: lib_ref_msg
+nodes:
+  worker:
+    type: function
+    ref: lib.tasks.do_work
+edges:
+  - source: worker
+    target: __end__
+entry_point: worker
+"""
+    wf_file = tmp_path / "lib_ref_msg.yaml"
+    wf_file.write_text(yaml_text, encoding="utf-8")
+
+    with pytest.raises(WorkflowLoadError, match="PYTHONPATH"):
+        load_workflow(wf_file, agent_registry={})
+
+
+def test_load_workflow_lib_ref_does_not_mutate_sys_path(tmp_path: Path):
+    """Loading a workflow with a lib.* ref must not modify sys.path."""
+    import sys
+
+    yaml_text = """\
+name: syspath_check
+nodes:
+  worker:
+    type: function
+    ref: lib.tasks.process
+edges:
+  - source: worker
+    target: __end__
+entry_point: worker
+"""
+    wf_file = tmp_path / "syspath_check.yaml"
+    wf_file.write_text(yaml_text, encoding="utf-8")
+
+    path_before = list(sys.path)
+    try:
+        load_workflow(wf_file, agent_registry={})
+    except WorkflowLoadError:
+        pass  # Expected
+
+    assert sys.path == path_before, "load_workflow must not modify sys.path"
