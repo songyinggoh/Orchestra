@@ -317,5 +317,26 @@ def up(
     uvicorn.run(app_instance, host=effective_host, port=effective_port, reload=False)
 
 
+@app.command()
+def validate(
+    project_dir: str = typer.Option(".", "--dir", help="Project directory to validate"),
+) -> None:
+    """Validate a project without starting the server.
+
+    Discovers all tools, agents, and workflows, checks cross-references,
+    and reports any errors. Exits non-zero if problems are found.
+    """
+    from pathlib import Path
+    from orchestra.discovery.validation import validate_project, format_validation_report
+
+    root = Path(project_dir).resolve()
+    result = validate_project(root)
+    report = format_validation_report(result)
+    console.print(report)
+
+    if result.errors:
+        raise typer.Exit(1)
+
+
 if __name__ == "__main__":
     app()
