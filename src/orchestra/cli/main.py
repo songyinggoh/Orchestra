@@ -179,5 +179,91 @@ def serve(
     uvicorn.run(app_instance, host=host, port=port, reload=reload)
 
 
+@app.command()
+def up(
+    host: str = typer.Option("0.0.0.0", help="Host to bind to"),
+    port: int = typer.Option(8000, help="Port to bind to"),
+    reload: bool = typer.Option(False, help="Enable YAML hot-reload"),
+    project_dir: str = typer.Option(".", "--dir", help="Project directory to scan"),
+) -> None:
+    """Auto-discover agents, tools, and workflows, then start the server.
+
+    Scans the project directory for convention-based definitions:
+    - tools/     Python files with @tool functions
+    - agents/    YAML agent definitions
+    - workflows/ YAML workflow graphs
+
+    Registers all discovered workflows and starts the HTTP server.
+    """
+    from pathlib import Path
+
+    try:
+        import uvicorn
+
+        from orchestra.server.app import create_app
+        from orchestra.server.config import ServerConfig
+        from orchestra.server.lifecycle import GraphRegistry
+    except ImportError:
+        console.print("[red]Error:[/red] Server dependencies not installed.")
+        console.print("Install with: pip install orchestra-agents[server]")
+        raise typer.Exit(1)
+
+    from orchestra.discovery.scanner import ProjectScanner
+
+    root = Path(project_dir).resolve()
+    console.print(f"[bold]Scanning project:[/bold] {root}")
+
+    scanner = ProjectScanner()
+    result = scanner.scan(root)
+
+    # Report discoveries
+    console.print(f"  Tools:     {len(result.tools)}")
+    console.print(f"  Agents:    {len(result.agents)}")
+    console.print(f"  Workflows: {len(result.workflows)}")
+
+    # Report warnings
+    for warning in result.warnings:
+        console.print(f"  [yellow]Warning:[/yellow] {warning}")
+
+    # Report errors and exit if any
+    if result.errors:
+        for error in result.errors:
+            console.print(f"  [red]Error:[/red] {error}")
+        console.print(f"\n[red]{len(result.errors)} error(s) found. Fix them and try again.[/red]")
+        raise typer.Exit(1)
+
+    # Use config from orchestra.yaml for server settings
+    srv = result.config.server
+    effective_host = host if host != "0.0.0.0" else srv.host
+    effective_port = port if port != 8000 else srv.port
+
+    # Create app and pre-register discovered workflows
+    server_config = ServerConfig(
+        host=effective_host,
+        port=effective_port,
+        cors_origins=srv.cors_origins,
+    )
+    app_instance = create_app(server_config)
+
+    # Store scan result on app state so the lifespan can register graphs
+    app_instance.state.discovery_result = result
+
+    # Register workflows into a GraphRegistry attached to app state
+    # The lifespan creates its own registry; we register after creation
+    # by hooking into the startup. Since create_app uses a lifespan,
+    # we register directly before uvicorn starts.
+    _original_graph_registry = GraphRegistry()
+    for wf_name, compiled in result.workflows.items():
+        _original_graph_registry.register(wf_name, compiled)
+        console.print(f"  [green]Registered workflow:[/green] {wf_name}")
+
+    app_instance.state._discovery_registry = _original_graph_registry
+
+    console.print(
+        f"\n[green]Starting Orchestra server on {effective_host}:{effective_port}[/green]"
+    )
+    uvicorn.run(app_instance, host=effective_host, port=effective_port, reload=False)
+
+
 if __name__ == "__main__":
     app()
