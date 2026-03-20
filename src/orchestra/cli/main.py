@@ -32,7 +32,11 @@ def init(
     project_name: str = typer.Argument(..., help="Name of the project to create"),
     directory: str = typer.Option(".", help="Directory to create project in"),
 ) -> None:
-    """Initialize a new Orchestra project with scaffolding."""
+    """Initialize a new Orchestra project with convention-based structure.
+
+    Creates a ready-to-run project with example agent, tool, workflow,
+    and orchestra.yaml configuration. Run ``orchestra up`` to start.
+    """
     from pathlib import Path
 
     project_dir = Path(directory) / project_name
@@ -41,46 +45,94 @@ def init(
     (project_dir / "agents").mkdir(exist_ok=True)
     (project_dir / "tools").mkdir(exist_ok=True)
     (project_dir / "workflows").mkdir(exist_ok=True)
+    (project_dir / "lib").mkdir(exist_ok=True)
 
-    workflow_file = project_dir / "workflows" / "hello.py"
-    workflow_file.write_text(
+    # orchestra.yaml
+    (project_dir / "orchestra.yaml").write_text(
+        f"""\
+# Orchestra project configuration
+project:
+  name: {project_name}
+
+defaults:
+  model: claude-sonnet-4-20250514
+  temperature: 0.7
+  max_iterations: 10
+
+server:
+  host: 0.0.0.0
+  port: 8000
+""",
+        encoding="utf-8",
+    )
+
+    # .env template
+    (project_dir / ".env").write_text(
+        """\
+# Add your API key here
+# ANTHROPIC_API_KEY=sk-ant-...
+""",
+        encoding="utf-8",
+    )
+
+    # Example agent
+    (project_dir / "agents" / "assistant.yaml").write_text(
+        """\
+name: assistant
+system_prompt: |
+  You are a helpful assistant. Answer questions clearly and concisely.
+tools:
+  - greet
+temperature: 0.7
+max_iterations: 5
+""",
+        encoding="utf-8",
+    )
+
+    # Example tool
+    (project_dir / "tools" / "greet.py").write_text(
         '''\
-"""Hello World Orchestra workflow."""
+"""Example tool for the Orchestra project."""
 
-import asyncio
-from orchestra.core.graph import WorkflowGraph
-from orchestra.core.state import WorkflowState
+from orchestra.tools.base import tool
 
 
-class HelloState(WorkflowState):
-    greeting: str = ""
-
-
-async def greet(state: dict) -> dict:
-    return {"greeting": "Hello from Orchestra!"}
-
-
-async def main():
-    graph = WorkflowGraph(state_schema=HelloState)
-    graph.add_node("greeter", greet)
-    graph.set_entry_point("greeter")
-
-    compiled = graph.compile()
-    result = await compiled.run({})
-    print(result["greeting"])
-
-
-if __name__ == "__main__":
-    asyncio.run(main())
+@tool
+async def greet(name: str) -> str:
+    """Greet someone by name."""
+    return f"Hello, {name}! Welcome to Orchestra."
 ''',
         encoding="utf-8",
     )
 
+    # Example workflow
+    (project_dir / "workflows" / "hello.yaml").write_text(
+        """\
+name: hello
+state:
+  input: str
+  output: str
+nodes:
+  assistant:
+    type: agent
+    ref: assistant
+    output_key: output
+edges:
+  - source: assistant
+    target: __end__
+entry_point: assistant
+""",
+        encoding="utf-8",
+    )
+
     console.print(f"[green]Created project:[/green] {project_dir}")
-    console.print("  agents/")
-    console.print("  tools/")
-    console.print("  workflows/hello.py")
-    console.print(f"\nRun: [bold]cd {project_name} && python workflows/hello.py[/bold]")
+    console.print("  orchestra.yaml")
+    console.print("  .env")
+    console.print("  agents/assistant.yaml")
+    console.print("  tools/greet.py")
+    console.print("  workflows/hello.yaml")
+    console.print("  lib/")
+    console.print(f"\nRun: [bold]cd {project_name} && orchestra up[/bold]")
 
 
 @app.command()
