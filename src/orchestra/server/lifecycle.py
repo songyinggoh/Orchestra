@@ -48,10 +48,16 @@ class GraphRegistry:
             for name, graph in self._graphs.items():
                 edges_list: list[dict[str, Any]] = []
                 for edge in graph._edges:
+                    target = getattr(edge, "target", getattr(edge, "targets", ""))
+                    # Convert sentinel objects (END) to strings for serialization
+                    if not isinstance(target, (str, list)):
+                        target = str(target)
+                    elif isinstance(target, list):
+                        target = [str(t) if not isinstance(t, str) else t for t in target]
                     edges_list.append({
                         "type": type(edge).__name__,
                         "source": getattr(edge, "source", ""),
-                        "target": getattr(edge, "target", getattr(edge, "targets", "")),
+                        "target": target,
                     })
                 result.append(GraphInfo(
                     name=name,

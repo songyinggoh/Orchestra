@@ -62,7 +62,12 @@ def create_app(config: ServerConfig | None = None) -> FastAPI:
         await event_store.initialize()
 
         app.state.config = config
-        app.state.graph_registry = GraphRegistry()
+        # If orchestra up pre-registered workflows via discovery, reuse that
+        # registry. Otherwise create a fresh one.
+        if not getattr(app.state, "_discovery_registry", None):
+            app.state.graph_registry = GraphRegistry()
+        else:
+            app.state.graph_registry = app.state._discovery_registry
         app.state.run_manager = RunManager()
         app.state.event_store = event_store
 
