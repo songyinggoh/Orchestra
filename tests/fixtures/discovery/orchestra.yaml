@@ -1,0 +1,22 @@
+project:
+  name: test-project
+
+defaults:
+  model: claude-sonnet-4-20250514
+  temperature: 0.5
+  max_iterations: 8
+
+directories:
+  agents: agents
+  tools: tools
+  workflows: workflows
+  lib: lib
+
+server:
+  host: 127.0.0.1
+  port: 9000
+
+security:
+  allowed_imports:
+    - orchestra.
+    - lib.

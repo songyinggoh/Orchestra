@@ -153,3 +153,72 @@ def test_load_agent_invalid_yaml_raises(tmp_path: Path):
     agent_file.write_text("  invalid:\n bad: [yaml", encoding="utf-8")
     with pytest.raises(AgentLoadError, match="Cannot parse"):
         load_agent(agent_file, tool_registry={})
+
+
+# ---- Additional coverage ----
+
+
+def test_load_agent_multiline_system_prompt(tmp_path: Path):
+    """Multiline YAML literal block scalars must be preserved in full."""
+    yaml_text = """\
+name: analyst
+system_prompt: |
+  You are a research analyst.
+  Be thorough and cite your sources.
+  Always verify facts.
+"""
+    agent_file = tmp_path / "analyst.yaml"
+    agent_file.write_text(yaml_text, encoding="utf-8")
+
+    agent = load_agent(agent_file, tool_registry={})
+    assert "Be thorough and cite your sources." in agent.system_prompt
+    assert "Always verify facts." in agent.system_prompt
+
+
+def test_load_agent_empty_tools_list(tmp_path: Path):
+    """An explicit empty tools list must result in an agent with no tools."""
+    yaml_text = "name: notoolsagent\ntools: []\n"
+    agent_file = tmp_path / "notoolsagent.yaml"
+    agent_file.write_text(yaml_text, encoding="utf-8")
+
+    agent = load_agent(agent_file, tool_registry={})
+    assert list(agent.tools) == []
+
+
+def test_load_agent_tool_order_preserved(tmp_path: Path):
+    """Tools must be attached in the order listed in the YAML file."""
+    yaml_text = "name: ordered\ntools:\n  - beta\n  - alpha\n  - gamma\n"
+    agent_file = tmp_path / "ordered.yaml"
+    agent_file.write_text(yaml_text, encoding="utf-8")
+
+    registry = {
+        "alpha": _make_tool("alpha"),
+        "beta": _make_tool("beta"),
+        "gamma": _make_tool("gamma"),
+    }
+    agent = load_agent(agent_file, tool_registry=registry)
+    names = [t.name for t in agent.tools]
+    assert names == ["beta", "alpha", "gamma"]
+
+
+def test_load_agent_missing_tool_names_all_listed(tmp_path: Path):
+    """When multiple tools are missing, all missing names should appear in the error."""
+    yaml_text = "name: multi_miss\ntools:\n  - no_such_tool_1\n  - no_such_tool_2\n"
+    agent_file = tmp_path / "multi_miss.yaml"
+    agent_file.write_text(yaml_text, encoding="utf-8")
+
+    with pytest.raises(ToolNotFoundError) as exc_info:
+        load_agent(agent_file, tool_registry={})
+    # At least one of the missing tool names should appear
+    msg = str(exc_info.value)
+    assert "no_such_tool_1" in msg or "no_such_tool_2" in msg
+
+
+def test_load_agent_max_iterations_from_yaml(tmp_path: Path):
+    """max_iterations specified in YAML must be set on the resulting agent."""
+    yaml_text = "name: limited\nmax_iterations: 2\n"
+    agent_file = tmp_path / "limited.yaml"
+    agent_file.write_text(yaml_text, encoding="utf-8")
+
+    agent = load_agent(agent_file, tool_registry={}, defaults=None)
+    assert agent.max_iterations == 2
