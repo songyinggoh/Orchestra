@@ -71,7 +71,7 @@ def distill_context(
     # Zone 2: middleware — everything in between
     middleware = rest[: max(0, len(rest) - keep_last_n_turns)]
 
-    if not middleware:
+    if not middleware or not suffix:
         return prefix + suffix
 
     # Summarize middleware by concatenating content, then word-truncating
@@ -120,7 +120,7 @@ def _get_role(msg: Any) -> str:
 def _get_content(msg: Any) -> str:
     """Extract content from a Message object or dict."""
     if isinstance(msg, dict):
-        return str(msg.get("content", ""))
+        return str(msg.get("content", None))
     return str(getattr(msg, "content", "") or "")
 
 

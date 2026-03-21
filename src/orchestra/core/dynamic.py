@@ -17,6 +17,7 @@ from ruamel.yaml import YAML
 from orchestra.core.graph import WorkflowGraph
 from orchestra.core.nodes import SubgraphNode
 from orchestra.core.compiled import CompiledGraph
+from orchestra.core.types import END
 
 logger = structlog.get_logger(__name__)
 
@@ -104,7 +105,7 @@ def load_graph_yaml(
             condition = builder.resolve_ref(edge_data["condition"])
             graph.add_conditional_edge(source, condition, edge_data.get("paths"))
         else:
-            graph.add_edge(source, target)
+            graph.add_edge(source, END if target == "__end__" else target)
 
     if "entry_point" in data:
         graph.set_entry_point(data["entry_point"])
