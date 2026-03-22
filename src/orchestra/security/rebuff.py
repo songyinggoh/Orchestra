@@ -153,7 +153,8 @@ class InjectionReport(BaseModel):
     def to_text(self) -> str:
         lines = [
             "=== Prompt Injection Audit (Rebuff) ===",
-            f"Injection Detected : {'YES — BLOCKED' if self.blocked else ('yes' if self.injection_detected else 'no')}",
+            "Injection Detected : "
+            + ("YES - BLOCKED" if self.blocked else ("yes" if self.injection_detected else "no")),
             f"Heuristic Score    : {self.heuristic_score:.2f}",
             f"Vector Score       : {self.vector_score:.2f}",
             f"LLM Model Score    : {self.model_score:.2f}",
@@ -285,7 +286,7 @@ class PromptInjectionAgent(BaseAgent):
     model_config = {"arbitrary_types_allowed": True}
 
     # Lazily initialised so __init__ doesn't require rebuff when just importing
-    _checker: RebuffChecker | None = None
+    _checker: RebuffChecker | None = None  # noqa: RUF012
 
     def _get_checker(self) -> RebuffChecker:
         if self._checker is None:
@@ -437,7 +438,7 @@ class InjectionAuditorAgent(BaseAgent):
 
     model_config = {"arbitrary_types_allowed": True}
 
-    _checker: RebuffChecker | None = None
+    _checker: RebuffChecker | None = None  # noqa: RUF012
 
     def _get_checker(self) -> RebuffChecker:
         if self._checker is None:

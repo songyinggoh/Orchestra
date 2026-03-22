@@ -25,10 +25,9 @@ class CapabilityAttenuator:
 
     def process_risk_score(self, context: ExecutionContext, score: float) -> None:
         """Update context state based on a risk score."""
-        if score >= self.risk_threshold:
-            if not context.restricted_mode:
-                logger.warning("entering_restricted_mode", score=score, run_id=context.run_id)
-                context.restricted_mode = True
+        if score >= self.risk_threshold and not context.restricted_mode:
+            logger.warning("entering_restricted_mode", score=score, run_id=context.run_id)
+            context.restricted_mode = True
 
     def get_allowed_capabilities(
         self, context: ExecutionContext, base_capabilities: Sequence[UCANCapability]

@@ -145,9 +145,8 @@ class AsyncCircuitBreaker:
         if self._state == CircuitState.HALF_OPEN:
             # Failed in half-open => back to open
             self._state = CircuitState.OPEN
-        elif self._state == CircuitState.CLOSED:
-            if self._failure_count >= self._failure_threshold:
-                self._state = CircuitState.OPEN
+        elif self._state == CircuitState.CLOSED and self._failure_count >= self._failure_threshold:
+            self._state = CircuitState.OPEN
 
     def reset(self) -> None:
         """Manually reset the circuit breaker to CLOSED state."""

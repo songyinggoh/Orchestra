@@ -215,7 +215,7 @@ class ToolACL:
         """
         from orchestra.core.errors import CapabilityDeniedError
 
-        # Build the parent–child pairs: proofs are ordered from root → issuer,
+        # Build the parent-child pairs: proofs are ordered from root -> issuer,
         # so proofs[0] is the root grant and the *current* ucan is the leaf.
         # We treat each adjacent pair (proofs[i], proofs[i+1]) as parent/child,
         # and finally (proofs[-1], ucan) as the last parent/child pair.
@@ -226,7 +226,7 @@ class ToolACL:
                 proof_ucans.append(parsed)
 
         # Build the full chain: [proof_0, proof_1, ..., proof_n, leaf_ucan]
-        full_chain = proof_ucans + [ucan]
+        full_chain = [*proof_ucans, ucan]
 
         for i in range(len(full_chain) - 1):
             parent_token = full_chain[i]
@@ -294,11 +294,7 @@ class ToolACL:
         if tool_name in self.allowed_tools:
             return True
 
-        for pattern in self.allow_patterns:
-            if fnmatch.fnmatch(tool_name, pattern):
-                return True
-
-        return False
+        return any(fnmatch.fnmatch(tool_name, pattern) for pattern in self.allow_patterns)
 
     def check_ucan_call_limit(
         self,

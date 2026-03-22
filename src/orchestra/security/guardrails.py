@@ -11,7 +11,7 @@ import asyncio
 import re
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, ClassVar, Protocol, runtime_checkable
 
 import structlog
 from pydantic import BaseModel, Field, ValidationError
@@ -245,7 +245,7 @@ class ContentFilter:
 class PIIDetector:
     """Basic PII detection using regex patterns."""
 
-    _PATTERNS = {
+    _PATTERNS: ClassVar[dict[str, str]] = {
         "email": r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+",
         "phone": r"\b(?:\+?(\d{1,3}))?[-. (]*(\d{3})[-. )]*(\d{3})[-. ]*(\d{4})\b",
         "ssn": r"\b\d{3}-\d{2}-\d{4}\b",
