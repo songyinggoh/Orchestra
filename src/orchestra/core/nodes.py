@@ -51,7 +51,11 @@ class FunctionNode:
             object.__setattr__(self, "name", self.func.__name__)
 
     async def __call__(self, state: dict[str, Any]) -> dict[str, Any]:
-        return await self.func(state)
+        import inspect
+        result = self.func(state)
+        if inspect.isawaitable(result):
+            return await result
+        return result
 
 
 @dataclass(frozen=True)

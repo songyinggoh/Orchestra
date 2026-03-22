@@ -29,3 +29,4 @@ def test_subpackages_importable() -> None:
     import orchestra.providers
     import orchestra.testing
     import orchestra.tools  # noqa: F401
+    import orchestra.discovery
