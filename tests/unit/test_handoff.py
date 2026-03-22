@@ -9,7 +9,6 @@ from orchestra.core.graph import WorkflowGraph
 from orchestra.core.handoff import HandoffEdge, HandoffPayload
 from orchestra.core.types import Message, MessageRole
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -149,11 +148,13 @@ class TestDistillContextMiddleware:
     def test_middleware_truncated_to_max_tokens(self) -> None:
         """Summary word count should not exceed max_middleware_tokens."""
         long_content = " ".join(["word"] * 1000)
-        msgs = (
-            [sys_msg("sys")]
-            + [user_msg(long_content)]
-            + [user_msg("tail1"), asst_msg("tail2"), user_msg("tail3")]
-        )
+        msgs = [
+            sys_msg("sys"),
+            user_msg(long_content),
+            user_msg("tail1"),
+            asst_msg("tail2"),
+            user_msg("tail3"),
+        ]
         result = distill_context(msgs, max_middleware_tokens=20, keep_last_n_turns=3)
         summary = result[1]
         content = summary.content if hasattr(summary, "content") else summary.get("content", "")
@@ -171,11 +172,7 @@ class TestDistillContextMiddleware:
 class TestDistillContextSuffix:
     def test_last_n_turns_kept_intact(self) -> None:
         tail = [user_msg("u1"), asst_msg("a1"), user_msg("u2")]
-        msgs = (
-            [sys_msg("sys")]
-            + [user_msg(f"mid{i}") for i in range(5)]
-            + tail
-        )
+        msgs = [sys_msg("sys")] + [user_msg(f"mid{i}") for i in range(5)] + tail
         result = distill_context(msgs, keep_last_n_turns=3)
         # Last 3 messages in result must match tail
         assert result[-3].content == "u1"

@@ -7,7 +7,6 @@ based on cost, historical performance (Thompson Sampling), and task complexity.
 from __future__ import annotations
 
 import random
-import time
 from dataclasses import dataclass, field
 from typing import Any, Protocol, runtime_checkable
 
@@ -207,16 +206,18 @@ class CostAwareRouter:
                 candidates = options
                 if sla:
                     candidates = self._filter_by_sla(candidates, sla)
-                
+
                 # Apply relaxed budget
                 if budget:
                     relaxed_budget = BudgetConstraint(
                         max_cost_usd=(budget.max_cost_usd * 1.5 if budget.max_cost_usd else None),
                         remaining_budget_usd=budget.remaining_budget_usd,
-                        tenant_id=budget.tenant_id
+                        tenant_id=budget.tenant_id,
                     )
-                    candidates = self._filter_by_budget(candidates, relaxed_budget, estimated_tokens)
-                
+                    candidates = self._filter_by_budget(
+                        candidates, relaxed_budget, estimated_tokens
+                    )
+
                 if not candidates:
                     candidates = [min(options, key=lambda x: x.latency_score)]
                 else:
@@ -237,21 +238,25 @@ class CostAwareRouter:
         filtered = options
         if sla.min_capability_score is not None:
             filtered = [o for o in filtered if o.capability_score >= sla.min_capability_score]
-        
+
         # Note: latency_score (1=fastest, 5=slowest) is used as a proxy for max_latency_ms
         # In a real system, we'd map ms to score or vice versa.
         if sla.max_latency_ms is not None:
             # Simple heuristic: max_latency_ms < 500ms -> score 1, < 1000ms -> score 2, etc.
             max_score = 5
-            if sla.max_latency_ms < 500: max_score = 1
-            elif sla.max_latency_ms < 1000: max_score = 2
-            elif sla.max_latency_ms < 2000: max_score = 3
-            elif sla.max_latency_ms < 5000: max_score = 4
+            if sla.max_latency_ms < 500:
+                max_score = 1
+            elif sla.max_latency_ms < 1000:
+                max_score = 2
+            elif sla.max_latency_ms < 2000:
+                max_score = 3
+            elif sla.max_latency_ms < 5000:
+                max_score = 4
             filtered = [o for o in filtered if o.latency_score <= max_score]
 
         if sla.required_features:
             filtered = [o for o in filtered if sla.required_features.issubset(o.features)]
-        
+
         return filtered
 
     def _filter_by_budget(
@@ -260,7 +265,7 @@ class CostAwareRouter:
         filtered = []
         for opt in options:
             est_cost = (estimated_tokens / 1000) * (opt.input_cost_1k + opt.output_cost_1k)
-            
+
             if budget.max_cost_usd is not None and est_cost > budget.max_cost_usd:
                 continue
             if budget.remaining_budget_usd is not None and est_cost > budget.remaining_budget_usd:

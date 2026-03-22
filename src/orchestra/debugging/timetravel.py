@@ -7,7 +7,7 @@ by projecting events up to a specific sequence number.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from orchestra.storage.store import project_state
 
@@ -44,22 +44,24 @@ class TimeTravelController:
         """
         # 1. Fetch all events for the run up to the sequence
         events = await self.store.get_events(run_id, after_sequence=-1)
-        
+
         # Filter to sequence (assuming events might come back unordered or full list)
         historical_events = [e for e in events if e.sequence <= sequence_number]
-        
+
         if not historical_events:
-            raise ValueError(f"No events found for run_id '{run_id}' up to sequence {sequence_number}")
+            raise ValueError(
+                f"No events found for run_id '{run_id}' up to sequence {sequence_number}"
+            )
 
         # 2. Project state
         reconstructed_state = project_state(historical_events)
 
         # 3. Identify metadata (last active node, turn count)
-        from orchestra.storage.events import NodeStarted, ExecutionStarted
-        
+        from orchestra.storage.events import ExecutionStarted, NodeStarted
+
         node_id = "unknown"
         turn_number = 0
-        
+
         # Determine the active node at this point in history.
         # If the last event was NodeStarted, that's our node.
         # If it was NodeCompleted, we might be 'between' nodes (on an edge).
@@ -68,7 +70,7 @@ class TimeTravelController:
             if isinstance(e, NodeStarted):
                 node_id = e.node_id
                 break
-        
+
         # If still unknown, check ExecutionStarted for entry point
         if node_id == "unknown":
             for e in historical_events:

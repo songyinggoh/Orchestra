@@ -1,6 +1,8 @@
 import datetime
+
 import msgpack
 import pytest
+
 from orchestra.core.types import Message, MessageRole
 from orchestra.memory.serialization import pack, unpack
 
@@ -13,7 +15,7 @@ def test_roundtrip_primitives():
 
 
 def test_roundtrip_datetime():
-    now = datetime.datetime.now(datetime.timezone.utc)
+    now = datetime.datetime.now(datetime.UTC)
     data = {"ts": now}
     packed = pack(data)
     unpacked = unpack(packed)
@@ -32,7 +34,7 @@ def test_roundtrip_pydantic():
 
 
 def test_roundtrip_nested():
-    now = datetime.datetime.now(datetime.timezone.utc)
+    now = datetime.datetime.now(datetime.UTC)
     msg = Message(role=MessageRole.ASSISTANT, content="hi")
     data = {"msg": msg, "created_at": now}
     packed = pack(data)
@@ -78,14 +80,17 @@ def test_allowlist_blocks_untrusted_module():
         assert result == {}, f"Untrusted module '{module_path}' was not blocked"
 
 
-@pytest.mark.parametrize("module_path", [
-    "os",
-    "subprocess",
-    "sys",
-    "builtins",
-    "importlib",
-    "__main__",
-])
+@pytest.mark.parametrize(
+    "module_path",
+    [
+        "os",
+        "subprocess",
+        "sys",
+        "builtins",
+        "importlib",
+        "__main__",
+    ],
+)
 def test_serialization_blocks_dangerous_module_paths(module_path):
     """Crafted payloads pointing at dangerous stdlib modules must be rejected
     by the allowlist before any import is attempted, returning the raw data dict."""

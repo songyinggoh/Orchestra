@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 import structlog
 
@@ -33,7 +34,7 @@ class InvalidationSubscriber:
         """Start the subscriber task."""
         if self._running:
             return
-        
+
         self._running = True
         self._task = asyncio.create_task(self._listen_loop())
         logger.debug("invalidation_subscriber_started")
@@ -57,8 +58,8 @@ class InvalidationSubscriber:
                 pubsub = self._redis.pubsub()
                 async with pubsub as ps:
                     await ps.subscribe(CHANNEL)
-                    
-                    # On initial connect/reconnect, we should probably flush everything 
+
+                    # On initial connect/reconnect, we should probably flush everything
                     # because we might have missed messages.
                     if asyncio.iscoroutinefunction(self._on_invalidate):
                         await self._on_invalidate("*")
@@ -69,12 +70,12 @@ class InvalidationSubscriber:
                         if message["type"] == "message":
                             key = message["data"].decode("utf-8")
                             logger.debug("invalidation_received", key=key)
-                            
+
                             if asyncio.iscoroutinefunction(self._on_invalidate):
                                 await self._on_invalidate(key)
                             else:
                                 self._on_invalidate(key)
-                        
+
                         if not self._running:
                             break
             except asyncio.CancelledError:

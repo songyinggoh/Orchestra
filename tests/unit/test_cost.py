@@ -5,18 +5,15 @@ Covers ModelCostRegistry, CostAggregator, and BudgetPolicy.
 
 from __future__ import annotations
 
-import asyncio
 import json
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
-from orchestra.cost.registry import ModelCostRegistry
-from orchestra.cost.aggregator import CostAggregator, RunCostSummary
-from orchestra.cost.budget import BudgetPolicy, BudgetCheckResult
 from orchestra.core.errors import BudgetExceededError
-
+from orchestra.cost.aggregator import CostAggregator
+from orchestra.cost.budget import BudgetPolicy
+from orchestra.cost.registry import ModelCostRegistry
 
 # ---------------------------------------------------------------------------
 # ModelCostRegistry Tests
@@ -71,12 +68,14 @@ class TestModelCostRegistry:
 
     def test_calculate_cost_known_model(self) -> None:
         """calculate_cost returns correct USD for known model."""
-        registry = ModelCostRegistry(prices={
-            "test-model": {
-                "input_cost_per_token": 0.001,
-                "output_cost_per_token": 0.002,
+        registry = ModelCostRegistry(
+            prices={
+                "test-model": {
+                    "input_cost_per_token": 0.001,
+                    "output_cost_per_token": 0.002,
+                }
             }
-        })
+        )
         cost = registry.calculate_cost("test-model", 100, 50)
         # 100 * 0.001 + 50 * 0.002 = 0.1 + 0.1 = 0.2
         assert cost == pytest.approx(0.2)
@@ -104,9 +103,9 @@ class TestModelCostRegistry:
 
     def test_set_pricing_overrides_existing(self) -> None:
         """set_pricing overrides existing model pricing."""
-        registry = ModelCostRegistry(prices={
-            "my-model": {"input_cost_per_token": 0.001, "output_cost_per_token": 0.002}
-        })
+        registry = ModelCostRegistry(
+            prices={"my-model": {"input_cost_per_token": 0.001, "output_cost_per_token": 0.002}}
+        )
         registry.set_pricing("my-model", 0.01, 0.02)
         cost = registry.calculate_cost("my-model", 100, 100)
         # 100 * 0.01 + 100 * 0.02 = 1.0 + 2.0 = 3.0
@@ -127,13 +126,19 @@ class TestModelCostRegistry:
 
     def test_default_prices_file_exists(self) -> None:
         """The bundled _default_prices.json file exists and is valid JSON."""
-        prices_file = Path(__file__).parent.parent.parent / "src" / "orchestra" / "cost" / "_default_prices.json"
+        prices_file = (
+            Path(__file__).parent.parent.parent
+            / "src"
+            / "orchestra"
+            / "cost"
+            / "_default_prices.json"
+        )
         assert prices_file.exists()
         with open(prices_file) as f:
             data = json.load(f)
         assert isinstance(data, dict)
         assert len(data) > 0
-        for model, pricing in data.items():
+        for _model, pricing in data.items():
             assert "input_cost_per_token" in pricing
             assert "output_cost_per_token" in pricing
 
@@ -157,6 +162,7 @@ class TestCostAggregator:
     ) -> object:
         """Create a mock LLMCalled event."""
         from orchestra.storage.events import LLMCalled
+
         return LLMCalled(
             run_id=run_id,
             node_id=node_id,
@@ -169,6 +175,7 @@ class TestCostAggregator:
     def _make_execution_completed(self, run_id: str = "run-1") -> object:
         """Create a mock ExecutionCompleted event."""
         from orchestra.storage.events import ExecutionCompleted
+
         return ExecutionCompleted(
             run_id=run_id,
             final_state={},
@@ -177,9 +184,9 @@ class TestCostAggregator:
 
     def test_accumulates_single_call(self) -> None:
         """Single LLMCalled event is accumulated correctly."""
-        registry = ModelCostRegistry(prices={
-            "gpt-4o": {"input_cost_per_token": 0.001, "output_cost_per_token": 0.002}
-        })
+        registry = ModelCostRegistry(
+            prices={"gpt-4o": {"input_cost_per_token": 0.001, "output_cost_per_token": 0.002}}
+        )
         agg = CostAggregator(registry=registry)
         event = self._make_llm_event(input_tokens=100, output_tokens=50)
         agg.on_event(event)
@@ -195,9 +202,9 @@ class TestCostAggregator:
 
     def test_accumulates_multiple_calls(self) -> None:
         """Multiple LLMCalled events accumulate correctly."""
-        registry = ModelCostRegistry(prices={
-            "gpt-4o": {"input_cost_per_token": 0.001, "output_cost_per_token": 0.002}
-        })
+        registry = ModelCostRegistry(
+            prices={"gpt-4o": {"input_cost_per_token": 0.001, "output_cost_per_token": 0.002}}
+        )
         agg = CostAggregator(registry=registry)
 
         agg.on_event(self._make_llm_event(input_tokens=100, output_tokens=50))
@@ -212,14 +219,18 @@ class TestCostAggregator:
 
     def test_per_model_breakdown(self) -> None:
         """Cost is tracked per model."""
-        registry = ModelCostRegistry(prices={
-            "gpt-4o": {"input_cost_per_token": 0.001, "output_cost_per_token": 0.002},
-            "gpt-3.5-turbo": {"input_cost_per_token": 0.0001, "output_cost_per_token": 0.0002},
-        })
+        registry = ModelCostRegistry(
+            prices={
+                "gpt-4o": {"input_cost_per_token": 0.001, "output_cost_per_token": 0.002},
+                "gpt-3.5-turbo": {"input_cost_per_token": 0.0001, "output_cost_per_token": 0.0002},
+            }
+        )
         agg = CostAggregator(registry=registry)
 
         agg.on_event(self._make_llm_event(model="gpt-4o", input_tokens=100, output_tokens=50))
-        agg.on_event(self._make_llm_event(model="gpt-3.5-turbo", input_tokens=200, output_tokens=100))
+        agg.on_event(
+            self._make_llm_event(model="gpt-3.5-turbo", input_tokens=200, output_tokens=100)
+        )
 
         summary = agg.get_summary("run-1")
         assert summary is not None
@@ -232,12 +243,14 @@ class TestCostAggregator:
 
     def test_per_agent_breakdown(self) -> None:
         """Cost is tracked per agent."""
-        registry = ModelCostRegistry(prices={
-            "gpt-4o": {"input_cost_per_token": 0.001, "output_cost_per_token": 0.002}
-        })
+        registry = ModelCostRegistry(
+            prices={"gpt-4o": {"input_cost_per_token": 0.001, "output_cost_per_token": 0.002}}
+        )
         agg = CostAggregator(registry=registry)
 
-        agg.on_event(self._make_llm_event(agent_name="researcher", input_tokens=100, output_tokens=50))
+        agg.on_event(
+            self._make_llm_event(agent_name="researcher", input_tokens=100, output_tokens=50)
+        )
         agg.on_event(self._make_llm_event(agent_name="writer", input_tokens=200, output_tokens=100))
 
         summary = agg.get_summary("run-1")
@@ -251,9 +264,9 @@ class TestCostAggregator:
 
     def test_separate_runs(self) -> None:
         """Different run_ids are tracked independently."""
-        registry = ModelCostRegistry(prices={
-            "gpt-4o": {"input_cost_per_token": 0.001, "output_cost_per_token": 0.002}
-        })
+        registry = ModelCostRegistry(
+            prices={"gpt-4o": {"input_cost_per_token": 0.001, "output_cost_per_token": 0.002}}
+        )
         agg = CostAggregator(registry=registry)
 
         agg.on_event(self._make_llm_event(run_id="run-1", input_tokens=100, output_tokens=50))
@@ -293,6 +306,7 @@ class TestCostAggregator:
     def test_on_event_ignores_non_llm_events(self) -> None:
         """Non-LLMCalled events are silently ignored."""
         from orchestra.storage.events import NodeStarted
+
         agg = CostAggregator()
         event = NodeStarted(run_id="run-1", node_id="node-1")
         agg.on_event(event)  # Should not crash
@@ -308,9 +322,9 @@ class TestCostAggregator:
 
     def test_execution_completed_logs_summary(self) -> None:
         """ExecutionCompleted triggers summary logging."""
-        registry = ModelCostRegistry(prices={
-            "gpt-4o": {"input_cost_per_token": 0.001, "output_cost_per_token": 0.002}
-        })
+        registry = ModelCostRegistry(
+            prices={"gpt-4o": {"input_cost_per_token": 0.001, "output_cost_per_token": 0.002}}
+        )
         agg = CostAggregator(registry=registry)
         agg.on_event(self._make_llm_event(input_tokens=100, output_tokens=50))
         # Should not crash
@@ -318,15 +332,27 @@ class TestCostAggregator:
 
     def test_parallel_attribution(self) -> None:
         """Multiple agents in same run accumulate correctly (parallel simulation)."""
-        registry = ModelCostRegistry(prices={
-            "gpt-4o": {"input_cost_per_token": 0.001, "output_cost_per_token": 0.002}
-        })
+        registry = ModelCostRegistry(
+            prices={"gpt-4o": {"input_cost_per_token": 0.001, "output_cost_per_token": 0.002}}
+        )
         agg = CostAggregator(registry=registry)
 
         # Simulate parallel agents
-        agg.on_event(self._make_llm_event(agent_name="agent-a", node_id="node-a", input_tokens=100, output_tokens=50))
-        agg.on_event(self._make_llm_event(agent_name="agent-b", node_id="node-b", input_tokens=200, output_tokens=100))
-        agg.on_event(self._make_llm_event(agent_name="agent-a", node_id="node-a", input_tokens=150, output_tokens=75))
+        agg.on_event(
+            self._make_llm_event(
+                agent_name="agent-a", node_id="node-a", input_tokens=100, output_tokens=50
+            )
+        )
+        agg.on_event(
+            self._make_llm_event(
+                agent_name="agent-b", node_id="node-b", input_tokens=200, output_tokens=100
+            )
+        )
+        agg.on_event(
+            self._make_llm_event(
+                agent_name="agent-a", node_id="node-a", input_tokens=150, output_tokens=75
+            )
+        )
 
         summary = agg.get_summary("run-1")
         assert summary is not None
@@ -505,6 +531,7 @@ class TestBudgetExceededError:
     def test_is_orchestra_error(self) -> None:
         """BudgetExceededError inherits from OrchestraError."""
         from orchestra.core.errors import OrchestraError
+
         err = BudgetExceededError("test")
         assert isinstance(err, OrchestraError)
 
@@ -525,12 +552,13 @@ class TestCostModuleExports:
     def test_imports_from_init(self) -> None:
         """All public classes are importable from orchestra.cost."""
         from orchestra.cost import (
-            CostAggregator,
             BudgetCheckResult,
             BudgetPolicy,
+            CostAggregator,
             ModelCostRegistry,
             RunCostSummary,
         )
+
         assert CostAggregator is not None
         assert BudgetCheckResult is not None
         assert BudgetPolicy is not None

@@ -4,6 +4,7 @@ Provides the event type hierarchy, EventBus for dispatching,
 EventStore protocol for backends, and state projection utilities.
 """
 
+from orchestra.storage.contracts import BoundaryContract, ContractRegistry
 from orchestra.storage.events import (
     AnyEvent,
     CheckpointCreated,
@@ -27,11 +28,16 @@ from orchestra.storage.events import (
     WorkflowEvent,
     create_event,
 )
-from orchestra.storage.contracts import BoundaryContract, ContractRegistry
-from orchestra.storage.store import EventBus, EventStore, InMemoryEventStore, RunSummary, project_state
+from orchestra.storage.store import (
+    EventBus,
+    EventStore,
+    InMemoryEventStore,
+    RunSummary,
+    project_state,
+)
 
 try:
-    from orchestra.storage.sqlite import SQLiteEventStore, SnapshotManager
+    from orchestra.storage.sqlite import SnapshotManager, SQLiteEventStore
 
     _sqlite_available = True
 except ImportError:
@@ -46,47 +52,35 @@ except ImportError:
     _postgres_available = False
 
 __all__ = [
-    # Event base and types
-    "WorkflowEvent",
-    "EventType",
     "AnyEvent",
-    "create_event",
-    # Lifecycle events
-    "ExecutionStarted",
-    "ExecutionCompleted",
-    # Node events
-    "NodeStarted",
-    "NodeCompleted",
-    "StateUpdated",
-    "ErrorOccurred",
-    # Agent events
-    "LLMCalled",
-    "ToolCalled",
-    # Graph events
-    "EdgeTraversed",
-    "ParallelStarted",
-    "ParallelCompleted",
-    # HITL events
-    "InterruptRequested",
-    "InterruptResumed",
+    "BoundaryContract",
     "CheckpointCreated",
-    # Contract events
-    "OutputRejected",
-    # Handoff events
-    "HandoffInitiated",
-    "HandoffCompleted",
-    # Infrastructure
+    "ContractRegistry",
+    "EdgeTraversed",
+    "ErrorOccurred",
     "EventBus",
     "EventStore",
+    "EventType",
+    "ExecutionCompleted",
+    "ExecutionStarted",
+    "HandoffCompleted",
+    "HandoffInitiated",
     "InMemoryEventStore",
-    "RunSummary",
-    "project_state",
-    # Contracts
-    "BoundaryContract",
-    "ContractRegistry",
-    # SQLite backend (optional — requires aiosqlite)
-    "SQLiteEventStore",
-    "SnapshotManager",
-    # PostgreSQL backend (optional — requires asyncpg)
+    "InterruptRequested",
+    "InterruptResumed",
+    "LLMCalled",
+    "NodeCompleted",
+    "NodeStarted",
+    "OutputRejected",
+    "ParallelCompleted",
+    "ParallelStarted",
     "PostgresEventStore",
+    "RunSummary",
+    "SnapshotManager",
+    "SQLiteEventStore",
+    "StateUpdated",
+    "ToolCalled",
+    "WorkflowEvent",
+    "create_event",
+    "project_state",
 ]

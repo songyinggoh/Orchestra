@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 import asyncio
-from contextlib import asynccontextmanager
 from collections.abc import AsyncGenerator
-from typing import Any
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -35,6 +34,7 @@ def create_app(config: ServerConfig | None = None) -> FastAPI:
 
     try:
         from orchestra.tools.wasm_runtime import WasmToolSandbox
+
         WASM_AVAILABLE = True
     except ImportError:
         WASM_AVAILABLE = False
@@ -43,7 +43,9 @@ def create_app(config: ServerConfig | None = None) -> FastAPI:
     async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         """Initialize shared resources on startup; clean up on shutdown."""
         import os
+
         import structlog
+
         from orchestra.observability.logging import setup_logging
         from orchestra.storage.sqlite import SQLiteEventStore
 
@@ -56,13 +58,21 @@ def create_app(config: ServerConfig | None = None) -> FastAPI:
         api_key = os.environ.get("ORCHESTRA_API_KEY")
         app.state.api_key = api_key
         if not api_key:
-            log.warning("orchestra_api_key_not_set", detail="Server is running without authentication. Set ORCHESTRA_API_KEY to enable.")
+            log.warning(
+                "orchestra_api_key_not_set",
+                detail="Server is running without authentication. Set ORCHESTRA_API_KEY to enable.",
+            )
 
         event_store = SQLiteEventStore()
         await event_store.initialize()
 
         app.state.config = config
-        app.state.graph_registry = GraphRegistry()
+        # If orchestra up pre-registered workflows via discovery, reuse that
+        # registry. Otherwise create a fresh one.
+        if not getattr(app.state, "_discovery_registry", None):
+            app.state.graph_registry = GraphRegistry()
+        else:
+            app.state.graph_registry = app.state._discovery_registry
         app.state.run_manager = RunManager()
         app.state.event_store = event_store
 
@@ -101,18 +111,19 @@ def create_app(config: ServerConfig | None = None) -> FastAPI:
     # --- Middleware ---
     # add_middleware prepends, so last call = outermost.
     # Desired chain: CORS → BodySize → RateLimit → RequestID → route handler
-    add_request_id_middleware(app)           # innermost
+    add_request_id_middleware(app)  # innermost
     add_rate_limit_middleware(app, config)
     add_body_size_middleware(app, config)
-    add_cors_middleware(app, config)         # outermost — OPTIONS preflight before auth
+    add_cors_middleware(app, config)  # outermost — OPTIONS preflight before auth
 
     # --- Routes ---
     from fastapi import Depends
+
+    from orchestra.server.dependencies import require_api_key
+    from orchestra.server.routes.graphs import router as graphs_router
     from orchestra.server.routes.health import router as health_router
     from orchestra.server.routes.runs import router as runs_router
     from orchestra.server.routes.streams import router as streams_router
-    from orchestra.server.routes.graphs import router as graphs_router
-    from orchestra.server.dependencies import require_api_key
 
     _auth = [Depends(require_api_key)]
 
@@ -136,9 +147,7 @@ def create_app(config: ServerConfig | None = None) -> FastAPI:
     async def general_error_handler(request: Request, exc: Exception) -> JSONResponse:
         return JSONResponse(
             status_code=500,
-            content=ErrorResponse(
-                detail=str(exc), error_type=type(exc).__name__
-            ).model_dump(),
+            content=ErrorResponse(detail=str(exc), error_type=type(exc).__name__).model_dump(),
         )
 
     return app

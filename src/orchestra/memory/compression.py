@@ -5,11 +5,14 @@ from __future__ import annotations
 from typing import Any
 
 import msgpack
+
 try:
     import pyzstd
+
     HAS_PYZSTD = True
 except ImportError:
     import zlib
+
     HAS_PYZSTD = False
 
 from orchestra.memory.serialization import _default, _object_hook

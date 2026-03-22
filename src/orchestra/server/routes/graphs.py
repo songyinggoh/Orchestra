@@ -29,11 +29,13 @@ async def get_graph(name: str, request: Request) -> GraphInfo:
 
     edges_list: list[dict[str, Any]] = []
     for edge in graph._edges:
-        edges_list.append({
-            "type": type(edge).__name__,
-            "source": getattr(edge, "source", ""),
-            "target": getattr(edge, "target", getattr(edge, "targets", "")),
-        })
+        edges_list.append(
+            {
+                "type": type(edge).__name__,
+                "source": getattr(edge, "source", ""),
+                "target": getattr(edge, "target", getattr(edge, "targets", "")),
+            }
+        )
 
     return GraphInfo(
         name=name,

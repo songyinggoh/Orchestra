@@ -43,23 +43,24 @@ pytestmark = pytest.mark.load
 # Constants
 # ---------------------------------------------------------------------------
 
-CONCURRENCY = 1_000          # Total number of tasks to launch
-SEMAPHORE_LIMIT = 200        # Max tasks in-flight at once (CI-friendly)
-SUCCESS_RATE_FLOOR = 0.999   # Require 99.9 % success rate
-MIN_THROUGHPUT_RPS = 50      # Minimum acceptable runs per second
-TIMEOUT_SECONDS = 120        # Hard deadline for the entire gather
+CONCURRENCY = 1_000  # Total number of tasks to launch
+SEMAPHORE_LIMIT = 200  # Max tasks in-flight at once (CI-friendly)
+SUCCESS_RATE_FLOOR = 0.999  # Require 99.9 % success rate
+MIN_THROUGHPUT_RPS = 50  # Minimum acceptable runs per second
+TIMEOUT_SECONDS = 120  # Hard deadline for the entire gather
 
 
 # ---------------------------------------------------------------------------
 # Shared graph fixture (compiled once, reused by all 1000 runs)
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture(scope="module")
 def echo_graph() -> Any:
     """Minimal graph: one node that echoes its run_id back in state."""
 
     async def echo(state: dict) -> dict:
-        await asyncio.sleep(0)          # yield to event loop
+        await asyncio.sleep(0)  # yield to event loop
         return {"output": state.get("run_id", "unknown")}
 
     g = WorkflowGraph()
@@ -88,6 +89,7 @@ def counter_graph() -> Any:
 # Helper
 # ---------------------------------------------------------------------------
 
+
 async def _run_with_semaphore(
     sem: asyncio.Semaphore,
     graph: Any,
@@ -97,14 +99,14 @@ async def _run_with_semaphore(
     async with sem:
         t0 = time.monotonic()
         try:
-            result = await run(
+            _result = await run(
                 graph,
                 initial_state={"run_id": str(run_id), "count": 0},
                 persist=False,
             )
             duration_ms = (time.monotonic() - t0) * 1000
             return run_id, True, duration_ms, None
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             duration_ms = (time.monotonic() - t0) * 1000
             return run_id, False, duration_ms, str(exc)
 
@@ -112,6 +114,7 @@ async def _run_with_semaphore(
 # ---------------------------------------------------------------------------
 # Test 1: Graph execution — state isolation and success rate
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_1000_concurrent_graph_runs_state_isolation(echo_graph: Any) -> None:
@@ -121,10 +124,7 @@ async def test_1000_concurrent_graph_runs_state_isolation(echo_graph: Any) -> No
     its output — detectable because each run injects a unique run_id.
     """
     sem = asyncio.Semaphore(SEMAPHORE_LIMIT)
-    tasks = [
-        _run_with_semaphore(sem, echo_graph, i)
-        for i in range(CONCURRENCY)
-    ]
+    tasks = [_run_with_semaphore(sem, echo_graph, i) for i in range(CONCURRENCY)]
 
     wall_start = time.monotonic()
     outcomes = await asyncio.wait_for(
@@ -135,13 +135,13 @@ async def test_1000_concurrent_graph_runs_state_isolation(echo_graph: Any) -> No
 
     # ---- aggregate results ------------------------------------------------
     successes = [o for o in outcomes if o[1]]
-    failures  = [o for o in outcomes if not o[1]]
+    failures = [o for o in outcomes if not o[1]]
     durations = [o[2] for o in successes]
 
     success_rate = len(successes) / CONCURRENCY
-    throughput   = len(successes) / wall_elapsed
-    p50          = statistics.median(durations) if durations else 0.0
-    p99          = (
+    throughput = len(successes) / wall_elapsed
+    p50 = statistics.median(durations) if durations else 0.0
+    p99 = (
         sorted(durations)[int(len(durations) * 0.99) - 1]
         if len(durations) >= 100
         else max(durations, default=0.0)
@@ -172,6 +172,7 @@ async def test_1000_concurrent_graph_runs_state_isolation(echo_graph: Any) -> No
 # Test 2: TieredMemoryManager — concurrent store/retrieve (CRITICAL-2.2)
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_1000_concurrent_memory_operations_no_corruption() -> None:
     """1000 concurrent store+retrieve pairs against one TieredMemoryManager.
@@ -194,13 +195,10 @@ async def test_1000_concurrent_memory_operations_no_corruption() -> None:
                 if result != value:
                     return False, f"key={key} expected={value!r} got={result!r}"
                 return True, None
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 return False, str(exc)
 
-    tasks = [
-        store_and_retrieve(f"agent:{i}:state", f"value-{i}")
-        for i in range(CONCURRENCY)
-    ]
+    tasks = [store_and_retrieve(f"agent:{i}:state", f"value-{i}") for i in range(CONCURRENCY)]
 
     wall_start = time.monotonic()
     results = await asyncio.wait_for(
@@ -210,7 +208,7 @@ async def test_1000_concurrent_memory_operations_no_corruption() -> None:
     wall_elapsed = time.monotonic() - wall_start
 
     successes = [r for r in results if r[0]]
-    failures  = [r for r in results if not r[0]]
+    failures = [r for r in results if not r[0]]
     success_rate = len(successes) / CONCURRENCY
 
     print(
@@ -234,6 +232,7 @@ async def test_1000_concurrent_memory_operations_no_corruption() -> None:
 # Test 3: No deadlocks — all tasks complete within deadline
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_1000_concurrent_runs_no_deadlock(counter_graph: Any) -> None:
     """All 1000 tasks must finish within TIMEOUT_SECONDS.
@@ -242,10 +241,7 @@ async def test_1000_concurrent_runs_no_deadlock(counter_graph: Any) -> None:
     asyncio.wait_for to raise TimeoutError, failing this test.
     """
     sem = asyncio.Semaphore(SEMAPHORE_LIMIT)
-    tasks = [
-        _run_with_semaphore(sem, counter_graph, i)
-        for i in range(CONCURRENCY)
-    ]
+    tasks = [_run_with_semaphore(sem, counter_graph, i) for i in range(CONCURRENCY)]
 
     # If any task hangs, this raises asyncio.TimeoutError → test fails.
     outcomes = await asyncio.wait_for(

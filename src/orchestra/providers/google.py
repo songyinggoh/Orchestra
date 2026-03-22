@@ -69,17 +69,19 @@ def _messages_to_gemini_format(
 
         if msg.role == MessageRole.TOOL:
             # Tool results go as "user" role with functionResponse parts
-            contents.append({
-                "role": "user",
-                "parts": [
-                    {
-                        "functionResponse": {
-                            "name": msg.name or "tool",
-                            "response": {"result": msg.content},
+            contents.append(
+                {
+                    "role": "user",
+                    "parts": [
+                        {
+                            "functionResponse": {
+                                "name": msg.name or "tool",
+                                "response": {"result": msg.content},
+                            }
                         }
-                    }
-                ],
-            })
+                    ],
+                }
+            )
             continue
 
         # Gemini uses "model" instead of "assistant"
@@ -91,12 +93,14 @@ def _messages_to_gemini_format(
             if msg.content:
                 parts.append({"text": msg.content})
             for tc in msg.tool_calls:
-                parts.append({
-                    "functionCall": {
-                        "name": tc.name,
-                        "args": tc.arguments,
+                parts.append(
+                    {
+                        "functionCall": {
+                            "name": tc.name,
+                            "args": tc.arguments,
+                        }
                     }
-                })
+                )
         else:
             parts.append({"text": msg.content})
 
@@ -193,9 +197,7 @@ class GoogleProvider:
         if max_tokens:
             body["generationConfig"]["maxOutputTokens"] = max_tokens
         if system_instruction:
-            body["systemInstruction"] = {
-                "parts": [{"text": system_instruction}]
-            }
+            body["systemInstruction"] = {"parts": [{"text": system_instruction}]}
         if tools:
             body["tools"] = _tools_to_gemini_format(tools)
 
@@ -233,16 +235,11 @@ class GoogleProvider:
         if max_tokens:
             body["generationConfig"]["maxOutputTokens"] = max_tokens
         if system_instruction:
-            body["systemInstruction"] = {
-                "parts": [{"text": system_instruction}]
-            }
+            body["systemInstruction"] = {"parts": [{"text": system_instruction}]}
         if tools:
             body["tools"] = _tools_to_gemini_format(tools)
 
-        endpoint = (
-            f"/v1beta/models/{use_model}:streamGenerateContent"
-            f"?alt=sse&key={self._api_key}"
-        )
+        endpoint = f"/v1beta/models/{use_model}:streamGenerateContent?alt=sse&key={self._api_key}"
 
         async with self._client.stream("POST", endpoint, json=body) as response:
             if response.status_code != 200:
@@ -303,9 +300,7 @@ class GoogleProvider:
         costs = _MODEL_COSTS.get(m, (0.0, 0.0))
         return ModelCost(input_cost_per_1k=costs[0], output_cost_per_1k=costs[1])
 
-    async def _request_with_retry(
-        self, model: str, body: dict[str, Any]
-    ) -> dict[str, Any]:
+    async def _request_with_retry(self, model: str, body: dict[str, Any]) -> dict[str, Any]:
         """Make HTTP request with retry logic."""
         endpoint = f"/v1beta/models/{model}:generateContent?key={self._api_key}"
         last_error: Exception | None = None
@@ -354,10 +349,7 @@ class GoogleProvider:
                     f"  Response: {text[:200]}\n"
                     f"  Fix: Reduce input length or use a model with a larger context window."
                 )
-            raise ProviderError(
-                f"Bad request (400).\n"
-                f"  Response: {text[:200]}"
-            )
+            raise ProviderError(f"Bad request (400).\n  Response: {text[:200]}")
         elif status_code == 403:
             raise AuthenticationError(
                 "Permission denied (403).\n"
@@ -370,20 +362,13 @@ class GoogleProvider:
                 "  Fix: Check your API key or set GOOGLE_API_KEY env var."
             )
         elif status_code == 429:
-            raise RateLimitError(
-                f"Rate limited (429).\n"
-                f"  Response: {text[:200]}"
-            )
+            raise RateLimitError(f"Rate limited (429).\n  Response: {text[:200]}")
         elif status_code >= 500:
             raise ProviderUnavailableError(
-                f"Provider error ({status_code}).\n"
-                f"  Response: {text[:200]}"
+                f"Provider error ({status_code}).\n  Response: {text[:200]}"
             )
         else:
-            raise ProviderError(
-                f"HTTP {status_code}.\n"
-                f"  Response: {text[:200]}"
-            )
+            raise ProviderError(f"HTTP {status_code}.\n  Response: {text[:200]}")
 
     def _parse_response(self, data: dict[str, Any], model: str) -> LLMResponse:
         """Parse Gemini generateContent response into LLMResponse."""
@@ -415,9 +400,7 @@ class GoogleProvider:
             input_tok = raw_usage.get("promptTokenCount", 0)
             output_tok = raw_usage.get("candidatesTokenCount", 0)
             cost_info = _MODEL_COSTS.get(model, (0.0, 0.0))
-            estimated_cost = (input_tok / 1000 * cost_info[0]) + (
-                output_tok / 1000 * cost_info[1]
-            )
+            estimated_cost = (input_tok / 1000 * cost_info[0]) + (output_tok / 1000 * cost_info[1])
             usage = TokenUsage(
                 input_tokens=input_tok,
                 output_tokens=output_tok,
@@ -441,7 +424,7 @@ class GoogleProvider:
 
 def _map_finish_reason(
     gemini_reason: str,
-) -> "LLMResponse.__fields__['finish_reason'].annotation":  # type: ignore[name-defined]
+) -> str | None:
     """Map Gemini finishReason to Orchestra finish_reason literal."""
     mapping = {
         "STOP": "stop",

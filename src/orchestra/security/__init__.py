@@ -33,30 +33,30 @@ Prompt injection (requires rebuff):
   make_injection_guard_node, rebuff_tool
 """
 
+from orchestra.security.attenuation import CapabilityAttenuator
+from orchestra.security.circuit_breaker import (
+    AsyncCircuitBreaker,
+    CircuitOpenError,
+    CircuitState,
+)
 from orchestra.security.guardrails import (
     ContentFilter,
+    GuardedAgent,
     Guardrail,
     GuardrailChain,
     GuardrailError,
     GuardrailResult,
     GuardrailViolation,
-    GuardedAgent,
     OnFail,
     PIIDetector,
     PromptShield,
     SchemaValidator,
 )
-from orchestra.security.attenuation import CapabilityAttenuator
+from orchestra.security.rate_limit import TokenBucket
 from orchestra.security.validators import (
     MaxLengthGuardrail,
     PIIRedactionGuardrail,
     RegexGuardrail,
-)
-from orchestra.security.rate_limit import TokenBucket
-from orchestra.security.circuit_breaker import (
-    AsyncCircuitBreaker,
-    CircuitOpenError,
-    CircuitState,
 )
 
 # Rebuff is optional — guarded import
@@ -74,36 +74,30 @@ except ImportError:
     pass
 
 __all__ = [
-    # Core guardrails
-    "OnFail",
-    "GuardrailResult",
-    "GuardrailViolation",
-    "Guardrail",
-    "GuardrailChain",
-    "GuardedAgent",
-    "GuardrailError",
-    # Built-in validators
-    "ContentFilter",
-    "PIIDetector",
-    "PromptShield",
-    "SchemaValidator",
-    "CapabilityAttenuator",
-    # Extended validators
-    "MaxLengthGuardrail",
-    "RegexGuardrail",
-    "PIIRedactionGuardrail",
-    # Rate limiting
-    "TokenBucket",
-    # Circuit breaker
     "AsyncCircuitBreaker",
+    "CapabilityAttenuator",
     "CircuitOpenError",
     "CircuitState",
-    # Rebuff (optional)
-    "RebuffChecker",
+    "ContentFilter",
+    "GuardedAgent",
+    "Guardrail",
+    "GuardrailChain",
+    "GuardrailError",
+    "GuardrailResult",
+    "GuardrailViolation",
+    "InjectionAuditorAgent",
     "InjectionDetectionResult",
     "InjectionReport",
+    "MaxLengthGuardrail",
+    "OnFail",
+    "PIIDetector",
+    "PIIRedactionGuardrail",
     "PromptInjectionAgent",
-    "InjectionAuditorAgent",
+    "PromptShield",
+    "RebuffChecker",
+    "RegexGuardrail",
+    "SchemaValidator",
+    "TokenBucket",
     "make_injection_guard_node",
     "rebuff_tool",
 ]

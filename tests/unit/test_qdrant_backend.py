@@ -1,12 +1,13 @@
 """Unit tests for QdrantColdBackend."""
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 def _make_mock_client():
     """Build a fully mocked AsyncQdrantClient."""
@@ -54,19 +55,24 @@ def backend(mock_client):
 # _key_to_point_id
 # ---------------------------------------------------------------------------
 
+
 def test_key_to_point_id_is_deterministic():
     from orchestra.memory.qdrant_backend import QdrantColdBackend
+
     assert QdrantColdBackend._key_to_point_id("x") == QdrantColdBackend._key_to_point_id("x")
 
 
 def test_key_to_point_id_different_keys_differ():
     from orchestra.memory.qdrant_backend import QdrantColdBackend
+
     assert QdrantColdBackend._key_to_point_id("a") != QdrantColdBackend._key_to_point_id("b")
 
 
 def test_key_to_point_id_is_uuid_string():
     import uuid
+
     from orchestra.memory.qdrant_backend import QdrantColdBackend
+
     result = QdrantColdBackend._key_to_point_id("hello")
     uuid.UUID(result)  # raises ValueError if not valid UUID
 
@@ -74,6 +80,7 @@ def test_key_to_point_id_is_uuid_string():
 # ---------------------------------------------------------------------------
 # _agent_filter
 # ---------------------------------------------------------------------------
+
 
 def test_agent_filter_has_agent_id_condition(backend):
     f = backend._agent_filter()
@@ -90,6 +97,7 @@ def test_agent_filter_extra_metadata(backend):
 # ---------------------------------------------------------------------------
 # store
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_store_calls_upsert(backend, mock_client):
@@ -120,6 +128,7 @@ async def test_store_zero_vector_when_no_embedding(backend, mock_client):
 @pytest.mark.asyncio
 async def test_store_uses_deterministic_point_id(backend, mock_client):
     from orchestra.memory.qdrant_backend import QdrantColdBackend
+
     await backend.store("mykey", "v", embedding=[0.1, 0.2, 0.3, 0.4])
     point = mock_client.upsert.call_args.kwargs["points"][0]
     assert point.id == QdrantColdBackend._key_to_point_id("mykey")
@@ -128,6 +137,7 @@ async def test_store_uses_deterministic_point_id(backend, mock_client):
 # ---------------------------------------------------------------------------
 # retrieve
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_retrieve_returns_none_when_not_found(backend, mock_client):
@@ -151,6 +161,7 @@ async def test_retrieve_returns_content(backend, mock_client):
 @pytest.mark.asyncio
 async def test_retrieve_warns_on_model_mismatch(backend, mock_client, caplog):
     import logging
+
     point = MagicMock()
     point.payload = {
         "key": "k1",
@@ -167,6 +178,7 @@ async def test_retrieve_warns_on_model_mismatch(backend, mock_client, caplog):
 # ---------------------------------------------------------------------------
 # search
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_search_returns_empty_when_no_results(backend, mock_client):
@@ -211,9 +223,11 @@ async def test_search_applies_filter_metadata(backend, mock_client):
 # delete
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_delete_calls_client_delete(backend, mock_client):
     from orchestra.memory.qdrant_backend import QdrantColdBackend
+
     await backend.delete("k1")
     mock_client.delete.assert_called_once()
     call_kwargs = mock_client.delete.call_args.kwargs
@@ -224,6 +238,7 @@ async def test_delete_calls_client_delete(backend, mock_client):
 # ---------------------------------------------------------------------------
 # count
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_count_returns_integer(backend, mock_client):
@@ -244,10 +259,11 @@ async def test_count_filters_by_agent(backend, mock_client):
 # ImportError when qdrant-client not installed
 # ---------------------------------------------------------------------------
 
+
 def test_raises_import_error_when_qdrant_missing():
     with patch("orchestra.memory.qdrant_backend.HAS_QDRANT", False):
         from orchestra.memory import qdrant_backend as qb
-        import importlib
+
         # Re-instantiate with HAS_QDRANT=False
         orig = qb.HAS_QDRANT
         qb.HAS_QDRANT = False
@@ -262,12 +278,13 @@ def test_raises_import_error_when_qdrant_missing():
 # #3 — Multi-tenant agent_id override
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_search_uses_instance_agent_id_by_default(backend, mock_client):
     mock_client.query_points = AsyncMock(return_value=MagicMock(points=[]))
     await backend.search([0.0] * 4)
     call_kwargs = mock_client.query_points.call_args.kwargs
-    keys = [c.key for c in call_kwargs["query_filter"].must]
+    _keys = [c.key for c in call_kwargs["query_filter"].must]
     values = [c.match.value for c in call_kwargs["query_filter"].must if c.key == "agent_id"]
     assert values == ["agent-1"]
 

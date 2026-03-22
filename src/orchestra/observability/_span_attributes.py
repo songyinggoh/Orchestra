@@ -51,7 +51,7 @@ def extract_provider(model: str) -> str:
     return "unknown"
 
 
-def llm_event_to_attributes(event: "LLMCalled") -> dict[str, Any]:
+def llm_event_to_attributes(event: LLMCalled) -> dict[str, Any]:
     """Map LLMCalled event fields to gen_ai.* semantic convention attributes.
 
     Returns a dict of span attributes following the OpenTelemetry

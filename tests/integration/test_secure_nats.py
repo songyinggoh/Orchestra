@@ -10,17 +10,16 @@ Run locally:
 
 from __future__ import annotations
 
-import asyncio
 import uuid
 
 import pytest
 import pytest_asyncio
 
 nats_lib = pytest.importorskip("nats", reason="nats-py not installed")
-base58 = pytest.importorskip("base58", reason="base58 not installed")  # noqa: F841
+base58 = pytest.importorskip("base58", reason="base58 not installed")
 
-from orchestra.messaging import SecureNatsProvider, TaskConsumer, TaskPublisher
-from orchestra.messaging.client import NATSClientConfig, create_nats_client
+from orchestra.messaging import SecureNatsProvider, TaskConsumer, TaskPublisher  # noqa: E402
+from orchestra.messaging.client import NATSClientConfig, create_nats_client  # noqa: E402
 
 NATS_URL = "nats://localhost:4222"
 pytestmark = pytest.mark.integration
@@ -59,7 +58,7 @@ def agent_pair():
 @pytest.mark.asyncio
 async def test_publish_100_encrypted_tasks(nats_connection, agent_pair) -> None:
     """Publish 100 tasks, consume all 100, verify decryption succeeds."""
-    nc, js, stream_name = nats_connection
+    _nc, js, stream_name = nats_connection
     pub_provider, con_provider = agent_pair
 
     agent_type = f"test.{stream_name}"
@@ -89,7 +88,7 @@ async def test_publish_100_encrypted_tasks(nats_connection, agent_pair) -> None:
 
     # Fetch in batches of 10
     total_processed = 0
-    for _ in range(20):  # up to 20 attempts × batch 10 = 200 slots
+    for _ in range(20):  # up to 20 attempts x batch 10 = 200 slots
         n = await consumer.fetch_and_process(handler, batch_size=10, timeout=2.0)
         total_processed += n
         if total_processed >= 100:
@@ -103,7 +102,7 @@ async def test_publish_100_encrypted_tasks(nats_connection, agent_pair) -> None:
 @pytest.mark.asyncio
 async def test_nats_store_contains_only_ciphertexts(nats_connection, agent_pair) -> None:
     """Raw bytes stored in NATS must not contain any plaintext fragments."""
-    nc, js, stream_name = nats_connection
+    _nc, js, stream_name = nats_connection
     pub_provider, con_provider = agent_pair
 
     agent_type = f"test.{stream_name}"
@@ -134,7 +133,7 @@ async def test_nats_store_contains_only_ciphertexts(nats_connection, agent_pair)
 @pytest.mark.asyncio
 async def test_wrong_key_consumer_naks_message(nats_connection, agent_pair) -> None:
     """A consumer with the wrong key should NAK, not silently drop the message."""
-    nc, js, stream_name = nats_connection
+    _nc, js, stream_name = nats_connection
     pub_provider, con_provider = agent_pair
     eve_provider = SecureNatsProvider.create(nats_url=NATS_URL)
 

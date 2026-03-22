@@ -25,6 +25,7 @@ def test_subpackages_importable() -> None:
     """Verify all subpackages are importable."""
     import orchestra.cli
     import orchestra.core
+    import orchestra.discovery
     import orchestra.observability
     import orchestra.providers
     import orchestra.testing

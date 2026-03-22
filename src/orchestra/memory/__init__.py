@@ -1,23 +1,24 @@
 """Memory module for Orchestra."""
 
-from orchestra.memory.manager import InMemoryMemoryManager, MemoryManager
-from orchestra.memory.backends import MemoryBackend, InMemoryMemoryBackend, RedisMemoryBackend
+from orchestra.memory.backends import InMemoryMemoryBackend, MemoryBackend, RedisMemoryBackend
 from orchestra.memory.embeddings import EmbeddingProvider
-from orchestra.memory.tools import rag_tool
+from orchestra.memory.manager import InMemoryMemoryManager, MemoryManager
 from orchestra.memory.tiers import (
-    TieredMemoryManager,
     ColdTierBackend,
-    Tier,
     MemoryEntry,
+    Tier,
+    TieredMemoryManager,
     TierStats,
     create_tiered_memory,
 )
+from orchestra.memory.tools import rag_tool
 
 # Optional: pgvector backend — requires asyncpg + pgvector (+ model2vec for dedup)
 try:
-    from orchestra.memory.vector_store import VectorStore
-    from orchestra.memory.dedup import SemanticDeduplicator
     from orchestra.memory.compression import StateCompressor
+    from orchestra.memory.dedup import SemanticDeduplicator
+    from orchestra.memory.vector_store import VectorStore
+
     HAS_VECTORDB = True
 except ImportError:
     HAS_VECTORDB = False
@@ -25,33 +26,29 @@ except ImportError:
 # Optional: Qdrant backend — requires qdrant-client
 try:
     from orchestra.memory.qdrant_backend import QdrantColdBackend
+
     HAS_QDRANT = True
 except ImportError:
     HAS_QDRANT = False
 
 __all__ = [
-    # Core protocols
-    "MemoryManager",
-    "MemoryBackend",
     "ColdTierBackend",
     "EmbeddingProvider",
-    # Implementations
-    "InMemoryMemoryManager",
+    "HAS_QDRANT",
+    "HAS_VECTORDB",
     "InMemoryMemoryBackend",
-    "RedisMemoryBackend",
-    # Tiered memory
-    "TieredMemoryManager",
-    "create_tiered_memory",
-    "rag_tool",
-    "Tier",
+    "InMemoryMemoryManager",
+    "MemoryBackend",
     "MemoryEntry",
-    "TierStats",
-    # pgvector backend (optional — pip install orchestra-agents[vectordb])
-    "VectorStore",
+    "MemoryManager",
+    "QdrantColdBackend",
+    "RedisMemoryBackend",
     "SemanticDeduplicator",
     "StateCompressor",
-    "HAS_VECTORDB",
-    # Qdrant backend (optional — pip install orchestra-agents[qdrant])
-    "QdrantColdBackend",
-    "HAS_QDRANT",
+    "Tier",
+    "TieredMemoryManager",
+    "TierStats",
+    "VectorStore",
+    "create_tiered_memory",
+    "rag_tool",
 ]

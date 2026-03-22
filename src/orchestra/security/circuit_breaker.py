@@ -27,7 +27,6 @@ from __future__ import annotations
 import time
 from enum import Enum
 from types import TracebackType
-from typing import Any
 
 
 class CircuitState(str, Enum):
@@ -41,7 +40,9 @@ class CircuitState(str, Enum):
 class CircuitOpenError(Exception):
     """Raised when the circuit breaker is open and requests are rejected."""
 
-    def __init__(self, message: str = "Circuit breaker is OPEN", remaining_seconds: float = 0.0) -> None:
+    def __init__(
+        self, message: str = "Circuit breaker is OPEN", remaining_seconds: float = 0.0
+    ) -> None:
         super().__init__(message)
         self.remaining_seconds = remaining_seconds
 
@@ -144,9 +145,8 @@ class AsyncCircuitBreaker:
         if self._state == CircuitState.HALF_OPEN:
             # Failed in half-open => back to open
             self._state = CircuitState.OPEN
-        elif self._state == CircuitState.CLOSED:
-            if self._failure_count >= self._failure_threshold:
-                self._state = CircuitState.OPEN
+        elif self._state == CircuitState.CLOSED and self._failure_count >= self._failure_threshold:
+            self._state = CircuitState.OPEN
 
     def reset(self) -> None:
         """Manually reset the circuit breaker to CLOSED state."""
@@ -155,7 +155,7 @@ class AsyncCircuitBreaker:
         self._success_count = 0
         self._last_failure_time = None
 
-    async def __aenter__(self) -> "AsyncCircuitBreaker":
+    async def __aenter__(self) -> AsyncCircuitBreaker:
         """Context manager entry: check if request is allowed."""
         if not self.allow_request():
             remaining = 0.0
@@ -163,8 +163,7 @@ class AsyncCircuitBreaker:
                 elapsed = time.monotonic() - self._last_failure_time
                 remaining = max(0.0, self._reset_timeout - elapsed)
             raise CircuitOpenError(
-                f"Circuit breaker '{self._name}' is OPEN. "
-                f"Retry in {remaining:.1f}s.",
+                f"Circuit breaker '{self._name}' is OPEN. Retry in {remaining:.1f}s.",
                 remaining_seconds=remaining,
             )
         return self

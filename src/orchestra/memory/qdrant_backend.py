@@ -12,7 +12,6 @@ or directly::
 from __future__ import annotations
 
 import asyncio
-import json
 import uuid
 from typing import Any
 
@@ -112,7 +111,7 @@ class QdrantColdBackend:
     # Internal helpers
     # ------------------------------------------------------------------
 
-    async def _ensure_initialized(self) -> "AsyncQdrantClient":
+    async def _ensure_initialized(self) -> AsyncQdrantClient:
         """Lazy-init client and collection (double-checked locking)."""
         if self._initialized and self._client:
             return self._client
@@ -152,7 +151,7 @@ class QdrantColdBackend:
         self,
         extra: dict | None = None,
         agent_id: str | None = None,
-    ) -> "Filter":
+    ) -> Filter:
         """Build a Filter scoped to an agent, with optional extra conditions.
 
         Args:
@@ -167,9 +166,7 @@ class QdrantColdBackend:
         ]
         if extra:
             for k, v in extra.items():
-                conditions.append(
-                    FieldCondition(key=f"meta.{k}", match=MatchValue(value=v))
-                )
+                conditions.append(FieldCondition(key=f"meta.{k}", match=MatchValue(value=v)))
         return Filter(must=conditions)
 
     # ------------------------------------------------------------------

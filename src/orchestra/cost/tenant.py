@@ -7,13 +7,14 @@ budgeting in Orchestra.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum, auto
 from typing import Any
 
 
 class BudgetStatus(Enum):
     """Current status of a tenant's budget."""
+
     ACTIVE = auto()
     WARNING = auto()
     EXCEEDED = auto()
@@ -30,6 +31,7 @@ class Tenant:
         parent_id: Optional ID of the parent tenant for hierarchical budgets.
         metadata: Custom attributes (e.g. tier, contact).
     """
+
     tenant_id: str
     name: str
     parent_id: str | None = None
@@ -46,6 +48,7 @@ class BudgetConfig:
         is_hard_limit: If True, block requests immediately upon exceeding.
         reset_period: 'monthly', 'daily', or 'none'.
     """
+
     limit_usd: float
     warning_threshold: float = 0.8
     is_hard_limit: bool = True
@@ -62,7 +65,8 @@ class BudgetState:
         last_reset: Timestamp of the last budget reset (UTC).
         status: Calculated BudgetStatus.
     """
+
     tenant_id: str
     balance_usd: float = 0.0
-    last_reset: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    last_reset: datetime = field(default_factory=lambda: datetime.now(UTC))
     status: BudgetStatus = BudgetStatus.ACTIVE

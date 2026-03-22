@@ -31,7 +31,6 @@ from __future__ import annotations
 from typing import Any
 
 import structlog
-from pydantic import BaseModel, Field
 
 from orchestra.core.agent import BaseAgent
 from orchestra.core.context import ExecutionContext
@@ -64,9 +63,9 @@ class FactScorerAgent(BaseAgent):
     knowledge_source: str = "enwiki-20230401"
     factscore_data_dir: str = ".cache/factscore"
     factscore_gamma: int = 10
-    topic_state_key: str = "topic"   # state key to read the topic from
+    topic_state_key: str = "topic"  # state key to read the topic from
 
-    model_config = {"arbitrary_types_allowed": True}
+    model_config: dict = {"arbitrary_types_allowed": True}  # noqa: RUF012
 
     async def run(
         self,
@@ -183,9 +182,7 @@ def make_factscore_node(
         gamma=gamma,
     )
 
-    async def factscore_node(
-        state: dict[str, Any], context: ExecutionContext
-    ) -> dict[str, Any]:
+    async def factscore_node(state: dict[str, Any], context: ExecutionContext) -> dict[str, Any]:
         response: str = state.get(response_key, "")
         topic: str = state.get(topic_key, "")
 

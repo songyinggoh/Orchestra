@@ -1,0 +1,24 @@
+name: pipeline
+
+state:
+  topic: str
+  research: str
+  output: str
+
+nodes:
+  researcher:
+    type: agent
+    ref: researcher
+    output_key: research
+  writer:
+    type: agent
+    ref: writer
+    output_key: output
+
+edges:
+  - source: researcher
+    target: writer
+  - source: writer
+    target: __end__
+
+entry_point: researcher

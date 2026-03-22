@@ -23,6 +23,7 @@ Prerequisites (at least one):
     export GOOGLE_API_KEY=AIza...
     ollama serve && ollama pull llama3.1
 """
+
 from __future__ import annotations
 
 from typing import Annotated, Any
@@ -36,7 +37,6 @@ from orchestra.core.runner import run
 from orchestra.core.state import WorkflowState, merge_dict, merge_list
 from orchestra.core.types import END, LLMResponse, Message, MessageRole, StreamChunk
 from orchestra.tools.base import tool
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -260,6 +260,121 @@ class TestToolCalling:
         result = await self._run_tool_agent(google_provider, google_model)
         assert "46" in result.output
 
+    @pytest.mark.asyncio
+    async def test_ollama_tool_called(self, ollama_provider, ollama_model):
+        result = await self._run_tool_agent(ollama_provider, ollama_model)
+        assert result.tool_calls_made, "Expected at least one tool call"
+        tool_names = [tc.tool_call.name for tc in result.tool_calls_made]
+        assert "add_numbers" in tool_names
+
+    @pytest.mark.asyncio
+    async def test_ollama_tool_result_correct(self, ollama_provider, ollama_model):
+        result = await self._run_tool_agent(ollama_provider, ollama_model)
+        assert "46" in result.output
+
+    @pytest.mark.asyncio
+    async def test_any_provider_tool_called(self, any_provider_and_model):
+        provider, model = any_provider_and_model
+        result = await self._run_tool_agent(provider, model)
+        assert result.tool_calls_made, "Expected at least one tool call"
+        tool_names = [tc.tool_call.name for tc in result.tool_calls_made]
+        assert "add_numbers" in tool_names
+
+    @pytest.mark.asyncio
+    async def test_any_provider_tool_result_correct(self, any_provider_and_model):
+        provider, model = any_provider_and_model
+        result = await self._run_tool_agent(provider, model)
+        assert "46" in result.output
+
+
+# ---------------------------------------------------------------------------
+# 3b. Multi-turn tool use — agent calls a tool then uses the result
+# ---------------------------------------------------------------------------
+
+
+@tool
+async def lookup_capital(country: str) -> str:
+    """Return the capital city of a country."""
+    capitals = {
+        "france": "Paris",
+        "germany": "Berlin",
+        "japan": "Tokyo",
+        "brazil": "Brasilia",
+        "australia": "Canberra",
+    }
+    return capitals.get(country.lower(), f"Unknown capital for {country}")
+
+
+@pytest.mark.live
+class TestMultiTurnToolUse:
+    """Agent calls a tool, receives the result, then formulates a final answer.
+
+    This exercises the full max_iterations loop: think → call tool → observe
+    result → answer. A one-shot model that refuses to use tools would fail here.
+    """
+
+    async def _run_capital_agent(self, provider: Any, model: str) -> Any:
+        agent = BaseAgent(
+            name="geo_assistant",
+            model=model,
+            system_prompt=(
+                "You are a geography assistant. When asked about a capital city, "
+                "you MUST use the lookup_capital tool to find it. "
+                "Do not rely on memory — always call the tool first."
+            ),
+            tools=[lookup_capital],
+            temperature=0.0,
+            max_iterations=5,
+        )
+        ctx = ExecutionContext(provider=provider)
+        return await agent.run("What is the capital of France?", ctx)
+
+    @pytest.mark.asyncio
+    async def test_anthropic_tool_called_in_loop(self, anthropic_provider, anthropic_model):
+        result = await self._run_capital_agent(anthropic_provider, anthropic_model)
+        assert result.tool_calls_made, "Agent should have called lookup_capital"
+        assert "Paris" in result.output
+
+    @pytest.mark.asyncio
+    async def test_openai_tool_called_in_loop(self, openai_provider, openai_model):
+        result = await self._run_capital_agent(openai_provider, openai_model)
+        assert result.tool_calls_made
+        assert "Paris" in result.output
+
+    @pytest.mark.asyncio
+    async def test_ollama_tool_called_in_loop(self, ollama_provider, ollama_model):
+        result = await self._run_capital_agent(ollama_provider, ollama_model)
+        assert result.tool_calls_made, "Agent should have called lookup_capital"
+        assert "Paris" in result.output
+
+    @pytest.mark.asyncio
+    async def test_any_provider_tool_called_in_loop(self, any_provider_and_model):
+        provider, model = any_provider_and_model
+        result = await self._run_capital_agent(provider, model)
+        assert result.tool_calls_made, "Agent should have called lookup_capital"
+        assert "Paris" in result.output
+
+    @pytest.mark.asyncio
+    async def test_any_provider_sequential_tool_calls(self, any_provider_and_model):
+        """Agent calls a tool twice in sequence to answer a compound question."""
+        provider, model = any_provider_and_model
+        agent = BaseAgent(
+            name="multi_lookup",
+            model=model,
+            system_prompt=(
+                "You are a geography assistant. For every country mentioned, "
+                "call lookup_capital once per country. Always use the tool."
+            ),
+            tools=[lookup_capital],
+            temperature=0.0,
+            max_iterations=8,
+        )
+        ctx = ExecutionContext(provider=provider)
+        result = await agent.run("What are the capitals of France and Japan?", ctx)
+        assert result.tool_calls_made, "Expected tool calls"
+        assert "Paris" in result.output
+        assert "Tokyo" in result.output
+
 
 # ---------------------------------------------------------------------------
 # 4. BaseAgent.run() — single agent returns coherent AgentResult
@@ -317,7 +432,9 @@ class TestBaseAgent:
         result = await agent.run(
             "What is the chemical symbol for water? Reply with only the symbol.", ctx
         )
-        assert "h2o" in result.output.lower() or "H2O" in result.output
+        # Accept ASCII H2O and Unicode subscript H₂O (both are correct)
+        normalised = result.output.lower().replace("₂", "2")
+        assert "h2o" in normalised
 
 
 # ---------------------------------------------------------------------------
@@ -389,7 +506,9 @@ class TestMultiAgentRouting:
         assert state["answer"]
 
     @pytest.mark.asyncio
-    async def test_anthropic_answer_non_empty_after_routing(self, anthropic_provider, anthropic_model):
+    async def test_anthropic_answer_non_empty_after_routing(
+        self, anthropic_provider, anthropic_model
+    ):
         state = await self._run_routing(
             anthropic_provider,
             anthropic_model,
@@ -506,12 +625,8 @@ class TestParallelFanOut:
 
         async def run_synthesizer(state: dict[str, Any]) -> dict[str, Any]:
             ctx = ExecutionContext(provider=provider)
-            combined = "\n".join(
-                f"[{k}] {v}" for k, v in state["findings"].items()
-            )
-            r = await synthesizer.run(
-                f"Topic: {state['topic']}\n\nFindings:\n{combined}", ctx
-            )
+            combined = "\n".join(f"[{k}] {v}" for k, v in state["findings"].items())
+            r = await synthesizer.run(f"Topic: {state['topic']}\n\nFindings:\n{combined}", ctx)
             return {"synthesis": r.output, "log": ["synthesizer done"]}
 
         graph = WorkflowGraph(state_schema=ResearchState)
@@ -532,7 +647,9 @@ class TestParallelFanOut:
         )
 
     @pytest.mark.asyncio
-    async def test_anthropic_all_three_findings_populated(self, anthropic_provider, anthropic_model):
+    async def test_anthropic_all_three_findings_populated(
+        self, anthropic_provider, anthropic_model
+    ):
         result = await self._run_parallel(anthropic_provider, anthropic_model)
         findings = result.state["findings"]
         assert "technical" in findings

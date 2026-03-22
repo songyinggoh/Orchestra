@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 import structlog
 from watchfiles import awatch
 
-from orchestra.core.dynamic import load_graph_yaml, SubgraphBuilder
+from orchestra.core.dynamic import SubgraphBuilder, load_graph_yaml
 
 if TYPE_CHECKING:
     from orchestra.server.lifecycle import GraphRegistry
@@ -25,10 +25,7 @@ class GraphHotReloader:
     """Watches a directory for YAML graph changes and updates the registry."""
 
     def __init__(
-        self, 
-        watch_dir: str | Path,
-        registry: GraphRegistry,
-        builder: SubgraphBuilder | None = None
+        self, watch_dir: str | Path, registry: GraphRegistry, builder: SubgraphBuilder | None = None
     ) -> None:
         self._watch_dir = Path(watch_dir)
         self._registry = registry
@@ -39,10 +36,10 @@ class GraphHotReloader:
         """Start the background watcher task."""
         if self._task is not None:
             return
-        
+
         if not self._watch_dir.exists():
             self._watch_dir.mkdir(parents=True, exist_ok=True)
-            
+
         self._task = asyncio.create_task(self._run_loop())
         logger.info("hot_reloader_started", dir=str(self._watch_dir))
 
@@ -71,10 +68,10 @@ class GraphHotReloader:
         try:
             yaml_str = path.read_text(encoding="utf-8")
             compiled = load_graph_yaml(yaml_str, builder=self._builder)
-            
+
             # Use filename (minus extension) as registry name if not set in YAML
             name = compiled._name or path.stem
-            
+
             # Atomic registry swap
             self._registry.register(name, compiled)
             logger.info("graph_reloaded_successfully", name=name)

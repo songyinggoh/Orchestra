@@ -1,6 +1,7 @@
 """Tests for JCS canonicalization (RFC 8785)."""
 
 from __future__ import annotations
+
 from orchestra.interop.zkp import jcs_canonicalize
 
 
@@ -11,13 +12,7 @@ def test_jcs_basic_sort():
 
 
 def test_jcs_nested_sort():
-    state = {
-        "z": 0,
-        "a": {
-            "y": 2,
-            "x": 1
-        }
-    }
+    state = {"z": 0, "a": {"y": 2, "x": 1}}
     # Should sort nested keys recursively
     assert jcs_canonicalize(state) == b'{"a":{"x":1,"y":2},"z":0}'
 

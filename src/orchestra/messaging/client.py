@@ -33,10 +33,10 @@ class NATSClientConfig:
     stream_subjects: list[str] = field(default_factory=lambda: list(_STREAM_SUBJECTS))
     # LIMITS retention: keep messages until capacity/age thresholds are exceeded
     max_age_seconds: int = 7 * 24 * 3600  # 7 days
-    duplicate_window_seconds: int = 120   # 2-minute dedup window
+    duplicate_window_seconds: int = 120  # 2-minute dedup window
     max_msgs: int = 1_000_000
-    max_bytes: int = 1 * 1024**3          # 1 GB
-    max_msg_size: int = 1 * 1024**2       # 1 MB per message
+    max_bytes: int = 1 * 1024**3  # 1 GB
+    max_msg_size: int = 1 * 1024**2  # 1 MB per message
     num_replicas: int = 1
 
 

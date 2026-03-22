@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
@@ -36,7 +36,7 @@ class SandboxPolicy:
 POLICY_STRICT = SandboxPolicy(
     fuel=1_000_000,
     timeout_epochs=2,
-    max_memory_pages=64,   # 4 MiB
+    max_memory_pages=64,  # 4 MiB
 )
 
 #: Default limits for general-purpose tools.

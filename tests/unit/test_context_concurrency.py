@@ -22,7 +22,6 @@ from orchestra.core.graph import WorkflowGraph
 from orchestra.core.state import WorkflowState, merge_list, sum_numbers
 from orchestra.core.types import END
 
-
 # ---------------------------------------------------------------------------
 # Unit tests for ExecutionContext.mutate()
 # ---------------------------------------------------------------------------
@@ -147,9 +146,7 @@ class TestContextConcurrencyRace:
             async with ctx.mutate():
                 ctx.state = {"owner": i, "value": i * 2}
                 # Read back inside the same lock — must still be our write
-                consistent = (
-                    ctx.state["owner"] == i and ctx.state["value"] == i * 2
-                )
+                consistent = ctx.state["owner"] == i and ctx.state["value"] == i * 2
             results.append(consistent)
 
         await asyncio.gather(*[write_and_verify(i) for i in range(50)])
@@ -228,6 +225,7 @@ class TestParallelEdgeContextSafety:
         g.add_edge("join", END)
 
         from orchestra.core.runner import run
+
         result_obj = await run(g, input={})
 
         final = result_obj.state
@@ -278,7 +276,7 @@ class TestParallelEdgeContextSafety:
             lengths.append(len(res.node_execution_order))
 
         # Every run: source + join = 2 loop-level nodes
-        assert all(l == 2 for l in lengths), (
+        assert all(n == 2 for n in lengths), (
             f"Inconsistent node_execution_order lengths across runs: {lengths}"
         )
 
@@ -294,7 +292,7 @@ class TestParallelEdgeContextSafety:
         All workers must observe the same complete dict — no torn reads.
         """
         # Track what each worker sees
-        observed_states: list[dict] = []
+        _observed_states: list[dict] = []
 
         async def source(state: dict) -> dict:
             return {"marker": "set_by_source"}
@@ -324,6 +322,7 @@ class TestParallelEdgeContextSafety:
         g.add_edge("join", END)
 
         from orchestra.core.runner import run
+
         result_obj = await run(g, input={})
 
         final = result_obj.state

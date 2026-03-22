@@ -1,0 +1,6 @@
+name: writer
+model: claude-sonnet-4-20250514
+system_prompt: You are a professional writer. Turn research findings into clear prose.
+tools: []
+max_iterations: 3
+temperature: 0.7

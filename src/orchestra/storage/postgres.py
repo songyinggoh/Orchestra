@@ -18,17 +18,17 @@ Usage:
     # Subscribe to live events:
     await store.subscribe_events(run_id, callback)
 """
+
 from __future__ import annotations
 
 import json
 import os
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, AsyncGenerator
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
 
 from orchestra.storage.events import (
-    CheckpointCreated,
     EventType,
     WorkflowEvent,
 )
@@ -164,7 +164,7 @@ class PostgresEventStore:
             await self._pool.close()
             self._pool = None
 
-    async def __aenter__(self) -> "PostgresEventStore":
+    async def __aenter__(self) -> PostgresEventStore:
         await self.initialize()
         return self
 
@@ -185,9 +185,7 @@ class PostgresEventStore:
         return self._pool
 
     @asynccontextmanager
-    async def _locked_transaction(
-        self, run_id: str
-    ) -> AsyncGenerator[asyncpg.Connection, None]:
+    async def _locked_transaction(self, run_id: str) -> AsyncGenerator[asyncpg.Connection, None]:
         """Acquire an advisory lock for a workflow run within a transaction.
 
         Uses pg_advisory_xact_lock(hashtext(run_id)) so the lock is
@@ -196,12 +194,9 @@ class PostgresEventStore:
         """
         pool = self._require_pool()
         lock_id = hash(run_id) & 0x7FFFFFFF  # positive int required by pg
-        async with pool.acquire() as conn:
-            async with conn.transaction():
-                await conn.execute(
-                    "SELECT pg_advisory_xact_lock($1)", lock_id
-                )
-                yield conn
+        async with pool.acquire() as conn, conn.transaction():
+            await conn.execute("SELECT pg_advisory_xact_lock($1)", lock_id)
+            yield conn
 
     async def _ensure_run_exists(
         self,
@@ -211,7 +206,7 @@ class PostgresEventStore:
         entry_point: str = "",
     ) -> None:
         """Insert a run row if it does not already exist (upsert-ignore)."""
-        started_at = datetime.now(timezone.utc)
+        started_at = datetime.now(UTC)
         await conn.execute(
             """
             INSERT INTO workflow_runs
@@ -260,9 +255,7 @@ class PostgresEventStore:
             notify_payload = json.dumps(
                 {"run_id": event.run_id, "event_type": event.event_type.value}
             )
-            await conn.execute(
-                "SELECT pg_notify('workflow_events', $1)", notify_payload
-            )
+            await conn.execute("SELECT pg_notify('workflow_events', $1)", notify_payload)
 
     async def get_events(
         self,
@@ -286,9 +279,7 @@ class PostgresEventStore:
         if event_types:
             type_values = [et.value for et in event_types]
             # asyncpg uses $N placeholders; build dynamic IN list
-            placeholders = ", ".join(
-                f"${i + 3}" for i in range(len(type_values))
-            )
+            placeholders = ", ".join(f"${i + 3}" for i in range(len(type_values)))
             query = f"""
                 SELECT data FROM workflow_events
                 WHERE run_id = $1
@@ -320,6 +311,7 @@ class PostgresEventStore:
     async def get_latest_checkpoint(self, run_id: str) -> Checkpoint | None:
         """Return the most recent checkpoint for a run, or None."""
         from orchestra.storage.checkpoint import Checkpoint
+
         pool = self._require_pool()
         row = await pool.fetchrow(
             """
@@ -347,13 +339,16 @@ class PostgresEventStore:
             sequence_number=row["sequence_at"],
             state=state if isinstance(state, dict) else json.loads(state),
             loop_counters=ctx.get("loop_counters", {}) if isinstance(ctx, dict) else {},
-            node_execution_order=ctx.get("node_execution_order", []) if isinstance(ctx, dict) else [],
+            node_execution_order=ctx.get("node_execution_order", [])
+            if isinstance(ctx, dict)
+            else [],
             timestamp=row["created_at"],
         )
 
     async def get_checkpoint(self, checkpoint_id: str) -> Checkpoint | None:
         """Retrieve a specific checkpoint by its ID."""
         from orchestra.storage.checkpoint import Checkpoint
+
         pool = self._require_pool()
         row = await pool.fetchrow(
             """
@@ -378,17 +373,21 @@ class PostgresEventStore:
             sequence_number=row["sequence_at"],
             state=state if isinstance(state, dict) else json.loads(state),
             loop_counters=ctx.get("loop_counters", {}) if isinstance(ctx, dict) else {},
-            node_execution_order=ctx.get("node_execution_order", []) if isinstance(ctx, dict) else [],
+            node_execution_order=ctx.get("node_execution_order", [])
+            if isinstance(ctx, dict)
+            else [],
             timestamp=row["created_at"],
         )
 
     async def save_checkpoint(self, checkpoint: Checkpoint) -> None:
         """Persist a Checkpoint object to the store."""
         pool = self._require_pool()
-        ctx_json = json.dumps({
-            "loop_counters": checkpoint.loop_counters,
-            "node_execution_order": checkpoint.node_execution_order,
-        })
+        ctx_json = json.dumps(
+            {
+                "loop_counters": checkpoint.loop_counters,
+                "node_execution_order": checkpoint.node_execution_order,
+            }
+        )
         await pool.execute(
             """
             INSERT INTO workflow_checkpoints
@@ -410,9 +409,7 @@ class PostgresEventStore:
             checkpoint.timestamp,
         )
 
-    async def list_runs(
-        self, *, limit: int = 50, status: str | None = None
-    ) -> list[RunSummary]:
+    async def list_runs(self, *, limit: int = 50, status: str | None = None) -> list[RunSummary]:
         """List workflow runs with optional status filter.
 
         Returns RunSummary objects ordered by started_at descending.
@@ -477,7 +474,7 @@ class PostgresEventStore:
     ) -> None:
         """Insert a new run record with status 'running'."""
         pool = self._require_pool()
-        started_at = datetime.now(timezone.utc)
+        started_at = datetime.now(UTC)
         await pool.execute(
             """
             INSERT INTO workflow_runs
@@ -537,6 +534,7 @@ class PostgresEventStore:
         pool = self._require_pool()
         conn = await pool.acquire()
         try:
+
             async def _on_notification(
                 connection: asyncpg.Connection,
                 pid: int,
@@ -569,6 +567,7 @@ class PostgresEventStore:
             await conn.add_listener("workflow_events", _on_notification)  # type: ignore[arg-type]
             # Keep the connection open until cancelled
             import asyncio
+
             while True:
                 await asyncio.sleep(1)
         finally:

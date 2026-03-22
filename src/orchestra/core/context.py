@@ -8,9 +8,10 @@ from __future__ import annotations
 
 import asyncio
 import uuid
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
-from typing import Any, AsyncIterator
+from typing import Any
 
 
 @dataclass
@@ -81,13 +82,13 @@ class ExecutionContext:
     tenant_id: str | None = None
 
     # Wave 2: Agent Identity (Track B)
-    identity: Any = None            # AgentIdentity instance
-    ucan_token: str | None = None   # Current UCAN JWT string
+    identity: Any = None  # AgentIdentity instance
+    ucan_token: str | None = None  # Current UCAN JWT string
     delegation_context: Any = None  # DelegationContext instance
 
     # Wave 3: Memory & Security
-    memory_manager: Any = None      # MemoryManager or TieredMemoryManager
-    restricted_mode: bool = False   # Set by Attenuator on injection detection
+    memory_manager: Any = None  # MemoryManager or TieredMemoryManager
+    restricted_mode: bool = False  # Set by Attenuator on injection detection
 
     # Time-travel / Replay data
     replay_events: list[Any] = field(default_factory=list)

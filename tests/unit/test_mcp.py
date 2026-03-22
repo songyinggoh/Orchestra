@@ -10,10 +10,7 @@ transport context managers so no real subprocess or network I/O occurs.
 
 from __future__ import annotations
 
-import asyncio
 import json
-import os
-import tempfile
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -22,7 +19,6 @@ import pytest
 from orchestra.core.errors import MCPTimeoutError, ToolNotFoundError
 from orchestra.core.protocols import Tool
 from orchestra.tools.mcp import MCPClient, MCPToolAdapter, load_mcp_config
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -38,10 +34,14 @@ def _make_tool_schema(
     schema = MagicMock()
     schema.name = name
     schema.description = description
-    schema.inputSchema = input_schema if input_schema is not None else {
-        "type": "object",
-        "properties": {},
-    }
+    schema.inputSchema = (
+        input_schema
+        if input_schema is not None
+        else {
+            "type": "object",
+            "properties": {},
+        }
+    )
     return schema
 
 
@@ -108,6 +108,7 @@ class TestMCPToolAdapter:
 
         class _Unconvertible:
             """An object that is not a dict and raises on dict() conversion."""
+
             def __iter__(self):
                 raise TypeError("not iterable")
 
@@ -178,7 +179,7 @@ class TestMCPToolAdapterTimeout:
         """asyncio.TimeoutError from session.call_tool is re-raised as MCPTimeoutError."""
         adapter, session = _make_adapter(name="slow_tool", timeout=1.0)
         # Make call_tool raise asyncio.TimeoutError when awaited
-        session.call_tool = AsyncMock(side_effect=asyncio.TimeoutError())
+        session.call_tool = AsyncMock(side_effect=TimeoutError())
 
         with pytest.raises(MCPTimeoutError, match="slow_tool"):
             await adapter.execute({})

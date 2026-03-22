@@ -7,21 +7,21 @@ from orchestra.identity.agent_identity import (
     RevocationList,
     Signer,
 )
-from orchestra.identity.types import DelegationContext, UCANCapability, UCANToken, SecretProvider
-from orchestra.identity.discovery import SignedDiscoveryProvider
 from orchestra.identity.did_web import DidWebManager
+from orchestra.identity.discovery import SignedDiscoveryProvider
+from orchestra.identity.types import DelegationContext, SecretProvider, UCANCapability, UCANToken
 
 __all__ = [
     "AgentCard",
     "AgentIdentity",
     "AgentIdentityValidator",
+    "DelegationContext",
+    "DidWebManager",
     "Ed25519Signer",
     "RevocationList",
-    "Signer",
-    "DelegationContext",
-    "UCANCapability",
-    "UCANToken",
     "SecretProvider",
     "SignedDiscoveryProvider",
-    "DidWebManager",
+    "Signer",
+    "UCANCapability",
+    "UCANToken",
 ]

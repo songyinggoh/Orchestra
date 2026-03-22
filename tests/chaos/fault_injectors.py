@@ -3,6 +3,7 @@
 FaultInjector wraps any LLM provider with configurable failure rates
 to test graceful degradation under adverse conditions.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -54,7 +55,7 @@ class FaultInjector:
         # Timeout fault
         if roll < self.timeout_rate:
             self.fault_count += 1
-            raise asyncio.TimeoutError("Injected timeout fault")
+            raise TimeoutError("Injected timeout fault")
 
         roll = random.random()
 

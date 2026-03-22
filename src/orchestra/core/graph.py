@@ -98,7 +98,6 @@ def _wrap_as_node(
     )
 
 
-
 class WorkflowGraph:
     """Builder for workflow graphs.
 
@@ -106,9 +105,7 @@ class WorkflowGraph:
     compiles into an executable CompiledGraph.
     """
 
-    def __init__(
-        self, state_schema: type[Any] | None = None, name: str = ""
-    ) -> None:
+    def __init__(self, state_schema: type[Any] | None = None, name: str = "") -> None:
         self._state_schema = state_schema
         self._name = name
         self._nodes: dict[str, GraphNode] = {}
@@ -132,13 +129,11 @@ class WorkflowGraph:
         """Add a node to the graph."""
         if node_id in (END, START):
             raise GraphCompileError(
-                f"'{node_id}' is a reserved node ID.\n"
-                f"  Fix: Choose a different name for your node."
+                f"'{node_id}' is a reserved node ID.\n  Fix: Choose a different name for your node."
             )
         if node_id in self._nodes:
             raise GraphCompileError(
-                f"Node '{node_id}' already exists.\n"
-                f"  Fix: Use a unique name for each node."
+                f"Node '{node_id}' already exists.\n  Fix: Use a unique name for each node."
             )
 
         wrapped = _wrap_as_node(
@@ -177,9 +172,7 @@ class WorkflowGraph:
         path_map: dict[str, Any] | None = None,
     ) -> WorkflowGraph:
         """Add a conditional edge: source -> condition(state) -> target."""
-        self._edges.append(
-            ConditionalEdge(source=source, condition=condition, path_map=path_map)
-        )
+        self._edges.append(ConditionalEdge(source=source, condition=condition, path_map=path_map))
         return self
 
     def add_parallel(
@@ -189,9 +182,7 @@ class WorkflowGraph:
         join_node: Any = None,
     ) -> WorkflowGraph:
         """Add parallel fan-out: source -> [targets] concurrently."""
-        self._edges.append(
-            ParallelEdge(source=source, targets=targets, join_node=join_node)
-        )
+        self._edges.append(ParallelEdge(source=source, targets=targets, join_node=join_node))
         return self
 
     def add_handoff(
@@ -201,7 +192,7 @@ class WorkflowGraph:
         *,
         condition: EdgeCondition | None = None,
         distill: bool = True,
-    ) -> "WorkflowGraph":
+    ) -> WorkflowGraph:
         """Add a handoff edge between agents.
 
         Handoffs are Swarm-style agent-to-agent transfers with optional
@@ -379,8 +370,7 @@ class WorkflowGraph:
         """
         if self._last_node is None:
             raise GraphCompileError(
-                "Cannot branch without a preceding node.\n"
-                "  Fix: Call .then() before .branch()."
+                "Cannot branch without a preceding node.\n  Fix: Call .then() before .branch()."
             )
 
         resolved_map: dict[str, Any] = {}
@@ -516,8 +506,7 @@ class WorkflowGraph:
         """Validate graph structure."""
         if not self._nodes:
             raise GraphCompileError(
-                "Graph has no nodes.\n"
-                "  Fix: Add at least one node with .add_node() or .then()."
+                "Graph has no nodes.\n  Fix: Add at least one node with .add_node() or .then()."
             )
 
         if not self._entry_point:

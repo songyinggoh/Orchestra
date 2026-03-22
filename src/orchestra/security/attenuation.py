@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Sequence
+from collections.abc import Sequence
 
 import structlog
 
@@ -25,15 +25,12 @@ class CapabilityAttenuator:
 
     def process_risk_score(self, context: ExecutionContext, score: float) -> None:
         """Update context state based on a risk score."""
-        if score >= self.risk_threshold:
-            if not context.restricted_mode:
-                logger.warning("entering_restricted_mode", score=score, run_id=context.run_id)
-                context.restricted_mode = True
+        if score >= self.risk_threshold and not context.restricted_mode:
+            logger.warning("entering_restricted_mode", score=score, run_id=context.run_id)
+            context.restricted_mode = True
 
     def get_allowed_capabilities(
-        self, 
-        context: ExecutionContext, 
-        base_capabilities: Sequence[UCANCapability]
+        self, context: ExecutionContext, base_capabilities: Sequence[UCANCapability]
     ) -> list[UCANCapability]:
         """Filter/narrow capabilities if in restricted mode."""
         if not context.restricted_mode:
@@ -47,9 +44,9 @@ class CapabilityAttenuator:
                 continue
             if "delete" in cap.ability or "write" in cap.ability:
                 continue
-            
+
             allowed.append(cap)
-            
+
         logger.debug("capabilities_attenuated", count=len(allowed))
         return allowed
 
@@ -59,14 +56,14 @@ class CapabilityAttenuator:
         ucan_manager: UCANManager,
         parent_token: str,
         audience_did: str,
-        requested_caps: Sequence[UCANCapability]
+        requested_caps: Sequence[UCANCapability],
     ) -> str:
         """Generate an attenuated UCAN token for a sub-agent."""
         final_caps = self.get_allowed_capabilities(context, requested_caps)
-        
+
         return ucan_manager.delegate(
             parent_token=parent_token,
             audience_did=audience_did,
             capabilities=final_caps,
-            ttl_seconds=300 # Shorter TTL for attenuated tokens
+            ttl_seconds=300,  # Shorter TTL for attenuated tokens
         )

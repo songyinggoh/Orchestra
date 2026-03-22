@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import datetime
 from dataclasses import asdict, is_dataclass
-from typing import Any, Type
+from typing import Any
 
 import msgpack
 import structlog
@@ -22,7 +22,7 @@ logger = structlog.get_logger(__name__)
 # This replaces insecure dynamic imports (importlib) with a static allowlist.
 # Only types listed here can be reconstructed from serialized data.
 # To register a new type: add an entry below with key "{module}.{classname}".
-SERIALIZATION_REGISTRY: dict[str, Type[Any]] = {
+SERIALIZATION_REGISTRY: dict[str, type[Any]] = {
     "orchestra.core.types.AgentResult": types.AgentResult,
     "orchestra.core.types.LLMResponse": types.LLMResponse,
     "orchestra.core.types.Message": types.Message,

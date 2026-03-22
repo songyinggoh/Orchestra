@@ -196,6 +196,7 @@ class TestAsyncCircuitBreakerContextManager:
 
         # Simulate time passing
         import time
+
         breaker._last_failure_time = time.monotonic() - 6.0
 
         # Should be HALF_OPEN now, one request allowed

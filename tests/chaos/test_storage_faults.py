@@ -3,16 +3,15 @@
 Tests that the workflow engine operates correctly when storage is
 unavailable or when persist=False is used.
 """
+
 from __future__ import annotations
 
-import asyncio
 from typing import Any
 
 import pytest
 
 from orchestra.core.graph import WorkflowGraph
 from orchestra.core.runner import run
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -21,7 +20,6 @@ from orchestra.core.runner import run
 
 def _make_simple_graph(name: str = "storage-test") -> Any:
     """Build a minimal one-node graph that returns a fixed output."""
-    from orchestra.core.graph import WorkflowGraph
 
     async def echo(state: dict[str, Any]) -> dict[str, Any]:
         return {"output": state.get("input", "default")}

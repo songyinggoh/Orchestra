@@ -100,18 +100,12 @@ class HttpProvider:
         timeout: float = 120.0,
     ) -> None:
         self._base_url = (
-            base_url
-            or os.environ.get("ORCHESTRA_BASE_URL", "https://api.openai.com/v1")
+            base_url or os.environ.get("ORCHESTRA_BASE_URL", "https://api.openai.com/v1")
         ).rstrip("/")
         self._api_key = (
-            api_key
-            or os.environ.get("ORCHESTRA_API_KEY")
-            or os.environ.get("OPENAI_API_KEY", "")
+            api_key or os.environ.get("ORCHESTRA_API_KEY") or os.environ.get("OPENAI_API_KEY", "")
         )
-        self._default_model = (
-            default_model
-            or os.environ.get("ORCHESTRA_MODEL", "gpt-4o-mini")
-        )
+        self._default_model = default_model or os.environ.get("ORCHESTRA_MODEL", "gpt-4o-mini")
         self._max_retries = max_retries
         self._client = httpx.AsyncClient(
             base_url=self._base_url,
@@ -197,9 +191,7 @@ class HttpProvider:
         if max_tokens:
             body["max_tokens"] = max_tokens
 
-        async with self._client.stream(
-            "POST", "/chat/completions", json=body
-        ) as response:
+        async with self._client.stream("POST", "/chat/completions", json=body) as response:
             if response.status_code != 200:
                 text = ""
                 async for chunk in response.aiter_text():
@@ -286,10 +278,7 @@ class HttpProvider:
                 "  Fix: Check your API key or set OPENAI_API_KEY env var."
             )
         elif status_code == 429:
-            raise RateLimitError(
-                f"Rate limited (429).\n"
-                f"  Response: {text[:200]}"
-            )
+            raise RateLimitError(f"Rate limited (429).\n  Response: {text[:200]}")
         elif status_code == 400 and "context_length" in text.lower():
             raise ContextWindowError(
                 f"Context window exceeded.\n"
@@ -298,14 +287,10 @@ class HttpProvider:
             )
         elif status_code >= 500:
             raise ProviderUnavailableError(
-                f"Provider error ({status_code}).\n"
-                f"  Response: {text[:200]}"
+                f"Provider error ({status_code}).\n  Response: {text[:200]}"
             )
         else:
-            raise ProviderError(
-                f"HTTP {status_code}.\n"
-                f"  Response: {text[:200]}"
-            )
+            raise ProviderError(f"HTTP {status_code}.\n  Response: {text[:200]}")
 
     def _parse_response(self, data: dict[str, Any], model: str) -> LLMResponse:
         """Parse OpenAI-format response into LLMResponse."""
@@ -348,9 +333,7 @@ class HttpProvider:
             input_tok = raw_usage.get("prompt_tokens", 0)
             output_tok = raw_usage.get("completion_tokens", 0)
             cost_info = _MODEL_COSTS.get(model, (0.0, 0.0))
-            estimated_cost = (input_tok / 1000 * cost_info[0]) + (
-                output_tok / 1000 * cost_info[1]
-            )
+            estimated_cost = (input_tok / 1000 * cost_info[0]) + (output_tok / 1000 * cost_info[1])
             usage = TokenUsage(
                 input_tokens=input_tok,
                 output_tokens=output_tok,

@@ -63,6 +63,7 @@ class TestTypes:
 
     def test_end_sentinel_singleton(self):
         from orchestra.core.types import _EndSentinel
+
         assert END is _EndSentinel()
         assert _EndSentinel() == END
         assert hash(END) == hash(_EndSentinel())
@@ -101,8 +102,17 @@ class TestTypes:
 
 class TestState:
     def test_all_nine_reducers_exist(self):
-        fns = [merge_list, merge_dict, sum_numbers, last_write_wins,
-               merge_set, concat_str, keep_first, max_value, min_value]
+        fns = [
+            merge_list,
+            merge_dict,
+            sum_numbers,
+            last_write_wins,
+            merge_set,
+            concat_str,
+            keep_first,
+            max_value,
+            min_value,
+        ]
         assert len(fns) == 9
         for fn in fns:
             assert callable(fn)
@@ -479,8 +489,10 @@ class TestFluentAPI:
             WorkflowGraph(state_schema=S)
             .then(incrementer, name="start")
             .loop(
-                incrementer, name="looper",
-                condition=lambda s: s.get("count", 0) < 3, max_iterations=10,
+                incrementer,
+                name="looper",
+                condition=lambda s: s.get("count", 0) < 3,
+                max_iterations=10,
             )
         )
         result = await g.compile().run({})
@@ -678,6 +690,7 @@ class TestAgentIntegration:
     @pytest.mark.asyncio
     async def test_max_iterations_attaches_partial_output(self):
         """MaxIterationsError.partial_output must contain accumulated tool records."""
+
         @tool
         async def noop_tool(x: str) -> str:
             """Do nothing."""
@@ -708,6 +721,7 @@ class TestAgentIntegration:
     async def test_max_iterations_emit_partial_returns_result(self):
         """emit_partial_on_max_iterations=True must return a partial AgentResult
         instead of raising."""
+
         @tool
         async def noop_tool(x: str) -> str:
             """Do nothing."""
@@ -752,13 +766,15 @@ class TestAgentIntegration:
             return str(_safe_eval(tree.body))
 
         # First response has a tool call, second is final
-        llm = ScriptedLLM([
-            LLMResponse(
-                content="Let me calculate that.",
-                tool_calls=[ToolCall(name="calculator", arguments={"expression": "2+2"})],
-            ),
-            LLMResponse(content="The answer is 4."),
-        ])
+        llm = ScriptedLLM(
+            [
+                LLMResponse(
+                    content="Let me calculate that.",
+                    tool_calls=[ToolCall(name="calculator", arguments={"expression": "2+2"})],
+                ),
+                LLMResponse(content="The answer is 4."),
+            ]
+        )
 
         agent_inst = BaseAgent(name="math", tools=[calculator])
         ctx = ExecutionContext(provider=llm)
@@ -809,14 +825,13 @@ class TestSubgraphBuilderSecurity:
         """The allowlist stored on SubgraphBuilder._allowed_prefixes must be a
         tuple (immutable). Any attempt to append or assign into it must raise
         TypeError (tuple does not support mutation) or AttributeError."""
-        from orchestra.core.dynamic import SubgraphBuilder, DEFAULT_ALLOWED_PREFIXES
+        from orchestra.core.dynamic import DEFAULT_ALLOWED_PREFIXES, SubgraphBuilder
 
         builder = SubgraphBuilder()
 
         # Verify it is stored as a tuple, not a mutable list or set.
         assert isinstance(builder._allowed_prefixes, tuple), (
-            "_allowed_prefixes must be a tuple, not "
-            f"{type(builder._allowed_prefixes).__name__}"
+            f"_allowed_prefixes must be a tuple, not {type(builder._allowed_prefixes).__name__}"
         )
 
         # Attempting to call .append() must raise AttributeError (tuples have no append).
@@ -853,7 +868,7 @@ class TestCheckpointResumeExceptions:
     subclass not in the narrow list above).
     """
 
-    def _make_compiled_graph(self) -> "object":
+    def _make_compiled_graph(self) -> object:
         """Return a minimal compiled graph instance for calling resume()."""
         from orchestra.core.graph import WorkflowGraph
         from orchestra.core.types import END
@@ -873,22 +888,24 @@ class TestCheckpointResumeExceptions:
         from orchestra.core.errors import AgentError
 
         compiled = self._make_compiled_graph()
-        with patch(
-            "orchestra.storage.sqlite.SQLiteEventStore",
-            side_effect=ImportError("aiosqlite not installed"),
-        ):
-            with patch(
+        with (
+            patch(
+                "orchestra.storage.sqlite.SQLiteEventStore",
+                side_effect=ImportError("aiosqlite not installed"),
+            ),
+            patch(
                 "orchestra.core.compiled.SQLiteEventStore",
                 side_effect=ImportError("aiosqlite not installed"),
                 create=True,
-            ):
-                # The import inside resume() itself — patch the module-level import
-                with patch.dict(
-                    "sys.modules",
-                    {"orchestra.storage.sqlite": None},
-                ):
-                    with pytest.raises(AgentError, match="Failed to auto-initialize"):
-                        await compiled.resume("nonexistent-run-id")
+            ),
+            # The import inside resume() itself — patch the module-level import
+            patch.dict(
+                "sys.modules",
+                {"orchestra.storage.sqlite": None},
+            ),
+            pytest.raises(AgentError, match="Failed to auto-initialize"),
+        ):
+            await compiled.resume("nonexistent-run-id")
 
     @pytest.mark.asyncio
     async def test_os_error_becomes_agent_error(self):
@@ -900,11 +917,14 @@ class TestCheckpointResumeExceptions:
         mock_store = AsyncMock()
         mock_store.initialize = AsyncMock(side_effect=OSError("Permission denied"))
 
-        with patch("orchestra.core.compiled.SQLiteEventStore", return_value=mock_store, create=True):
+        with patch(
+            "orchestra.core.compiled.SQLiteEventStore", return_value=mock_store, create=True
+        ):
             # Force the branch where event_store is None by not passing event_store;
             # we also need the import inside the function to succeed and return our mock.
             # Patch at the location where the name is looked up inside the function body.
             import orchestra.storage.sqlite as _sqlite_mod
+
             original_cls = getattr(_sqlite_mod, "SQLiteEventStore", None)
             _sqlite_mod.SQLiteEventStore = lambda *a, **kw: mock_store  # type: ignore[attr-defined]
             try:
@@ -922,11 +942,10 @@ class TestCheckpointResumeExceptions:
         compiled = self._make_compiled_graph()
 
         mock_store = AsyncMock()
-        mock_store.initialize = AsyncMock(
-            side_effect=sqlite3.OperationalError("disk I/O error")
-        )
+        mock_store.initialize = AsyncMock(side_effect=sqlite3.OperationalError("disk I/O error"))
 
         import orchestra.storage.sqlite as _sqlite_mod
+
         original_cls = getattr(_sqlite_mod, "SQLiteEventStore", None)
         _sqlite_mod.SQLiteEventStore = lambda *a, **kw: mock_store  # type: ignore[attr-defined]
         try:
@@ -942,11 +961,10 @@ class TestCheckpointResumeExceptions:
         compiled = self._make_compiled_graph()
 
         mock_store = AsyncMock()
-        mock_store.initialize = AsyncMock(
-            side_effect=RuntimeError("unexpected internal failure")
-        )
+        mock_store.initialize = AsyncMock(side_effect=RuntimeError("unexpected internal failure"))
 
         import orchestra.storage.sqlite as _sqlite_mod
+
         original_cls = getattr(_sqlite_mod, "SQLiteEventStore", None)
         _sqlite_mod.SQLiteEventStore = lambda *a, **kw: mock_store  # type: ignore[attr-defined]
         try:

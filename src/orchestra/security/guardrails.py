@@ -11,12 +11,12 @@ import asyncio
 import re
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Optional, Protocol, runtime_checkable
+from typing import Any, ClassVar, Protocol, runtime_checkable
 
 import structlog
 from pydantic import BaseModel, Field, ValidationError
 
-from orchestra.core.types import Message, MessageRole
+from orchestra.core.types import Message
 
 logger = structlog.get_logger(__name__)
 
@@ -29,10 +29,10 @@ logger = structlog.get_logger(__name__)
 class OnFail(str, Enum):
     """Actions to take when a guardrail validation fails."""
 
-    BLOCK = "block"          # Stop processing, return violation
-    FIX = "fix"              # Attempt to fix the content and continue
-    LOG = "log"              # Log the violation but continue
-    RETRY = "retry"          # Ask the LLM to retry (used at GuardedAgent level)
+    BLOCK = "block"  # Stop processing, return violation
+    FIX = "fix"  # Attempt to fix the content and continue
+    LOG = "log"  # Log the violation but continue
+    RETRY = "retry"  # Ask the LLM to retry (used at GuardedAgent level)
     EXCEPTION = "exception"  # Raise an exception
 
 
@@ -50,7 +50,7 @@ class GuardrailResult:
 
     passed: bool
     output: Any = None
-    violation: Optional[str] = None
+    violation: str | None = None
     violations: list[GuardrailViolation] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
 
@@ -133,11 +133,12 @@ class PromptShield:
             try:
                 from optimum.onnxruntime import ORTModelForSequenceClassification
                 from transformers import AutoTokenizer
-                self._tokenizer = await asyncio.to_thread(AutoTokenizer.from_pretrained, self.model_id)
+
+                self._tokenizer = await asyncio.to_thread(
+                    AutoTokenizer.from_pretrained, self.model_id
+                )
                 self._model = await asyncio.to_thread(
-                    ORTModelForSequenceClassification.from_pretrained, 
-                    self.model_id, 
-                    export=True
+                    ORTModelForSequenceClassification.from_pretrained, self.model_id, export=True
                 )
             except ImportError:
                 self._model = False
@@ -148,28 +149,35 @@ class PromptShield:
             if "ignore all previous instructions" in text.lower():
                 violation = "Mock PromptShield: Potential injection detected"
                 return GuardrailResult(
-                    passed=False, output=text, violation=violation,
+                    passed=False,
+                    output=text,
+                    violation=violation,
                     violations=[GuardrailViolation(self.name, violation)],
-                    metadata={"score": 1.0}
+                    metadata={"score": 1.0},
                 )
             return GuardrailResult(passed=True, output=text)
 
         import torch
+
         inputs = self._tokenizer(text, return_tensors="pt")
         outputs = await asyncio.to_thread(self._model, **inputs)
         probs = torch.softmax(outputs.logits, dim=-1)
         score = probs[0][1].item()
-        
+
         if score >= self.threshold:
             violation = f"Injection detected (score: {score:.4f})"
             return GuardrailResult(
-                passed=False, output=text, violation=violation,
+                passed=False,
+                output=text,
+                violation=violation,
                 violations=[GuardrailViolation(self.name, violation)],
-                metadata={"score": score}
+                metadata={"score": score},
             )
         return GuardrailResult(passed=True, output=text, metadata={"score": score})
 
-    async def validate_input(self, *, messages: list[Message], **kwargs: Any) -> list[GuardrailViolation]:
+    async def validate_input(
+        self, *, messages: list[Message], **kwargs: Any
+    ) -> list[GuardrailViolation]:
         violations = []
         for msg in messages:
             res = await self.validate(msg.content)
@@ -210,13 +218,19 @@ class ContentFilter:
                 violations.append(GuardrailViolation(self.name, f"Banned word found: {word}"))
         for pattern in self.patterns:
             if pattern.search(text):
-                violations.append(GuardrailViolation(self.name, f"Banned pattern found: {pattern.pattern}"))
-        
+                violations.append(
+                    GuardrailViolation(self.name, f"Banned pattern found: {pattern.pattern}")
+                )
+
         if violations:
-            return GuardrailResult(passed=False, output=text, violation=violations[0].message, violations=violations)
+            return GuardrailResult(
+                passed=False, output=text, violation=violations[0].message, violations=violations
+            )
         return GuardrailResult(passed=True, output=text)
 
-    async def validate_input(self, *, messages: list[Message], **kwargs: Any) -> list[GuardrailViolation]:
+    async def validate_input(
+        self, *, messages: list[Message], **kwargs: Any
+    ) -> list[GuardrailViolation]:
         violations = []
         for msg in messages:
             res = await self.validate(msg.content)
@@ -231,7 +245,7 @@ class ContentFilter:
 class PIIDetector:
     """Basic PII detection using regex patterns."""
 
-    _PATTERNS = {
+    _PATTERNS: ClassVar[dict[str, str]] = {
         "email": r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+",
         "phone": r"\b(?:\+?(\d{1,3}))?[-. (]*(\d{3})[-. )]*(\d{3})[-. ]*(\d{4})\b",
         "ssn": r"\b\d{3}-\d{2}-\d{4}\b",
@@ -243,10 +257,12 @@ class PIIDetector:
         self._on_fail = on_fail
 
     @property
-    def name(self) -> str: return "pii_detector"
+    def name(self) -> str:
+        return "pii_detector"
 
     @property
-    def on_fail(self) -> OnFail: return self._on_fail
+    def on_fail(self) -> OnFail:
+        return self._on_fail
 
     async def validate(self, text: str, **kwargs: Any) -> GuardrailResult:
         violations = []
@@ -254,10 +270,14 @@ class PIIDetector:
             if regex.search(text):
                 violations.append(GuardrailViolation(self.name, f"PII detected: {pii_type}"))
         if violations:
-            return GuardrailResult(passed=False, output=text, violation=violations[0].message, violations=violations)
+            return GuardrailResult(
+                passed=False, output=text, violation=violations[0].message, violations=violations
+            )
         return GuardrailResult(passed=True, output=text)
 
-    async def validate_input(self, *, messages: list[Message], **kwargs: Any) -> list[GuardrailViolation]:
+    async def validate_input(
+        self, *, messages: list[Message], **kwargs: Any
+    ) -> list[GuardrailViolation]:
         violations = []
         for msg in messages:
             res = await self.validate(msg.content)
@@ -277,22 +297,31 @@ class SchemaValidator:
         self._on_fail = on_fail
 
     @property
-    def name(self) -> str: return f"schema_validator[{self.schema.__name__}]"
+    def name(self) -> str:
+        return f"schema_validator[{self.schema.__name__}]"
 
     @property
-    def on_fail(self) -> OnFail: return self._on_fail
+    def on_fail(self) -> OnFail:
+        return self._on_fail
 
     async def validate(self, text: str, **kwargs: Any) -> GuardrailResult:
         import json
+
         try:
             data = json.loads(text)
             self.schema.model_validate(data)
             return GuardrailResult(passed=True, output=text)
         except (json.JSONDecodeError, ValidationError) as e:
-            violation = f"Output failed schema validation: {str(e)}"
-            return GuardrailResult(passed=False, output=text, violation=violation, violations=[GuardrailViolation(self.name, violation)])
+            violation = f"Output failed schema validation: {e!s}"
+            return GuardrailResult(
+                passed=False,
+                output=text,
+                violation=violation,
+                violations=[GuardrailViolation(self.name, violation)],
+            )
 
-    async def validate_input(self, **kwargs: Any) -> list[GuardrailViolation]: return []
+    async def validate_input(self, **kwargs: Any) -> list[GuardrailViolation]:
+        return []
 
     async def validate_output(self, *, output_text: str, **kwargs: Any) -> list[GuardrailViolation]:
         res = await self.validate(output_text)
@@ -305,7 +334,7 @@ class GuardrailChain:
     def __init__(self, guardrails: list[Any] | None = None) -> None:
         self._guardrails: list[Any] = list(guardrails or [])
 
-    def add(self, guardrail: Any) -> "GuardrailChain":
+    def add(self, guardrail: Any) -> GuardrailChain:
         self._guardrails.append(guardrail)
         return self
 
@@ -313,7 +342,8 @@ class GuardrailChain:
         return len(self._guardrails)
 
     @property
-    def guardrails(self) -> list[Any]: return list(self._guardrails)
+    def guardrails(self) -> list[Any]:
+        return list(self._guardrails)
 
     async def run(self, text: str, **kwargs: Any) -> GuardrailResult:
         current_text = text
@@ -387,41 +417,60 @@ class GuardedAgent(BaseModel):
             input_text = self._extract_input_text(input)
             input_result = await self.input_guardrails.run(input_text)
             if not input_result.passed:
-                return AgentResult(agent_name=self.name, output=f"Input blocked by guardrail: {input_result.violation}")
+                return AgentResult(
+                    agent_name=self.name,
+                    output=f"Input blocked by guardrail: {input_result.violation}",
+                )
             if input_result.output is not None and isinstance(input, str):
                 input = input_result.output
 
         base = BaseAgent(
-            name=self.name, model=self.model, system_prompt=self.system_prompt,
-            tools=self.tools, acl=self.acl, max_iterations=self.max_iterations,
-            temperature=self.temperature, output_type=self.output_type, provider=self.provider
+            name=self.name,
+            model=self.model,
+            system_prompt=self.system_prompt,
+            tools=self.tools,
+            acl=self.acl,
+            max_iterations=self.max_iterations,
+            temperature=self.temperature,
+            output_type=self.output_type,
+            provider=self.provider,
         )
 
         for attempt in range(1 + self.max_retries):
             result: AgentResult = await base.run(input, context)
-            if self.output_guardrails is None: return result
+            if self.output_guardrails is None:
+                return result
             output_result = await self.output_guardrails.run(result.output)
             if output_result.passed:
                 if output_result.output is not None and output_result.output != result.output:
                     result = AgentResult(
-                        agent_name=result.agent_name, output=output_result.output,
-                        structured_output=result.structured_output, messages=result.messages,
-                        tool_calls_made=result.tool_calls_made, token_usage=result.token_usage
+                        agent_name=result.agent_name,
+                        output=output_result.output,
+                        structured_output=result.structured_output,
+                        messages=result.messages,
+                        tool_calls_made=result.tool_calls_made,
+                        token_usage=result.token_usage,
                     )
                 return result
-            
+
             on_fail = self._get_chain_blocking_action(self.output_guardrails)
-            if on_fail == OnFail.RETRY and attempt < self.max_retries: continue
-            return AgentResult(agent_name=self.name, output=f"Output blocked by guardrail: {output_result.violation}")
+            if on_fail == OnFail.RETRY and attempt < self.max_retries:
+                continue
+            return AgentResult(
+                agent_name=self.name,
+                output=f"Output blocked by guardrail: {output_result.violation}",
+            )
         return result
 
     def _extract_input_text(self, input: str | list[Message]) -> str:
-        if isinstance(input, str): return input
+        if isinstance(input, str):
+            return input
         return " ".join(msg.content for msg in input if msg.content)
 
     @staticmethod
     def _get_chain_blocking_action(chain: GuardrailChain) -> OnFail:
         for g in chain.guardrails:
             action = getattr(g, "on_fail", OnFail.BLOCK)
-            if action != OnFail.LOG: return action
+            if action != OnFail.LOG:
+                return action
         return OnFail.BLOCK

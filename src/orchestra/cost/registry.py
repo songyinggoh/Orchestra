@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
 
 import structlog
 
@@ -40,7 +39,7 @@ class ModelCostRegistry:
     def _load_default_prices() -> dict[str, dict[str, float]]:
         """Load pricing data from the bundled JSON file."""
         try:
-            with open(_PRICES_FILE, "r") as f:
+            with open(_PRICES_FILE) as f:
                 return json.load(f)
         except (FileNotFoundError, json.JSONDecodeError) as e:
             logger.warning("default_prices_load_failed", error=str(e))
@@ -71,9 +70,7 @@ class ModelCostRegistry:
 
         return None
 
-    def calculate_cost(
-        self, model: str, input_tokens: int, output_tokens: int
-    ) -> float:
+    def calculate_cost(self, model: str, input_tokens: int, output_tokens: int) -> float:
         """Calculate cost in USD for a model call.
 
         Args:

@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [master]
   pull_request:
-    branches: [main]
+    branches: [master]
 
 permissions:
   contents: read
@@ -56,7 +56,7 @@ jobs:
       - name: Bandit Scan (SAST)
         run: |
           pip install bandit
-          bandit -r src/ -ll -ii
+          bandit -r src/ -ll -ii -c pyproject.toml
 
       - name: pip-audit Scan (SCA)
         uses: pypa/gh-action-pip-audit@v1.1.0

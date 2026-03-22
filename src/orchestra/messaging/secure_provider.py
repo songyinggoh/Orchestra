@@ -60,8 +60,8 @@ class AgentKeyMaterial:
     kid: str
     keypair: OKPKey
     created_at: float = field(default_factory=time.time)  # wall-clock creation time
-    version: int = 1                                       # incremented on each rotation
-    rotated_at: float | None = None                        # wall-clock time of last rotation
+    version: int = 1  # incremented on each rotation
+    rotated_at: float | None = None  # wall-clock time of last rotation
     _public_jwk: dict = field(default_factory=dict, init=False, repr=False)
 
     def __post_init__(self) -> None:
@@ -154,6 +154,7 @@ class SecureNatsProvider:
             from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
             from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
             from joserfc.jwk import OKPKey
+
             from orchestra.messaging.peer_did import create_peer_did_numalgo_2
         except ImportError as exc:
             raise ImportError(
@@ -198,9 +199,7 @@ class SecureNatsProvider:
         # Build joserfc OKPKey from raw bytes
         x_b64 = base64.urlsafe_b64encode(x_pub_raw).rstrip(b"=").decode()
         d_b64 = base64.urlsafe_b64encode(x_priv_raw).rstrip(b"=").decode()
-        keypair: OKPKey = OKPKey.import_key(
-            {"kty": "OKP", "crv": "X25519", "x": x_b64, "d": d_b64}
-        )
+        keypair: OKPKey = OKPKey.import_key({"kty": "OKP", "crv": "X25519", "x": x_b64, "d": d_b64})
 
         # Ed25519 keypair for signing (required by did:peer:2 spec)
         ed_priv = Ed25519PrivateKey.generate()
@@ -332,6 +331,7 @@ class SecureNatsProvider:
             from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
             from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
             from joserfc.jwk import OKPKey
+
             from orchestra.messaging.peer_did import create_peer_did_numalgo_2
         except ImportError as exc:  # pragma: no cover
             raise ImportError(
@@ -392,6 +392,7 @@ class SecureNatsProvider:
             from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
             from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
             from joserfc.jwk import OKPKey
+
             from orchestra.messaging.peer_did import create_peer_did_numalgo_2
         except ImportError as exc:  # pragma: no cover
             raise ImportError(
@@ -445,6 +446,7 @@ def extract_x25519_key_from_did(did: str) -> tuple[str, OKPKey]:
     try:
         import base58
         from joserfc.jwk import OKPKey
+
         from orchestra.messaging.peer_did import resolve_peer_did
     except ImportError as exc:
         raise ImportError(
@@ -458,9 +460,7 @@ def extract_x25519_key_from_did(did: str) -> tuple[str, OKPKey]:
             kid: str = vm["id"]
             multibase: str = vm.get("publicKeyMultibase", "")
             if not multibase.startswith("z"):
-                raise ValueError(
-                    f"Expected base58btc (z-prefix) publicKeyMultibase in DID {did!r}"
-                )
+                raise ValueError(f"Expected base58btc (z-prefix) publicKeyMultibase in DID {did!r}")
             raw = base58.b58decode(multibase[1:])
             # resolve_peer_did already stripped multicodec prefix for multibase
             x_b64 = base64.urlsafe_b64encode(raw).rstrip(b"=").decode()

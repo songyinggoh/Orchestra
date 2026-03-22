@@ -71,7 +71,7 @@ def distill_context(
     # Zone 2: middleware — everything in between
     middleware = rest[: max(0, len(rest) - keep_last_n_turns)]
 
-    if not middleware:
+    if not middleware or not suffix:
         return prefix + suffix
 
     # Summarize middleware by concatenating content, then word-truncating
@@ -90,7 +90,7 @@ def distill_context(
     # Wrap summary as a single assistant message (same type as input)
     summary_msg = _make_summary_message(messages[0], summary_text)
 
-    return prefix + [summary_msg] + suffix
+    return [*prefix, summary_msg, *suffix]
 
 
 def full_passthrough(messages: list[Any]) -> list[Any]:
@@ -120,7 +120,7 @@ def _get_role(msg: Any) -> str:
 def _get_content(msg: Any) -> str:
     """Extract content from a Message object or dict."""
     if isinstance(msg, dict):
-        return str(msg.get("content", ""))
+        return str(msg.get("content", None))
     return str(getattr(msg, "content", "") or "")
 
 
@@ -131,6 +131,7 @@ def _make_summary_message(template: Any, text: str) -> Any:
     # Try to construct a Message-like object
     try:
         from orchestra.core.types import Message, MessageRole
+
         return Message(role=MessageRole.ASSISTANT, content=text)
     except Exception:
         # Fallback to dict if types unavailable

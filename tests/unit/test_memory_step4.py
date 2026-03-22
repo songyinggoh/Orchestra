@@ -1,13 +1,14 @@
 """Tests for Step 4: multi-tenant agent_id scoping and hybrid search."""
 
+from unittest.mock import AsyncMock, MagicMock
+
 import numpy as np
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
-
 
 # ---------------------------------------------------------------------------
 # #3 — search_memories() agent_id override
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def mock_cold():
@@ -26,6 +27,7 @@ def mock_dedup():
 @pytest.mark.asyncio
 async def test_search_memories_passes_agent_id_to_cold(mock_cold, mock_dedup):
     from orchestra.memory.tiers import TieredMemoryManager
+
     mgr = TieredMemoryManager(cold_backend=mock_cold, deduplicator=mock_dedup)
     await mgr.search_memories("query", agent_id="other-agent")
     mock_cold.search.assert_called_once()
@@ -36,6 +38,7 @@ async def test_search_memories_passes_agent_id_to_cold(mock_cold, mock_dedup):
 @pytest.mark.asyncio
 async def test_search_memories_passes_none_agent_id_by_default(mock_cold, mock_dedup):
     from orchestra.memory.tiers import TieredMemoryManager
+
     mgr = TieredMemoryManager(cold_backend=mock_cold, deduplicator=mock_dedup)
     await mgr.search_memories("query")
     _, kwargs = mock_cold.search.call_args
@@ -45,6 +48,7 @@ async def test_search_memories_passes_none_agent_id_by_default(mock_cold, mock_d
 @pytest.mark.asyncio
 async def test_search_memories_passes_filter_metadata_and_agent_id(mock_cold, mock_dedup):
     from orchestra.memory.tiers import TieredMemoryManager
+
     mgr = TieredMemoryManager(cold_backend=mock_cold, deduplicator=mock_dedup)
     await mgr.search_memories("q", filter_metadata={"tag": "x"}, agent_id="a2")
     _, kwargs = mock_cold.search.call_args
@@ -55,6 +59,7 @@ async def test_search_memories_passes_filter_metadata_and_agent_id(mock_cold, mo
 # ---------------------------------------------------------------------------
 # VectorStore.search() agent_id override
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def mock_pool():
@@ -71,10 +76,11 @@ def mock_pool():
 @pytest.mark.asyncio
 async def test_vector_store_search_uses_override_agent_id(mock_pool):
     from orchestra.memory.vector_store import VectorStore
+
     pool, conn = mock_pool
     vs = VectorStore(pool=pool, agent_id="agent-default")
     await vs.search([0.0] * 4, agent_id="agent-other")
-    sql, *params = conn.fetch.call_args.args
+    _sql, *params = conn.fetch.call_args.args
     assert "agent-other" in params
     assert "agent-default" not in params
 
@@ -82,10 +88,11 @@ async def test_vector_store_search_uses_override_agent_id(mock_pool):
 @pytest.mark.asyncio
 async def test_vector_store_search_falls_back_to_instance_agent_id(mock_pool):
     from orchestra.memory.vector_store import VectorStore
+
     pool, conn = mock_pool
     vs = VectorStore(pool=pool, agent_id="agent-default")
     await vs.search([0.0] * 4)
-    sql, *params = conn.fetch.call_args.args
+    _sql, *params = conn.fetch.call_args.args
     assert "agent-default" in params
 
 
@@ -93,9 +100,11 @@ async def test_vector_store_search_falls_back_to_instance_agent_id(mock_pool):
 # #2 — VectorStore.hybrid_search()
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_hybrid_search_returns_key_score_tuples(mock_pool):
     from orchestra.memory.vector_store import VectorStore
+
     pool, conn = mock_pool
     row1 = MagicMock()
     row1.__getitem__ = lambda self, k: "k1" if k == "key" else 0.85
@@ -113,24 +122,26 @@ async def test_hybrid_search_returns_key_score_tuples(mock_pool):
 @pytest.mark.asyncio
 async def test_hybrid_search_passes_bm25_weight(mock_pool):
     from orchestra.memory.vector_store import VectorStore
+
     pool, conn = mock_pool
     conn.fetch = AsyncMock(return_value=[])
 
     vs = VectorStore(pool=pool, agent_id="a1")
     await vs.hybrid_search("q", [0.0] * 4, bm25_weight=0.5)
-    sql, *params = conn.fetch.call_args.args
+    _sql, *params = conn.fetch.call_args.args
     assert 0.5 in params
 
 
 @pytest.mark.asyncio
 async def test_hybrid_search_uses_override_agent_id(mock_pool):
     from orchestra.memory.vector_store import VectorStore
+
     pool, conn = mock_pool
     conn.fetch = AsyncMock(return_value=[])
 
     vs = VectorStore(pool=pool, agent_id="a1")
     await vs.hybrid_search("q", [0.0] * 4, agent_id="a2")
-    sql, *params = conn.fetch.call_args.args
+    _sql, *params = conn.fetch.call_args.args
     assert "a2" in params
     assert "a1" not in params
 
@@ -138,6 +149,7 @@ async def test_hybrid_search_uses_override_agent_id(mock_pool):
 @pytest.mark.asyncio
 async def test_hybrid_search_sql_contains_rrf_pattern(mock_pool):
     from orchestra.memory.vector_store import VectorStore
+
     pool, conn = mock_pool
     conn.fetch = AsyncMock(return_value=[])
 

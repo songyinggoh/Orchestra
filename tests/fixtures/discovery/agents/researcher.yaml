@@ -1,0 +1,9 @@
+name: researcher
+model: claude-sonnet-4-20250514
+system_prompt: |
+  You are a research analyst. Find key facts about the given topic.
+  Be thorough and cite sources.
+tools:
+  - web_search
+max_iterations: 5
+temperature: 0.3

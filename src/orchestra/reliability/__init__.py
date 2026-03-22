@@ -17,19 +17,19 @@ FActScore  (retrieval-augmented, requires knowledge source + OpenAI key)
 
 from orchestra.reliability.agents import (
     AuditReport,
-    SessionAuditorAgent,
     SelfCheckAgent,
+    SessionAuditorAgent,
     make_selfcheck_node,
 )
 from orchestra.reliability.factscore import FactScoreChecker, FactScoreResult
 from orchestra.reliability.factscore_agents import FactScorerAgent, make_factscore_node
-from orchestra.reliability.tools import factscore_tool, selfcheck_tool
 from orchestra.reliability.selfcheck import (
+    SelfChecker,
     SelfCheckMethod,
     SelfCheckResult,
-    SelfChecker,
     SentenceScore,
 )
+from orchestra.reliability.tools import factscore_tool, selfcheck_tool
 
 __all__ = [
     # SelfCheckGPT

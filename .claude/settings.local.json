@@ -35,7 +35,11 @@
       "WebFetch(domain:factory.ai)",
       "Bash(find:*)",
       "Read(//c/tmp/**)",
-      "Read(//mnt/c/Users/user/AppData/Local/Temp/**)"
+      "Read(//mnt/c/Users/user/AppData/Local/Temp/**)",
+      "Bash(cd:*)",
+      "Bash(pip show:*)",
+      "WebFetch(domain:developers.llamaindex.ai)",
+      "WebFetch(domain:deno.com)"
     ]
   }
 }

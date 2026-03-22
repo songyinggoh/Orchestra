@@ -15,7 +15,6 @@ from orchestra.core.runner import RunResult, run
 from orchestra.core.state import WorkflowState, merge_dict, merge_list
 from orchestra.core.types import END
 
-
 # ===== Sequential Example =====
 
 
@@ -156,9 +155,7 @@ class TestParallelExample:
         graph.add_node("competitors", research_competitors)
         graph.add_node("synthesizer", synthesize)
         graph.set_entry_point("dispatch")
-        graph.add_parallel(
-            "dispatch", ["tech", "market", "competitors"], join_node="synthesizer"
-        )
+        graph.add_parallel("dispatch", ["tech", "market", "competitors"], join_node="synthesizer")
         graph.add_edge("synthesizer", END)
 
         return ParallelResearchState, graph
@@ -261,9 +258,7 @@ class TestConditionalExample:
     @pytest.mark.asyncio
     async def test_routes_to_technical_writer(self):
         _, graph = self._build_state_and_graph()
-        result = await graph.compile().run(
-            {"request": "Write API documentation for user auth"}
-        )
+        result = await graph.compile().run({"request": "Write API documentation for user auth"})
 
         assert result["content_type"] == "technical"
         assert result["output"].startswith("[Technical Doc]")
@@ -271,9 +266,7 @@ class TestConditionalExample:
     @pytest.mark.asyncio
     async def test_routes_to_creative_writer(self):
         _, graph = self._build_state_and_graph()
-        result = await graph.compile().run(
-            {"request": "Write a blog post about AI trends"}
-        )
+        result = await graph.compile().run({"request": "Write a blog post about AI trends"})
 
         assert result["content_type"] == "creative"
         assert result["output"].startswith("[Creative Content]")

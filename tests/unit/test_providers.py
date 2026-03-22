@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import json
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
@@ -25,11 +24,9 @@ from orchestra.core.types import (
     Message,
     MessageRole,
     ModelCost,
-    TokenUsage,
 )
 from orchestra.providers.google import GoogleProvider, _messages_to_gemini_format
 from orchestra.providers.ollama import OllamaProvider
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -59,10 +56,7 @@ def _make_mock_transport(
     content_type: str = "application/json",
 ) -> httpx.MockTransport:
     """Create a mock HTTPX transport returning a fixed response."""
-    if isinstance(body, (dict, list)):
-        content = json.dumps(body).encode()
-    else:
-        content = str(body).encode()
+    content = json.dumps(body).encode() if isinstance(body, (dict, list)) else str(body).encode()
 
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(
@@ -154,25 +148,25 @@ class TestGoogleProvider:
         response_body = self._gemini_response(
             text="",
             finish_reason="FUNCTION_CALL",
-            function_calls=[
-                {"name": "get_weather", "args": {"location": "Paris"}}
-            ],
+            function_calls=[{"name": "get_weather", "args": {"location": "Paris"}}],
         )
         transport = _make_mock_transport(200, response_body)
         provider = self._make_provider(transport)
 
         result = await provider.complete(
             [_user("What's the weather in Paris?")],
-            tools=[{
-                "function": {
-                    "name": "get_weather",
-                    "description": "Get weather",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {"location": {"type": "string"}},
-                    },
+            tools=[
+                {
+                    "function": {
+                        "name": "get_weather",
+                        "description": "Get weather",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {"location": {"type": "string"}},
+                        },
+                    }
                 }
-            }],
+            ],
         )
 
         assert isinstance(result, LLMResponse)
@@ -187,7 +181,9 @@ class TestGoogleProvider:
     @pytest.mark.asyncio
     async def test_stream_yields_chunks(self) -> None:
         chunk1 = {"candidates": [{"content": {"parts": [{"text": "Hello"}]}, "finishReason": ""}]}
-        chunk2 = {"candidates": [{"content": {"parts": [{"text": " world"}]}, "finishReason": "STOP"}]}
+        chunk2 = {
+            "candidates": [{"content": {"parts": [{"text": " world"}]}, "finishReason": "STOP"}]
+        }
         sse_lines = [
             f"data: {json.dumps(chunk1)}",
             f"data: {json.dumps(chunk2)}",
@@ -352,17 +348,19 @@ class TestOllamaProvider:
 
         result = await provider.complete(
             [_user("Weather in London?")],
-            tools=[{
-                "type": "function",
-                "function": {
-                    "name": "get_weather",
-                    "description": "Get weather",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {"location": {"type": "string"}},
+            tools=[
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "get_weather",
+                        "description": "Get weather",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {"location": {"type": "string"}},
+                        },
                     },
-                },
-            }],
+                }
+            ],
         )
 
         assert isinstance(result, LLMResponse)
@@ -375,12 +373,8 @@ class TestOllamaProvider:
 
     @pytest.mark.asyncio
     async def test_stream_yields_chunks(self) -> None:
-        chunk1 = {
-            "choices": [{"delta": {"content": "Hello"}, "finish_reason": None}]
-        }
-        chunk2 = {
-            "choices": [{"delta": {"content": " Ollama"}, "finish_reason": "stop"}]
-        }
+        chunk1 = {"choices": [{"delta": {"content": "Hello"}, "finish_reason": None}]}
+        chunk2 = {"choices": [{"delta": {"content": " Ollama"}, "finish_reason": "stop"}]}
         sse_lines = [
             f"data: {json.dumps(chunk1)}",
             f"data: {json.dumps(chunk2)}",
@@ -414,7 +408,9 @@ class TestOllamaProvider:
         with pytest.raises(ProviderUnavailableError) as exc_info:
             await provider.complete([_user("Hi")])
 
-        assert "ollama serve" in str(exc_info.value).lower() or "ollama" in str(exc_info.value).lower()
+        assert (
+            "ollama serve" in str(exc_info.value).lower() or "ollama" in str(exc_info.value).lower()
+        )
 
     # --- Test 5: Error: model not found -> ProviderError with pull suggestion ---
 
@@ -458,7 +454,9 @@ class TestOllamaProvider:
     @pytest.mark.asyncio
     async def test_health_check_when_running(self) -> None:
         def handler(request: httpx.Request) -> httpx.Response:
-            return httpx.Response(200, content=b"Ollama is running", headers={"content-type": "text/plain"})
+            return httpx.Response(
+                200, content=b"Ollama is running", headers={"content-type": "text/plain"}
+            )
 
         transport = httpx.MockTransport(handler)
         provider = OllamaProvider()

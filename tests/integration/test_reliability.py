@@ -5,11 +5,10 @@ from __future__ import annotations
 import pytest
 
 from orchestra.core.agent import agent
+from orchestra.core.errors import AgentError
 from orchestra.core.graph import WorkflowGraph
 from orchestra.core.runner import run
-from orchestra.core.errors import AgentError
 from orchestra.core.types import LLMResponse, TokenUsage
-from orchestra.core.protocols import LLMProvider
 
 
 class FailingLLM:

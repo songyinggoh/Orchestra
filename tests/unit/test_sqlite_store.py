@@ -3,26 +3,23 @@
 All tests use ':memory:' -- no filesystem writes during the test suite.
 Uses pytest-asyncio with asyncio_mode = 'auto' (configured in pyproject.toml).
 """
+
 from __future__ import annotations
 
 import asyncio
 import os
 
-import pytest
 import pytest_asyncio
 
 from orchestra.storage.checkpoint import Checkpoint
 from orchestra.storage.events import (
     CheckpointCreated,
     EventType,
-    ExecutionCompleted,
     ExecutionStarted,
     NodeCompleted,
     NodeStarted,
 )
 from orchestra.storage.sqlite import SnapshotManager, SQLiteEventStore
-from orchestra.storage.store import EventBus
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -39,7 +36,9 @@ def make_execution_started(run_id: str = "run-1", sequence: int = 0) -> Executio
     )
 
 
-def make_node_started(run_id: str = "run-1", sequence: int = 1, node_id: str = "node-a") -> NodeStarted:
+def make_node_started(
+    run_id: str = "run-1", sequence: int = 1, node_id: str = "node-a"
+) -> NodeStarted:
     return NodeStarted(
         run_id=run_id,
         sequence=sequence,
@@ -48,7 +47,9 @@ def make_node_started(run_id: str = "run-1", sequence: int = 1, node_id: str = "
     )
 
 
-def make_node_completed(run_id: str = "run-1", sequence: int = 2, node_id: str = "node-a") -> NodeCompleted:
+def make_node_completed(
+    run_id: str = "run-1", sequence: int = 2, node_id: str = "node-a"
+) -> NodeCompleted:
     return NodeCompleted(
         run_id=run_id,
         sequence=sequence,
@@ -59,7 +60,9 @@ def make_node_completed(run_id: str = "run-1", sequence: int = 2, node_id: str =
     )
 
 
-def make_checkpoint(run_id: str = "run-1", sequence: int = 3, node_id: str = "node-a") -> Checkpoint:
+def make_checkpoint(
+    run_id: str = "run-1", sequence: int = 3, node_id: str = "node-a"
+) -> Checkpoint:
     return Checkpoint.create(
         run_id=run_id,
         node_id=node_id,
@@ -163,16 +166,12 @@ async def test_get_events_event_type_filter(store: SQLiteEventStore):
     await store.append(make_node_completed(sequence=2))
 
     # Only fetch NodeStarted events
-    results = await store.get_events(
-        "run-1", event_types=[EventType.NODE_STARTED]
-    )
+    results = await store.get_events("run-1", event_types=[EventType.NODE_STARTED])
     assert len(results) == 1
     assert results[0].event_type == EventType.NODE_STARTED
 
     # Only fetch ExecutionStarted events
-    results2 = await store.get_events(
-        "run-1", event_types=[EventType.EXECUTION_STARTED]
-    )
+    results2 = await store.get_events("run-1", event_types=[EventType.EXECUTION_STARTED])
     assert len(results2) == 1
     assert results2[0].event_type == EventType.EXECUTION_STARTED
 
@@ -339,10 +338,7 @@ async def test_snapshot_manager_counts_and_triggers(store: SQLiteEventStore):
     """SnapshotManager increments per-run counters correctly."""
     mgr = SnapshotManager(store, interval=3)
 
-    events = [
-        make_execution_started(run_id="run-sm", sequence=i)
-        for i in range(5)
-    ]
+    events = [make_execution_started(run_id="run-sm", sequence=i) for i in range(5)]
 
     for event in events:
         mgr.on_event(event)

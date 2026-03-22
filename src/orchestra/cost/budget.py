@@ -6,8 +6,7 @@ hard limits raise BudgetExceededError before the LLM call proceeds.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Any
+from dataclasses import dataclass
 
 import structlog
 
@@ -110,7 +109,8 @@ class BudgetPolicy:
             if self.soft_limit_usd is not None and current_cost_usd >= self.soft_limit_usd:
                 soft_hit = True
                 reasons.append(
-                    f"Soft USD limit exceeded: ${current_cost_usd:.4f} >= ${self.soft_limit_usd:.4f}"
+                    f"Soft USD limit exceeded: ${current_cost_usd:.4f}"
+                    f" >= ${self.soft_limit_usd:.4f}"
                 )
                 if self.downgrade_model:
                     suggested = self.downgrade_model

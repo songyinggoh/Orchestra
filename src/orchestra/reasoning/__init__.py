@@ -29,7 +29,7 @@ Usage:
 from orchestra.reasoning.tot import ThoughtNode, ToTSearchStrategy, TreeOfThoughtsAgent
 
 __all__ = [
-    "TreeOfThoughtsAgent",
-    "ToTSearchStrategy",
     "ThoughtNode",
+    "ToTSearchStrategy",
+    "TreeOfThoughtsAgent",
 ]

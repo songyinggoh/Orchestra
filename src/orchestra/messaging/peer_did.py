@@ -10,7 +10,10 @@ import base64
 import json
 from typing import Any
 
-import base58
+try:
+    import base58
+except ImportError:  # optional dep — only needed at call time
+    base58 = None  # type: ignore[assignment]
 
 
 # Multicodec prefixes

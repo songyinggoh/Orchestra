@@ -1,12 +1,13 @@
 """Tests for the event-sourced persistence layer (Task 2.1)."""
+
 from __future__ import annotations
 
 from datetime import datetime
 
 import pytest
 
+from orchestra.storage.contracts import BoundaryContract, ContractRegistry
 from orchestra.storage.events import (
-    AnyEvent,
     CheckpointCreated,
     EdgeTraversed,
     ErrorOccurred,
@@ -28,7 +29,6 @@ from orchestra.storage.events import (
     WorkflowEvent,
     create_event,
 )
-from orchestra.storage.store import EventBus, InMemoryEventStore, RunSummary, project_state
 from orchestra.storage.serialization import (
     dict_to_event,
     event_to_dict,
@@ -37,8 +37,7 @@ from orchestra.storage.serialization import (
     json_to_event,
     jsonl_to_events,
 )
-from orchestra.storage.contracts import BoundaryContract, ContractRegistry
-
+from orchestra.storage.store import EventBus, InMemoryEventStore, RunSummary, project_state
 
 # ---- Event Type Tests ----
 
@@ -278,12 +277,8 @@ class TestProjection:
     def test_project_from_state_updated(self):
         events = [
             ExecutionStarted(run_id="r1", initial_state={"x": 0, "y": 0}, sequence=0),
-            StateUpdated(
-                run_id="r1", node_id="n1", resulting_state={"x": 1, "y": 0}, sequence=1
-            ),
-            StateUpdated(
-                run_id="r1", node_id="n2", resulting_state={"x": 1, "y": 2}, sequence=2
-            ),
+            StateUpdated(run_id="r1", node_id="n1", resulting_state={"x": 1, "y": 0}, sequence=1),
+            StateUpdated(run_id="r1", node_id="n2", resulting_state={"x": 1, "y": 2}, sequence=2),
         ]
         state = project_state(events)
         assert state == {"x": 1, "y": 2}

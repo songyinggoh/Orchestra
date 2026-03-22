@@ -65,12 +65,14 @@ class ScriptedLLM:
         output_type: type[BaseModel] | None = None,
     ) -> LLMResponse:
         """Return the next scripted response."""
-        self._call_log.append({
-            "messages": messages,
-            "model": model,
-            "tools": tools,
-            "temperature": temperature,
-        })
+        self._call_log.append(
+            {
+                "messages": messages,
+                "model": model,
+                "tools": tools,
+                "temperature": temperature,
+            }
+        )
 
         if self._index >= len(self._responses):
             raise ScriptExhaustedError(
@@ -93,8 +95,11 @@ class ScriptedLLM:
     ) -> AsyncIterator[StreamChunk]:
         """Stream the next scripted response word by word."""
         response = await self.complete(
-            messages, model=model, tools=tools,
-            temperature=temperature, max_tokens=max_tokens,
+            messages,
+            model=model,
+            tools=tools,
+            temperature=temperature,
+            max_tokens=max_tokens,
         )
 
         if response.content:
@@ -143,8 +148,7 @@ class ScriptedLLM:
         """
         if call_index >= len(self._call_log):
             raise AssertionError(
-                f"Call {call_index} was never made "
-                f"(only {len(self._call_log)} call(s) total)."
+                f"Call {call_index} was never made (only {len(self._call_log)} call(s) total)."
             )
         messages = self._call_log[call_index].get("messages", [])
         text = " ".join(m.content for m in messages if m.content)

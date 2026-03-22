@@ -86,9 +86,7 @@ class AuthenticationError(ProviderError):
 class ContextWindowError(ProviderError):
     """Raised when input exceeds the model's context window."""
 
-    def __init__(
-        self, message: str, context_length: int = 0, max_context_length: int = 0
-    ) -> None:
+    def __init__(self, message: str, context_length: int = 0, max_context_length: int = 0) -> None:
         super().__init__(message)
         self.context_length = context_length
         self.max_context_length = max_context_length

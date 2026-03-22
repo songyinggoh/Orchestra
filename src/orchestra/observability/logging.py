@@ -4,14 +4,13 @@ from __future__ import annotations
 
 import logging
 import sys
+from typing import Any
 
 import structlog
 
-from typing import Any
-
 
 def add_otel_context(
-    logger: Any,  # noqa: ANN401
+    logger: Any,
     method_name: str,
     event_dict: dict[str, Any],
 ) -> dict[str, Any]:

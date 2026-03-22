@@ -7,8 +7,9 @@ to execute based on name, patterns, or namespaces.
 from __future__ import annotations
 
 import fnmatch
+from collections.abc import Iterable
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Iterable
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from orchestra.identity.agent_identity import RevocationList
@@ -58,17 +59,14 @@ def validate_narrowing(
             # 3. Parent ends with "/*" — child must be a sub-resource within
             #    that namespace (e.g. parent "ns:tools/*" covers "ns:tools/x")
             # 4. Child is a wildcard that is covered by the parent wildcard
-            if parent.resource == child.resource:
-                resource_ok = True
-            elif parent.resource == "orchestra:tools/*":
+            if parent.resource == child.resource or parent.resource == "orchestra:tools/*":
                 resource_ok = True
             elif parent.resource.endswith("/*"):
                 # parent namespace prefix: "orchestra:tools" (strip trailing "/*")
                 parent_ns = parent.resource[:-2]
                 # child must start with that prefix followed by "/" or be equal
-                resource_ok = (
-                    child.resource == parent_ns
-                    or child.resource.startswith(parent_ns + "/")
+                resource_ok = child.resource == parent_ns or child.resource.startswith(
+                    parent_ns + "/"
                 )
             else:
                 resource_ok = False
@@ -145,10 +143,14 @@ class ToolACL:
             AgentRevokedException: If agent_did is in revocation_list.
         """
         # Step 0: Revocation gate — checked before deny lists and UCAN.
-        if agent_did is not None and revocation_list is not None:
-            if revocation_list.is_revoked(agent_did):
-                from orchestra.core.errors import AgentRevokedException
-                raise AgentRevokedException(agent_did)
+        if (
+            agent_did is not None
+            and revocation_list is not None
+            and revocation_list.is_revoked(agent_did)
+        ):
+            from orchestra.core.errors import AgentRevokedException
+
+            raise AgentRevokedException(agent_did)
 
         # Step 1: Explicit denial always wins
         if tool_name in self.denied_tools:
@@ -179,10 +181,10 @@ class ToolACL:
         tool_authorized = False
         for cap in ucan.capabilities:
             resource_match = (
-                cap.resource == f"orchestra:tools/{tool_name}" or
-                cap.resource == "orchestra:tools/*"
+                cap.resource == f"orchestra:tools/{tool_name}"
+                or cap.resource == "orchestra:tools/*"
             )
-            ability_match = (cap.ability == "tool/invoke" or cap.ability == "*")
+            ability_match = cap.ability == "tool/invoke" or cap.ability == "*"
 
             if resource_match and ability_match:
                 tool_authorized = True
@@ -213,7 +215,7 @@ class ToolACL:
         """
         from orchestra.core.errors import CapabilityDeniedError
 
-        # Build the parent–child pairs: proofs are ordered from root → issuer,
+        # Build the parent-child pairs: proofs are ordered from root -> issuer,
         # so proofs[0] is the root grant and the *current* ucan is the leaf.
         # We treat each adjacent pair (proofs[i], proofs[i+1]) as parent/child,
         # and finally (proofs[-1], ucan) as the last parent/child pair.
@@ -224,7 +226,7 @@ class ToolACL:
                 proof_ucans.append(parsed)
 
         # Build the full chain: [proof_0, proof_1, ..., proof_n, leaf_ucan]
-        full_chain = proof_ucans + [ucan]
+        full_chain = [*proof_ucans, ucan]
 
         for i in range(len(full_chain) - 1):
             parent_token = full_chain[i]
@@ -292,11 +294,7 @@ class ToolACL:
         if tool_name in self.allowed_tools:
             return True
 
-        for pattern in self.allow_patterns:
-            if fnmatch.fnmatch(tool_name, pattern):
-                return True
-
-        return False
+        return any(fnmatch.fnmatch(tool_name, pattern) for pattern in self.allow_patterns)
 
     def check_ucan_call_limit(
         self,
@@ -313,8 +311,8 @@ class ToolACL:
         for cap in ucan.capabilities:
             # DD-4: same narrowing rule as is_authorized — exact or explicit wildcard only.
             resource_match = (
-                cap.resource == f"orchestra:tools/{tool_name}" or
-                cap.resource == "orchestra:tools/*"
+                cap.resource == f"orchestra:tools/{tool_name}"
+                or cap.resource == "orchestra:tools/*"
             )
             if resource_match and (cap.ability == "tool/invoke" or cap.ability == "*"):
                 if cap.max_calls is None:
@@ -348,6 +346,4 @@ class UnauthorizedToolError(Exception):
     def __init__(self, tool_name: str, agent_name: str) -> None:
         self.tool_name = tool_name
         self.agent_name = agent_name
-        super().__init__(
-            f"Agent '{agent_name}' is not authorized to execute tool '{tool_name}'."
-        )
+        super().__init__(f"Agent '{agent_name}' is not authorized to execute tool '{tool_name}'.")

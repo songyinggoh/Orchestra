@@ -44,7 +44,6 @@ from orchestra.core.types import (
 )
 from orchestra.providers import CallableProvider
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -72,8 +71,10 @@ class TestSyncStringFunction:
 
     def _make_provider(self, fn=None) -> CallableProvider:
         if fn is None:
+
             def fn(prompt: str) -> str:
                 return f"echo: {prompt}"
+
         return CallableProvider(fn)
 
     @pytest.mark.asyncio
@@ -137,6 +138,7 @@ class TestSyncStringFunction:
     def test_accepts_messages_false_for_str_param(self) -> None:
         def fn(prompt: str) -> str:
             return prompt
+
         provider = CallableProvider(fn)
         assert provider._accepts_messages is False
 
@@ -359,6 +361,7 @@ class TestFunctionReturningLLMResponse:
     @pytest.mark.asyncio
     async def test_string_return_is_wrapped_not_passthrough(self) -> None:
         """String returns are wrapped, not returned as LLMResponse directly."""
+
         def fn(prompt: str) -> str:
             return "plain string"
 
@@ -814,6 +817,7 @@ class TestSignatureDetection:
         The source checks ``origin is list``, which requires a subscripted
         ``list[X]`` — an unsubscripted ``list`` has ``__origin__ == None``.
         """
+
         def fn(messages: list) -> str:
             return "ok"
 
@@ -822,6 +826,7 @@ class TestSignatureDetection:
 
     def test_unannotated_param_treated_as_string(self) -> None:
         """A parameter with no annotation is not detected as message-list."""
+
         def fn(prompt) -> str:
             return prompt
 
@@ -837,6 +842,7 @@ class TestSignatureDetection:
 
     def test_no_params_does_not_crash(self) -> None:
         """Callables with zero parameters should construct without error."""
+
         def fn() -> str:
             return "no-param"
 
@@ -852,6 +858,7 @@ class TestSignatureDetection:
         which raises ``TypeError`` because the function accepts zero arguments.
         This documents the current behaviour — callers must accept at least one arg.
         """
+
         def fn() -> str:
             return "zero-param result"
 
@@ -861,6 +868,7 @@ class TestSignatureDetection:
 
     def test_list_of_non_message_type_not_treated_as_messages(self) -> None:
         """list[str] should NOT trigger _accepts_messages."""
+
         def fn(items: list[str]) -> str:
             return "ok"
 

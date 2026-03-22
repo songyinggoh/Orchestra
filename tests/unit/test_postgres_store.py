@@ -12,22 +12,21 @@ instance is required. Tests verify:
 
 Uses pytest-asyncio with asyncio_mode = 'auto' (configured in pyproject.toml).
 """
+
 from __future__ import annotations
 
-import asyncio
 import json
 import sys
 import types
 import uuid
-from collections.abc import Awaitable
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 # ---------------------------------------------------------------------------
 # Bootstrap asyncpg mock BEFORE importing postgres module
 # ---------------------------------------------------------------------------
+
 
 def _make_asyncpg_mock() -> types.ModuleType:
     """Build a minimal asyncpg stub sufficient for PostgresEventStore tests."""
@@ -41,7 +40,7 @@ def _make_asyncpg_mock() -> types.ModuleType:
             self._conn = FakeConnection()
             self._closed = False
 
-        def acquire(self) -> "FakeAcquireContext":
+        def acquire(self) -> FakeAcquireContext:
             return FakeAcquireContext(self._conn)
 
         async def release(self, conn: Any) -> None:
@@ -62,10 +61,10 @@ def _make_asyncpg_mock() -> types.ModuleType:
     class FakeAcquireContext:
         """Async context manager returned by pool.acquire()."""
 
-        def __init__(self, conn: "FakeConnection") -> None:
+        def __init__(self, conn: FakeConnection) -> None:
             self._conn = conn
 
-        async def __aenter__(self) -> "FakeConnection":
+        async def __aenter__(self) -> FakeConnection:
             return self._conn
 
         async def __aexit__(self, *args: Any) -> None:
@@ -73,12 +72,13 @@ def _make_asyncpg_mock() -> types.ModuleType:
 
         # Allow direct await (pool.acquire() used in subscribe_events)
         def __await__(self):  # type: ignore[override]
-            async def _inner() -> "FakeConnection":
+            async def _inner() -> FakeConnection:
                 return self._conn
+
             return _inner().__await__()
 
     class FakeTransactionContext:
-        async def __aenter__(self) -> "FakeTransactionContext":
+        async def __aenter__(self) -> FakeTransactionContext:
             return self
 
         async def __aexit__(self, *args: Any) -> None:
@@ -132,18 +132,16 @@ sys.modules["asyncpg"] = _asyncpg_mock
 sys.modules["asyncpg.pool"] = _asyncpg_mock.pool  # type: ignore[attr-defined]
 
 # Now import the module under test
-from orchestra.storage.postgres import PostgresEventStore  # noqa: E402
+from datetime import UTC  # noqa: E402
+
 from orchestra.storage.checkpoint import Checkpoint  # noqa: E402
 from orchestra.storage.events import (  # noqa: E402
-    CheckpointCreated,
     EventType,
-    ExecutionCompleted,
     ExecutionStarted,
     NodeCompleted,
     NodeStarted,
 )
-from orchestra.storage.store import EventStore  # noqa: E402
-
+from orchestra.storage.postgres import PostgresEventStore  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -168,9 +166,7 @@ def _make_node_started(run_id: str = _RUN_ID, sequence: int = 1) -> NodeStarted:
 
 
 def _make_node_completed(run_id: str = _RUN_ID, sequence: int = 2) -> NodeCompleted:
-    return NodeCompleted(
-        run_id=run_id, sequence=sequence, node_id="node-a", duration_ms=10.0
-    )
+    return NodeCompleted(run_id=run_id, sequence=sequence, node_id="node-a", duration_ms=10.0)
 
 
 def _make_checkpoint(run_id: str = _RUN_ID, sequence: int = 3) -> Checkpoint:
@@ -264,15 +260,9 @@ async def test_append_executes_insert_and_notify(store: PostgresEventStore) -> N
     queries = [q for q, _ in conn._executed]
 
     # Should have: advisory lock, ensure_run INSERT, event INSERT, NOTIFY
-    assert any("pg_advisory_xact_lock" in q for q in queries), (
-        "advisory lock not acquired"
-    )
-    assert any("INSERT INTO workflow_events" in q for q in queries), (
-        "event INSERT not found"
-    )
-    assert any("pg_notify" in q for q in queries), (
-        "NOTIFY not sent"
-    )
+    assert any("pg_advisory_xact_lock" in q for q in queries), "advisory lock not acquired"
+    assert any("INSERT INTO workflow_events" in q for q in queries), "event INSERT not found"
+    assert any("pg_notify" in q for q in queries), "NOTIFY not sent"
 
 
 # ---------------------------------------------------------------------------
@@ -362,8 +352,8 @@ async def test_get_latest_checkpoint_returns_checkpoint(
     class FakeRow(dict):
         pass
 
-    import json
-    from datetime import datetime, timezone
+    from datetime import datetime
+
     fake_row = FakeRow(
         checkpoint_id=checkpoint_id,
         node_id="node-a",
@@ -371,7 +361,7 @@ async def test_get_latest_checkpoint_returns_checkpoint(
         state_snapshot=json.dumps({"x": 99}),
         interrupt_type="before",
         execution_context=json.dumps({"loop_counters": {}, "node_execution_order": []}),
-        created_at=datetime.now(timezone.utc).isoformat(),
+        created_at=datetime.now(UTC).isoformat(),
     )
     store._pool._conn._fetchrow_result = fake_row  # type: ignore[union-attr]
 
@@ -396,7 +386,7 @@ async def test_save_checkpoint_executes_upsert(store: PostgresEventStore) -> Non
     pool = store._pool  # type: ignore[union-attr]
     # pool.execute is the direct pool-level call for save_checkpoint
     # We need to check what was passed
-    conn = pool._conn
+    _conn = pool._conn
     # save_checkpoint uses pool.execute directly, not conn
     # Verify by inspecting the pool's execute was triggered (patching)
     executed: list[tuple[str, Any]] = []
@@ -412,9 +402,7 @@ async def test_save_checkpoint_executes_upsert(store: PostgresEventStore) -> Non
     assert any("INSERT INTO workflow_checkpoints" in q for q, _ in executed), (
         "checkpoint INSERT not found"
     )
-    assert any("ON CONFLICT" in q for q, _ in executed), (
-        "ON CONFLICT upsert not found"
-    )
+    assert any("ON CONFLICT" in q for q, _ in executed), "ON CONFLICT upsert not found"
 
     pool.execute = original_execute  # type: ignore[union-attr]
 
@@ -426,9 +414,9 @@ async def test_save_checkpoint_executes_upsert(store: PostgresEventStore) -> Non
 
 async def test_list_runs_no_filter(store: PostgresEventStore) -> None:
     """list_runs() returns RunSummary objects from pool.fetch results."""
-    from datetime import datetime, timezone
+    from datetime import datetime
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     class FakeRow(dict):
         pass
@@ -471,7 +459,7 @@ async def test_list_runs_with_status_filter(store: PostgresEventStore) -> None:
     captured_args: list[tuple[Any, ...]] = []
 
     async def capturing_fetch(query: str, *args: Any) -> list[Any]:
-        captured_args.append((query,) + args)
+        captured_args.append((query, *args))
         return []
 
     store._pool.fetch = capturing_fetch  # type: ignore[union-attr]
@@ -502,8 +490,7 @@ def test_require_pool_raises_before_init() -> None:
 
 def test_protocol_conformance() -> None:
     """PostgresEventStore has all methods required by EventStore protocol."""
-    for method in ("append", "get_events", "get_latest_checkpoint",
-                   "save_checkpoint", "list_runs"):
+    for method in ("append", "get_events", "get_latest_checkpoint", "save_checkpoint", "list_runs"):
         assert hasattr(PostgresEventStore, method), f"Missing method: {method}"
 
 

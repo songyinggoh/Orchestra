@@ -37,20 +37,20 @@ def setup_telemetry(
     Returns:
         True if setup succeeded, False if OTel SDK is not installed.
     """
-    global _tracer_provider, _meter_provider  # noqa: PLW0603
+    global _tracer_provider, _meter_provider
 
     try:
         import os
 
-        from opentelemetry import trace as trace_api
         from opentelemetry import metrics as metrics_api
+        from opentelemetry import trace as trace_api
+        from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
+        from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+        from opentelemetry.sdk.metrics import MeterProvider
+        from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
         from opentelemetry.sdk.resources import Resource
         from opentelemetry.sdk.trace import TracerProvider
         from opentelemetry.sdk.trace.export import BatchSpanProcessor
-        from opentelemetry.sdk.metrics import MeterProvider
-        from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
-        from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
-        from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
     except ImportError:
         logger.debug("OpenTelemetry SDK not installed — telemetry disabled")
         return False
@@ -58,9 +58,7 @@ def setup_telemetry(
     try:
         # Resolve endpoint
         resolved_endpoint = (
-            endpoint
-            or os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT")
-            or "http://localhost:4318"
+            endpoint or os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT") or "http://localhost:4318"
         )
 
         # Resolve service name
@@ -101,7 +99,7 @@ def setup_telemetry(
 
 def shutdown_telemetry() -> None:
     """Flush and shut down OTel providers."""
-    global _tracer_provider, _meter_provider  # noqa: PLW0603
+    global _tracer_provider, _meter_provider
     if _tracer_provider is not None:
         try:
             _tracer_provider.shutdown()

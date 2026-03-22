@@ -63,16 +63,18 @@ def _messages_to_anthropic_format(
             continue
 
         if msg.role == MessageRole.TOOL:
-            result.append({
-                "role": "user",
-                "content": [
-                    {
-                        "type": "tool_result",
-                        "tool_use_id": msg.tool_call_id or "",
-                        "content": msg.content,
-                    }
-                ],
-            })
+            result.append(
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": msg.tool_call_id or "",
+                            "content": msg.content,
+                        }
+                    ],
+                }
+            )
             continue
 
         role = "assistant" if msg.role == MessageRole.ASSISTANT else "user"
@@ -84,12 +86,14 @@ def _messages_to_anthropic_format(
             if msg.content:
                 blocks.append({"type": "text", "text": msg.content})
             for tc in msg.tool_calls:
-                blocks.append({
-                    "type": "tool_use",
-                    "id": tc.id,
-                    "name": tc.name,
-                    "input": tc.arguments,
-                })
+                blocks.append(
+                    {
+                        "type": "tool_use",
+                        "id": tc.id,
+                        "name": tc.name,
+                        "input": tc.arguments,
+                    }
+                )
             content = blocks
         else:
             content = msg.content
@@ -106,11 +110,13 @@ def _tools_to_anthropic_format(
     result = []
     for t in tools:
         func = t.get("function", t)
-        result.append({
-            "name": func.get("name", ""),
-            "description": func.get("description", ""),
-            "input_schema": func.get("parameters", {}),
-        })
+        result.append(
+            {
+                "name": func.get("name", ""),
+                "description": func.get("description", ""),
+                "input_schema": func.get("parameters", {}),
+            }
+        )
     return result
 
 
@@ -202,9 +208,7 @@ class AnthropicProvider:
         if tools:
             body["tools"] = _tools_to_anthropic_format(tools)
 
-        async with self._client.stream(
-            "POST", "/v1/messages", json=body
-        ) as response:
+        async with self._client.stream("POST", "/v1/messages", json=body) as response:
             if response.status_code != 200:
                 text = ""
                 async for chunk in response.aiter_text():
@@ -302,10 +306,7 @@ class AnthropicProvider:
                 "  Fix: Check your API key or set ANTHROPIC_API_KEY env var."
             )
         elif status_code == 429:
-            raise RateLimitError(
-                f"Rate limited (429).\n"
-                f"  Response: {text[:200]}"
-            )
+            raise RateLimitError(f"Rate limited (429).\n  Response: {text[:200]}")
         elif status_code == 400 and "context" in text.lower():
             raise ContextWindowError(
                 f"Context window exceeded.\n"
@@ -314,14 +315,10 @@ class AnthropicProvider:
             )
         elif status_code >= 500:
             raise ProviderUnavailableError(
-                f"Provider error ({status_code}).\n"
-                f"  Response: {text[:200]}"
+                f"Provider error ({status_code}).\n  Response: {text[:200]}"
             )
         else:
-            raise ProviderError(
-                f"HTTP {status_code}.\n"
-                f"  Response: {text[:200]}"
-            )
+            raise ProviderError(f"HTTP {status_code}.\n  Response: {text[:200]}")
 
     def _parse_response(self, data: dict[str, Any], model: str) -> LLMResponse:
         """Parse Anthropic Messages API response into LLMResponse."""
@@ -359,9 +356,7 @@ class AnthropicProvider:
             input_tok = raw_usage.get("input_tokens", 0)
             output_tok = raw_usage.get("output_tokens", 0)
             cost_info = _MODEL_COSTS.get(model, (0.0, 0.0))
-            estimated_cost = (input_tok / 1000 * cost_info[0]) + (
-                output_tok / 1000 * cost_info[1]
-            )
+            estimated_cost = (input_tok / 1000 * cost_info[0]) + (output_tok / 1000 * cost_info[1])
             usage = TokenUsage(
                 input_tokens=input_tok,
                 output_tokens=output_tok,
