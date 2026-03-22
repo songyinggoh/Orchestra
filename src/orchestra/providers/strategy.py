@@ -1,7 +1,7 @@
 """Strategy-based LLM provider wrappers (DD-10).
 
-Provides transparent switching between NativeSchema (JSON/Tools) 
-and PromptedSchema (few-shot + validation) for models that lack 
+Provides transparent switching between NativeSchema (JSON/Tools)
+and PromptedSchema (few-shot + validation) for models that lack
 reliable native support.
 """
 
@@ -11,8 +11,8 @@ import json
 from collections.abc import AsyncIterator
 from typing import Any, Protocol, runtime_checkable
 
-from pydantic import BaseModel
 import structlog
+from pydantic import BaseModel
 
 from orchestra.core.protocols import LLMProvider
 from orchestra.core.types import (
@@ -22,7 +22,6 @@ from orchestra.core.types import (
     ModelCost,
     StreamChunk,
     ToolCall,
-    TokenUsage,
 )
 
 logger = structlog.get_logger(__name__)
@@ -31,7 +30,7 @@ logger = structlog.get_logger(__name__)
 @runtime_checkable
 class ExecutionStrategy(Protocol):
     """Protocol for transforming generic LLM calls into provider-specific strategies."""
-    
+
     async def execute(
         self,
         provider: LLMProvider,
@@ -81,12 +80,13 @@ class PromptedStrategy:
         output_type: type[BaseModel] | None = None,
     ) -> LLMResponse:
         # Validate output_type is a Pydantic BaseModel if provided
-        if output_type is not None:
-            if not (isinstance(output_type, type) and issubclass(output_type, BaseModel)):
-                raise ValueError(
-                    f"output_type must be a Pydantic BaseModel class, got {output_type!r}. "
-                    f"Make sure you pass the class itself, not an instance."
-                )
+        if output_type is not None and not (
+            isinstance(output_type, type) and issubclass(output_type, BaseModel)
+        ):
+            raise ValueError(
+                f"output_type must be a Pydantic BaseModel class, got {output_type!r}. "
+                f"Make sure you pass the class itself, not an instance."
+            )
 
         modified_messages = list(messages)
 
@@ -104,10 +104,10 @@ class PromptedStrategy:
         response = await provider.complete(
             messages=modified_messages,
             model=model,
-            tools=None, # Explicitly disable native tools
+            tools=None,  # Explicitly disable native tools
             temperature=temperature,
             max_tokens=max_tokens,
-            output_type=None, # Explicitly disable native output type
+            output_type=None,  # Explicitly disable native output type
         )
 
         # 4. Parse response for tools or structured output
@@ -131,10 +131,10 @@ class PromptedStrategy:
         )
 
     def _parse_prompted_response(
-        self, 
-        response: LLMResponse, 
+        self,
+        response: LLMResponse,
         tools: list[dict[str, Any]] | None,
-        output_type: type[BaseModel] | None
+        output_type: type[BaseModel] | None,
     ) -> LLMResponse:
         if not response.content:
             return response
@@ -150,19 +150,19 @@ class PromptedStrategy:
                 content = content[start:end]
 
             data = json.loads(content)
-            
+
             # Extract tool calls
             tool_calls = []
             if tools and "tool_calls" in data:
                 for tc in data["tool_calls"]:
                     tool_calls.append(ToolCall(name=tc["name"], arguments=tc["arguments"]))
-            
+
             return LLMResponse(
                 content=response.content,
                 tool_calls=tool_calls,
                 usage=response.usage,
                 model=response.model,
-                raw_response=response.raw_response
+                raw_response=response.raw_response,
             )
         except Exception as e:
             logger.warning("prompted_parse_failed", error=str(e))
@@ -173,12 +173,17 @@ class StrategySwitchingProvider:
     """A provider that automatically switches strategies based on model capabilities."""
 
     def __init__(
-        self, 
+        self,
         provider: LLMProvider,
         native_models: set[str] | None = None,
     ) -> None:
         self._provider = provider
-        self._native_models = native_models or {"gpt-4o", "gpt-4o-mini", "claude-3-5-sonnet-20240620", "gemini-1.5-pro"}
+        self._native_models = native_models or {
+            "gpt-4o",
+            "gpt-4o-mini",
+            "claude-3-5-sonnet-20240620",
+            "gemini-1.5-pro",
+        }
         self._native = NativeStrategy()
         self._prompted = PromptedStrategy()
 
@@ -202,9 +207,9 @@ class StrategySwitchingProvider:
     ) -> LLMResponse:
         target_model = model or self.default_model
         strategy = self._native if target_model in self._native_models else self._prompted
-        
+
         logger.debug("strategy_selected", model=target_model, strategy=strategy.__class__.__name__)
-        
+
         return await strategy.execute(
             provider=self._provider,
             messages=messages,

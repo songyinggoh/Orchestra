@@ -3,6 +3,7 @@
 Tests that the workflow engine handles provider faults gracefully:
 timeouts, rate-limit errors, and malformed responses.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -11,9 +12,7 @@ from orchestra.core.agent import agent
 from orchestra.core.errors import AgentError
 from orchestra.core.graph import WorkflowGraph
 from orchestra.core.runner import run
-
 from tests.chaos.fault_injectors import FaultInjector
-
 
 # ---------------------------------------------------------------------------
 # Shared test agent

@@ -2,21 +2,19 @@
 
 from __future__ import annotations
 
-import pytest
-
 from orchestra.core.context_distill import (
+    _get_content,
+    _get_role,
+    _make_summary_message,
     distill_context,
     full_passthrough,
-    _get_role,
-    _get_content,
-    _make_summary_message,
 )
 from orchestra.core.types import Message, MessageRole
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def sys_msg(text: str) -> dict:
     return {"role": "system", "content": text}
@@ -153,9 +151,11 @@ class TestDistillContextThreeZones:
         ]
         result = distill_context(msgs, keep_last_n_turns=1)
         # prefix should only contain sys1
-        prefix = [m for m in result if (
-            m.get("role") == "system" if isinstance(m, dict) else m.role == MessageRole.SYSTEM
-        )]
+        prefix = [
+            m
+            for m in result
+            if (m.get("role") == "system" if isinstance(m, dict) else m.role == MessageRole.SYSTEM)
+        ]
         assert len(prefix) == 1
 
 

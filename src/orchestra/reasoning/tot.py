@@ -40,7 +40,6 @@ from enum import Enum
 from typing import Any
 
 import structlog
-from pydantic import Field
 
 from orchestra.core.agent import BaseAgent
 from orchestra.core.context import ExecutionContext
@@ -53,7 +52,7 @@ logger = structlog.get_logger(__name__)
 # ---------------------------------------------------------------------------
 
 _FINAL_PREFIX = "FINAL ANSWER:"
-_IMPOSSIBLE_THRESHOLD = 0.2   # value <= this → prune immediately
+_IMPOSSIBLE_THRESHOLD = 0.2  # value <= this → prune immediately
 
 
 # ---------------------------------------------------------------------------
@@ -66,11 +65,11 @@ class ThoughtNode:
     """A single node in the thought tree."""
 
     thought: str
-    value: float           # 0.0 = impossible, 0.5 = maybe, 1.0 = sure
+    value: float  # 0.0 = impossible, 0.5 = maybe, 1.0 = sure
     depth: int
-    parent: "ThoughtNode | None" = field(default=None, repr=False)
-    children: list["ThoughtNode"] = field(default_factory=list, repr=False)
-    is_terminal: bool = False   # True when thought contains FINAL ANSWER
+    parent: ThoughtNode | None = field(default=None, repr=False)
+    children: list[ThoughtNode] = field(default_factory=list, repr=False)
+    is_terminal: bool = False  # True when thought contains FINAL ANSWER
 
     def chain(self) -> list[str]:
         """Full thought path from root to this node."""
@@ -98,8 +97,8 @@ class ThoughtNode:
 
 
 class ToTSearchStrategy(str, Enum):
-    BFS = "bfs"   # breadth-first beam search (default)
-    DFS = "dfs"   # depth-first with backtracking
+    BFS = "bfs"  # breadth-first beam search (default)
+    DFS = "dfs"  # depth-first with backtracking
 
 
 # ---------------------------------------------------------------------------
@@ -235,9 +234,7 @@ class TreeOfThoughtsAgent(BaseAgent):
     # BFS search
     # -------------------------------------------------------------------------
 
-    async def _bfs(
-        self, problem: str, llm: Any
-    ) -> tuple[ThoughtNode | None, TokenUsage]:
+    async def _bfs(self, problem: str, llm: Any) -> tuple[ThoughtNode | None, TokenUsage]:
         """Breadth-first beam search through the thought tree."""
         total_usage = TokenUsage()
         root = ThoughtNode(thought=problem, value=1.0, depth=0)
@@ -248,10 +245,7 @@ class TreeOfThoughtsAgent(BaseAgent):
 
         for depth in range(1, self.tot_max_depth + 1):
             # Generate k children for every node in the frontier (parallel)
-            gen_tasks = [
-                self._generate_thoughts(problem, node, llm)
-                for node in frontier
-            ]
+            gen_tasks = [self._generate_thoughts(problem, node, llm) for node in frontier]
             gen_results = await asyncio.gather(*gen_tasks, return_exceptions=True)
 
             candidates: list[ThoughtNode] = []
@@ -270,10 +264,7 @@ class TreeOfThoughtsAgent(BaseAgent):
                 break
 
             # Evaluate all candidates in parallel
-            eval_tasks = [
-                self._evaluate_thought(problem, node, llm)
-                for node in candidates
-            ]
+            eval_tasks = [self._evaluate_thought(problem, node, llm) for node in candidates]
             eval_results = await asyncio.gather(*eval_tasks, return_exceptions=True)
 
             scored: list[ThoughtNode] = []
@@ -326,9 +317,7 @@ class TreeOfThoughtsAgent(BaseAgent):
     # DFS search
     # -------------------------------------------------------------------------
 
-    async def _dfs(
-        self, problem: str, llm: Any
-    ) -> tuple[ThoughtNode | None, TokenUsage]:
+    async def _dfs(self, problem: str, llm: Any) -> tuple[ThoughtNode | None, TokenUsage]:
         """Depth-first search with backtracking through the thought tree."""
         total_usage = TokenUsage()
         root = ThoughtNode(thought=problem, value=1.0, depth=0)
@@ -342,7 +331,9 @@ class TreeOfThoughtsAgent(BaseAgent):
             node = stack.pop()
 
             if node.depth >= self.tot_max_depth or node.is_terminal:
-                if best_terminal is None or node.value > (best_terminal.value if best_terminal else -1):
+                if best_terminal is None or node.value > (
+                    best_terminal.value if best_terminal else -1
+                ):
                     node.is_terminal = True
                     best_terminal = node
                 continue
@@ -404,9 +395,9 @@ class TreeOfThoughtsAgent(BaseAgent):
         self, problem: str, node: ThoughtNode, llm: Any
     ) -> tuple[list[str], TokenUsage]:
         """Ask the LLM to generate k next thoughts from this node."""
-        chain_text = "\n".join(
-            f"Step {i + 1}: {t}" for i, t in enumerate(node.chain())
-        ) or "(none yet)"
+        chain_text = (
+            "\n".join(f"Step {i + 1}: {t}" for i, t in enumerate(node.chain())) or "(none yet)"
+        )
 
         prompt = _GENERATE_PROMPT.format(
             problem=problem,
@@ -438,9 +429,9 @@ class TreeOfThoughtsAgent(BaseAgent):
             return 1.0, TokenUsage()
 
         chain = node.chain()
-        chain_text = "\n".join(
-            f"Step {i + 1}: {t}" for i, t in enumerate(chain[:-1])
-        ) or "(none yet)"
+        chain_text = (
+            "\n".join(f"Step {i + 1}: {t}" for i, t in enumerate(chain[:-1])) or "(none yet)"
+        )
 
         prompt = _EVALUATE_PROMPT.format(
             problem=problem,

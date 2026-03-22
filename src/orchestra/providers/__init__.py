@@ -41,6 +41,7 @@ def auto_provider() -> object:
     # Named provider keys
     if os.environ.get("ANTHROPIC_API_KEY"):
         from orchestra.providers.anthropic import AnthropicProvider
+
         return AnthropicProvider()
 
     if os.environ.get("OPENAI_API_KEY"):
@@ -48,14 +49,17 @@ def auto_provider() -> object:
 
     if os.environ.get("GOOGLE_API_KEY"):
         from orchestra.providers.google import GoogleProvider
+
         return GoogleProvider()
 
     # Ollama — check synchronously via a quick socket probe
     import socket
+
     try:
         s = socket.create_connection(("localhost", 11434), timeout=1.0)
         s.close()
         from orchestra.providers.ollama import OllamaProvider
+
         return OllamaProvider()
     except OSError:
         pass
@@ -74,11 +78,14 @@ def auto_provider() -> object:
 def __getattr__(name: str) -> object:
     if name == "AnthropicProvider":
         from orchestra.providers.anthropic import AnthropicProvider
+
         return AnthropicProvider
     if name == "GoogleProvider":
         from orchestra.providers.google import GoogleProvider
+
         return GoogleProvider
     if name == "OllamaProvider":
         from orchestra.providers.ollama import OllamaProvider
+
         return OllamaProvider
     raise AttributeError(f"module 'orchestra.providers' has no attribute {name!r}")

@@ -14,12 +14,13 @@ Usage:
     async with SQLiteEventStore() as store:
         ...
 """
+
 from __future__ import annotations
 
 import asyncio
 import json
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import aiosqlite
@@ -32,7 +33,6 @@ from orchestra.storage.events import (
 )
 from orchestra.storage.serialization import dict_to_event, event_to_dict
 from orchestra.storage.store import RunSummary
-
 
 _DDL = """
 PRAGMA journal_mode = WAL;
@@ -131,7 +131,7 @@ class SQLiteEventStore:
             await self._conn.close()
             self._conn = None
 
-    async def __aenter__(self) -> "SQLiteEventStore":
+    async def __aenter__(self) -> SQLiteEventStore:
         await self.initialize()
         return self
 
@@ -297,10 +297,12 @@ class SQLiteEventStore:
     async def save_checkpoint(self, checkpoint: Checkpoint) -> None:
         """Persist a Checkpoint object to the store."""
         conn = self._require_conn()
-        ctx_json = json.dumps({
-            "loop_counters": checkpoint.loop_counters,
-            "node_execution_order": checkpoint.node_execution_order,
-        })
+        ctx_json = json.dumps(
+            {
+                "loop_counters": checkpoint.loop_counters,
+                "node_execution_order": checkpoint.node_execution_order,
+            }
+        )
         await conn.execute(
             """
             INSERT OR REPLACE INTO workflow_checkpoints
@@ -321,9 +323,7 @@ class SQLiteEventStore:
         )
         await conn.commit()
 
-    async def list_runs(
-        self, *, limit: int = 50, status: str | None = None
-    ) -> list[RunSummary]:
+    async def list_runs(self, *, limit: int = 50, status: str | None = None) -> list[RunSummary]:
         """List workflow runs with optional status filter.
 
         Returns RunSummary objects ordered by started_at descending.
@@ -380,7 +380,7 @@ class SQLiteEventStore:
     ) -> None:
         """Insert a new run record with status 'running'."""
         conn = self._require_conn()
-        started_at = datetime.now(timezone.utc).isoformat()
+        started_at = datetime.now(UTC).isoformat()
         await conn.execute(
             """
             INSERT OR IGNORE INTO workflow_runs

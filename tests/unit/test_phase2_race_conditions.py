@@ -7,19 +7,20 @@ These tests demonstrate the actual bugs in:
 """
 
 import asyncio
-import pytest
 from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 from pydantic import BaseModel
 
-from orchestra.providers.failover import ProviderFailover
-from orchestra.providers.strategy import PromptedStrategy
 from orchestra.core.types import LLMResponse, Message, MessageRole
 from orchestra.memory.invalidation import InvalidationSubscriber
-
+from orchestra.providers.failover import ProviderFailover
+from orchestra.providers.strategy import PromptedStrategy
 
 # =============================================================================
 # WARN-2.1: Latency Tracker Race Condition
 # =============================================================================
+
 
 @pytest.mark.asyncio
 async def test_warn_2_1_latency_tracker_race():
@@ -47,8 +48,10 @@ async def test_warn_2_1_latency_tracker_race():
     # EXPECTED: up to _max_history (20) latencies — the tracker caps history at
     # self._max_history = 20 to bound memory usage.  50 calls > 20 cap, so the
     # correct post-condition is that the history is exactly at the cap.
-    assert health["latency_history_size"] == failover._max_history, \
-        f"Race condition: expected {failover._max_history} latencies (max_history cap), got {health['latency_history_size']}"
+    assert health["latency_history_size"] == failover._max_history, (
+        f"Race condition: expected {failover._max_history} latencies (max_history cap), "
+        f"got {health['latency_history_size']}"
+    )
 
     # Also verify the tracker wasn't corrupted
     assert failover._latency_tracker[0], "Latency tracker should not be empty"
@@ -57,6 +60,7 @@ async def test_warn_2_1_latency_tracker_race():
 # =============================================================================
 # WARN-2.5: Background Task Shutdown Race
 # =============================================================================
+
 
 @pytest.mark.asyncio
 async def test_warn_2_5_background_task_shutdown_race():
@@ -103,16 +107,19 @@ async def test_warn_2_5_background_task_shutdown_race():
     # EXPECTED: Most/all of the 10 messages plus initial "*" processed
     # ACTUAL (with race): Fewer messages processed due to early flag exit
     # This assertion will FAIL without the fix
-    assert processed_count[0] >= 6, \
-        f"Race condition in shutdown: only {processed_count[0]} messages processed before forced exit"
+    assert processed_count[0] >= 6, (
+        f"Race condition in shutdown: only {processed_count[0]} messages processed before exit"
+    )
 
 
 # =============================================================================
 # WARN-2.9: Type Validation Missing
 # =============================================================================
 
+
 class ValidSchema(BaseModel):
     """Valid Pydantic model for testing."""
+
     name: str
     value: int
 
@@ -124,9 +131,7 @@ async def test_warn_2_9_type_validation_missing():
     PromptedStrategy accepts output_type but doesn't validate it's a BaseModel.
     """
     mock_provider = AsyncMock()
-    mock_provider.complete.return_value = LLMResponse(
-        content='{"name": "test", "value": 42}'
-    )
+    mock_provider.complete.return_value = LLMResponse(content='{"name": "test", "value": 42}')
 
     strategy = PromptedStrategy()
 
@@ -143,13 +148,15 @@ async def test_warn_2_9_type_validation_missing():
         pytest.fail("Should have raised ValueError for invalid output_type")
     except AttributeError as e:
         # This is the ACTUAL error we get without the fix
-        assert "model_json_schema" in str(e), \
+        assert "model_json_schema" in str(e), (
             f"Got AttributeError but not for model_json_schema: {e}"
+        )
         print(f"WARN-2.9 confirmed: {e}")
     except (ValueError, TypeError) as e:
         # This is what we EXPECT with the fix
-        assert "output_type" in str(e).lower() or "basemodel" in str(e).lower(), \
+        assert "output_type" in str(e).lower() or "basemodel" in str(e).lower(), (
             f"Expected validation error, got: {e}"
+        )
 
     # Test 2: Valid output_type
     result = await strategy.execute(

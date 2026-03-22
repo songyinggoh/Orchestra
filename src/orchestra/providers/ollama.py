@@ -157,9 +157,7 @@ class OllamaProvider:
             body["max_tokens"] = max_tokens
 
         try:
-            async with self._client.stream(
-                "POST", "/chat/completions", json=body
-            ) as response:
+            async with self._client.stream("POST", "/chat/completions", json=body) as response:
                 if response.status_code != 200:
                     text = ""
                     async for chunk in response.aiter_text():
@@ -238,9 +236,7 @@ class OllamaProvider:
         except httpx.ConnectError:
             return []
 
-    async def _request_with_retry(
-        self, model: str, body: dict[str, Any]
-    ) -> dict[str, Any]:
+    async def _request_with_retry(self, model: str, body: dict[str, Any]) -> dict[str, Any]:
         """Make HTTP request with retry logic, wrapping connection errors."""
         last_error: Exception | None = None
 
@@ -282,9 +278,7 @@ class OllamaProvider:
 
         raise last_error or ProviderError("Request failed after retries")
 
-    def _handle_error_status(
-        self, status_code: int, text: str, model: str
-    ) -> None:
+    def _handle_error_status(self, status_code: int, text: str, model: str) -> None:
         """Convert HTTP error status to Orchestra exception."""
         if status_code == 404:
             lower = text.lower()
@@ -294,10 +288,7 @@ class OllamaProvider:
                     f"  Response: {text[:200]}\n"
                     f"  Fix: Run `ollama pull {model}` to download the model."
                 )
-            raise ProviderError(
-                f"Not found (404).\n"
-                f"  Response: {text[:200]}"
-            )
+            raise ProviderError(f"Not found (404).\n  Response: {text[:200]}")
         elif status_code == 400:
             raise ProviderError(
                 f"Bad request (400).\n"
@@ -307,19 +298,14 @@ class OllamaProvider:
             )
         elif status_code == 500:
             raise ProviderUnavailableError(
-                f"Ollama internal error (500).\n"
-                f"  Response: {text[:200]}"
+                f"Ollama internal error (500).\n  Response: {text[:200]}"
             )
         elif status_code >= 500:
             raise ProviderUnavailableError(
-                f"Ollama server error ({status_code}).\n"
-                f"  Response: {text[:200]}"
+                f"Ollama server error ({status_code}).\n  Response: {text[:200]}"
             )
         else:
-            raise ProviderError(
-                f"HTTP {status_code}.\n"
-                f"  Response: {text[:200]}"
-            )
+            raise ProviderError(f"HTTP {status_code}.\n  Response: {text[:200]}")
 
     def _parse_response(self, data: dict[str, Any], model: str) -> LLMResponse:
         """Parse OpenAI-compatible Ollama response into LLMResponse."""

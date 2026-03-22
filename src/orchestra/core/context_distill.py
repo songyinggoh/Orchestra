@@ -90,7 +90,7 @@ def distill_context(
     # Wrap summary as a single assistant message (same type as input)
     summary_msg = _make_summary_message(messages[0], summary_text)
 
-    return prefix + [summary_msg] + suffix
+    return [*prefix, summary_msg, *suffix]
 
 
 def full_passthrough(messages: list[Any]) -> list[Any]:
@@ -131,6 +131,7 @@ def _make_summary_message(template: Any, text: str) -> Any:
     # Try to construct a Message-like object
     try:
         from orchestra.core.types import Message, MessageRole
+
         return Message(role=MessageRole.ASSISTANT, content=text)
     except Exception:
         # Fallback to dict if types unavailable

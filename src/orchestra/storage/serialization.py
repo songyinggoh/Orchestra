@@ -3,6 +3,7 @@
 Provides JSON and JSONL roundtrip for all event types using
 Pydantic's discriminated union via TypeAdapter.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -10,7 +11,6 @@ from typing import Any
 from pydantic import TypeAdapter
 
 from orchestra.storage.events import AnyEvent, WorkflowEvent
-
 
 # TypeAdapter for the discriminated union -- handles polymorphic deserialization
 _event_adapter = TypeAdapter(AnyEvent)

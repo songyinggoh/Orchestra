@@ -45,9 +45,8 @@ async def test_concurrent_runs_no_state_corruption():
     # We check if each run produced the correct result *for itself*.
     # A true race condition would likely corrupt the internal state of the
     # reducers, leading to an incorrect final count.
-    
+
     for result in results:
         # Each run consists of two agents, each incrementing the count by 1.
         # So the final count for each independent run should be 2.
         assert result.state["count"] == 2
-

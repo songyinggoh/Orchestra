@@ -78,7 +78,7 @@ class CostAggregator:
 
     def _dispatch(self, event: Any) -> None:
         """Route event to the appropriate handler."""
-        from orchestra.storage.events import LLMCalled, ExecutionCompleted
+        from orchestra.storage.events import ExecutionCompleted, LLMCalled
 
         if isinstance(event, LLMCalled):
             self._on_llm_called(event)

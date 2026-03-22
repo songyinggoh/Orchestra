@@ -11,7 +11,6 @@ import ast
 import importlib.util
 import sys
 from pathlib import Path
-from typing import Any
 
 import structlog
 

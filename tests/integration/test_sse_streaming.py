@@ -7,7 +7,6 @@ They are skipped automatically if dependencies are not installed.
 from __future__ import annotations
 
 import asyncio
-import json
 import time
 from typing import Any
 
@@ -75,11 +74,11 @@ def _parse_sse_events(raw: str) -> list[dict[str, str]]:
     for line in raw.splitlines():
         line = line.strip()
         if line.startswith("event:"):
-            current["event"] = line[len("event:"):].strip()
+            current["event"] = line[len("event:") :].strip()
         elif line.startswith("data:"):
-            current["data"] = line[len("data:"):].strip()
+            current["data"] = line[len("data:") :].strip()
         elif line.startswith("id:"):
-            current["id"] = line[len("id:"):].strip()
+            current["id"] = line[len("id:") :].strip()
         elif line == "" and current:
             events.append(current)
             current = {}

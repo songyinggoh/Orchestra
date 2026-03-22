@@ -30,7 +30,7 @@ import asyncio
 from typing import Any
 
 import structlog
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 logger = structlog.get_logger(__name__)
 
@@ -45,11 +45,11 @@ class FactScoreResult(BaseModel):
 
     topic: str
     response: str
-    factscore: float             # 0.0–1.0, fraction of supported atomic facts
-    init_score: float            # FActScore without length penalty
-    hallucination_risk: str      # "low" | "medium" | "high"
-    num_facts: float             # average atomic facts per response
-    respond_ratio: float         # fraction of responses that were not abstentions
+    factscore: float  # 0.0-1.0, fraction of supported atomic facts
+    init_score: float  # FActScore without length penalty
+    hallucination_risk: str  # "low" | "medium" | "high"
+    num_facts: float  # average atomic facts per response
+    respond_ratio: float  # fraction of responses that were not abstentions
     knowledge_source: str = ""
 
     model_config = {"arbitrary_types_allowed": True}
@@ -220,7 +220,7 @@ class FactScoreChecker:
         decisions = raw.get("decisions", [])
 
         results: list[FactScoreResult] = []
-        for i, (topic, response) in enumerate(zip(topics, responses)):
+        for i, (topic, response) in enumerate(zip(topics, responses, strict=False)):
             if decisions and i < len(decisions) and decisions[i] is not None:
                 item_facts = decisions[i]
                 supported = sum(1 for f in item_facts if f.get("is_supported", False))

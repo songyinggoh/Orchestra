@@ -37,11 +37,11 @@ jobs:
         uses: helm/chart-testing-action@v2.6.1
 
       - name: Run chart-testing (lint)
-        run: ct lint --target-branch main --chart-dirs deploy/helm/
+        run: ct lint --target-branch master --chart-dirs deploy/helm/
 
   helm-install:
     name: Helm Install (KinD)
-    # Only deploy on push to main — not on every PR
+    # Only deploy on push to master — not on every PR
     if: github.event_name == 'push'
     needs: [helm-lint]
     runs-on: ubuntu-latest
@@ -78,4 +78,4 @@ jobs:
           kind load docker-image orchestra-agents/worker:latest --name orchestra-kind
 
       - name: Run chart-testing (install)
-        run: ct install --target-branch main --chart-dirs deploy/helm/ --namespace orchestra-test
+        run: ct install --target-branch master --chart-dirs deploy/helm/ --namespace orchestra-test

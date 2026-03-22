@@ -13,15 +13,17 @@ string messages for files that failed to import.
 
 from __future__ import annotations
 
-import pytest
 from pathlib import Path
 
+import pytest
+
 try:
+    from orchestra.discovery.errors import DuplicateToolError
     from orchestra.discovery.tool_discovery import (
         _ast_has_tool_decorator,
         discover_tools,
     )
-    from orchestra.discovery.errors import DuplicateToolError
+
     _IMPORT_OK = True
 except ImportError:
     _IMPORT_OK = False
@@ -31,6 +33,7 @@ except ImportError:
 
 try:
     from orchestra.tools.base import ToolWrapper
+
     _TOOL_OK = True
 except ImportError:
     _TOOL_OK = False
@@ -141,7 +144,7 @@ async def some_tool(x: str) -> str:
 """,
             encoding="utf-8",
         )
-        result, errors = discover_tools(tools_dir)
+        result, _errors = discover_tools(tools_dir)
         assert isinstance(result["some_tool"], ToolWrapper)
 
     def test_discover_tools_custom_name(self, tmp_path: Path):
@@ -169,7 +172,7 @@ async def fetch_url(url: str) -> str:
         tools_dir.mkdir()
         (tools_dir / "readme.txt").write_text("not python", encoding="utf-8")
         (tools_dir / "config.yaml").write_text("key: value", encoding="utf-8")
-        result, errors = discover_tools(tools_dir)
+        result, _errors = discover_tools(tools_dir)
         assert result == {}
 
     def test_discover_tools_multiple_tools_one_file(self, tmp_path: Path):
@@ -216,7 +219,7 @@ async def hidden(x: str) -> str:
 """,
             encoding="utf-8",
         )
-        result, errors = discover_tools(tools_dir)
+        result, _errors = discover_tools(tools_dir)
         assert result == {}
 
     def test_skips_dunder_init(self, tmp_path: Path):
@@ -233,7 +236,7 @@ async def pkg_tool(x: str) -> str:
 """,
             encoding="utf-8",
         )
-        result, errors = discover_tools(tools_dir)
+        result, _errors = discover_tools(tools_dir)
         assert result == {}
 
     def test_skips_file_without_tool_decorator(self, tmp_path: Path):
@@ -269,7 +272,7 @@ async def format_text(text: str) -> str:
 """,
             encoding="utf-8",
         )
-        result, errors = discover_tools(tools_dir)
+        result, _errors = discover_tools(tools_dir)
         assert "format_text" in result
 
     def test_deeply_nested_tool_discovered(self, tmp_path: Path):
@@ -287,7 +290,7 @@ async def deep_search(q: str) -> str:
 """,
             encoding="utf-8",
         )
-        result, errors = discover_tools(tools_dir)
+        result, _errors = discover_tools(tools_dir)
         assert "deep_search" in result
 
 

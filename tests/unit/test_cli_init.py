@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import pytest
 from pathlib import Path
+
 from typer.testing import CliRunner
 
 from orchestra.cli.main import app

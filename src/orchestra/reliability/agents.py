@@ -46,8 +46,8 @@ from pydantic import BaseModel, Field
 
 from orchestra.core.agent import BaseAgent
 from orchestra.core.context import ExecutionContext
-from orchestra.core.types import AgentResult, Message, MessageRole, TokenUsage
-from orchestra.reliability.selfcheck import SelfCheckMethod, SelfCheckResult, SelfChecker
+from orchestra.core.types import AgentResult, Message, MessageRole
+from orchestra.reliability.selfcheck import SelfChecker, SelfCheckMethod, SelfCheckResult
 
 logger = structlog.get_logger(__name__)
 
@@ -111,7 +111,7 @@ class SelfCheckAgent(BaseAgent):
     selfcheck_samples: int = 3
     selfcheck_temperature: float = 1.0
     selfcheck_device: str = "cpu"
-    retry_on_high_risk: bool = False   # retry once if risk is "high"
+    retry_on_high_risk: bool = False  # retry once if risk is "high"
 
     model_config = {"arbitrary_types_allowed": True}
 
@@ -176,12 +176,9 @@ class SelfCheckAgent(BaseAgent):
             "method": sc_result.method,
             "num_samples": sc_result.num_samples,
             "num_sentences": len(sc_result.sentences),
-            "flagged": [
-                s.sentence for s in sc_result.sentences if s.score > 0.5
-            ],
+            "flagged": [s.sentence for s in sc_result.sentences if s.score > 0.5],
             "sentence_scores": [
-                {"sentence": s.sentence, "score": round(s.score, 4)}
-                for s in sc_result.sentences
+                {"sentence": s.sentence, "score": round(s.score, 4)} for s in sc_result.sentences
             ],
         }
 
@@ -196,9 +193,7 @@ class SelfCheckAgent(BaseAgent):
             token_usage=result.token_usage,
         )
 
-    def _build_sampling_messages(
-        self, input: str | list[Message]
-    ) -> list[Message]:
+    def _build_sampling_messages(self, input: str | list[Message]) -> list[Message]:
         """Build messages list for re-sampling (system + user only)."""
         msgs = [Message(role=MessageRole.SYSTEM, content=self.system_prompt)]
         if isinstance(input, str):
@@ -243,8 +238,8 @@ class SessionAuditorAgent(BaseAgent):
     selfcheck_samples: int = 3
     selfcheck_temperature: float = 1.0
     selfcheck_device: str = "cpu"
-    audited_agent_key: str = "output"    # state key → response to audit
-    messages_key: str = "messages"       # state key → original messages
+    audited_agent_key: str = "output"  # state key → response to audit
+    messages_key: str = "messages"  # state key → original messages
 
     model_config = {"arbitrary_types_allowed": True}
 
@@ -269,9 +264,7 @@ class SessionAuditorAgent(BaseAgent):
             if isinstance(input, list):
                 original_messages = input
             elif isinstance(input, str) and input:
-                original_messages = [
-                    Message(role=MessageRole.USER, content=input)
-                ]
+                original_messages = [Message(role=MessageRole.USER, content=input)]
 
         checker = SelfChecker(
             method=self.selfcheck_method,
@@ -362,16 +355,12 @@ def make_selfcheck_node(
         device=device,
     )
 
-    async def selfcheck_node(
-        state: dict[str, Any], context: ExecutionContext
-    ) -> dict[str, Any]:
+    async def selfcheck_node(state: dict[str, Any], context: ExecutionContext) -> dict[str, Any]:
         response: str = state.get(response_key, "")
         messages: list[Message] = state.get(messages_key, [])
 
         if not response:
-            logger.warning(
-                "selfcheck_node_empty_response", response_key=response_key
-            )
+            logger.warning("selfcheck_node_empty_response", response_key=response_key)
             return state
 
         sc_result = await checker.check(
@@ -388,9 +377,7 @@ def make_selfcheck_node(
                 "method": sc_result.method,
                 "num_samples": sc_result.num_samples,
                 "num_sentences": len(sc_result.sentences),
-                "flagged": [
-                    s.sentence for s in sc_result.sentences if s.score > 0.5
-                ],
+                "flagged": [s.sentence for s in sc_result.sentences if s.score > 0.5],
                 "sentence_scores": [
                     {"sentence": s.sentence, "score": round(s.score, 4)}
                     for s in sc_result.sentences

@@ -6,4 +6,4 @@ from orchestra.cache.backends import (
     InMemoryCacheBackend,
 )
 
-__all__ = ["CacheBackend", "InMemoryCacheBackend", "DiskCacheBackend"]
+__all__ = ["CacheBackend", "DiskCacheBackend", "InMemoryCacheBackend"]

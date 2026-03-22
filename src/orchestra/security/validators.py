@@ -48,9 +48,7 @@ class MaxLengthGuardrail:
         if len(text) <= self._max_length:
             return GuardrailResult(passed=True, output=text)
 
-        violation_msg = (
-            f"Text length {len(text)} exceeds maximum {self._max_length}"
-        )
+        violation_msg = f"Text length {len(text)} exceeds maximum {self._max_length}"
         violation = GuardrailViolation(self.name, violation_msg)
 
         if self._on_fail == OnFail.FIX:
@@ -109,13 +107,9 @@ class RegexGuardrail:
 
         # Violation
         if self._must_match:
-            violation_msg = (
-                f"Text does not match required pattern: {self._pattern.pattern}"
-            )
+            violation_msg = f"Text does not match required pattern: {self._pattern.pattern}"
         else:
-            violation_msg = (
-                f"Text matches forbidden pattern: {self._pattern.pattern}"
-            )
+            violation_msg = f"Text matches forbidden pattern: {self._pattern.pattern}"
 
         return GuardrailResult(
             passed=False,
@@ -139,9 +133,7 @@ class PIIRedactionGuardrail:
     # Fallback regex patterns when Presidio is not available
     _FALLBACK_PATTERNS: dict[str, re.Pattern[str]] = {
         "email": re.compile(r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+"),
-        "phone": re.compile(
-            r"\b(?:\+?(\d{1,3}))?[-. (]*(\d{3})[-. )]*(\d{3})[-. ]*(\d{4})\b"
-        ),
+        "phone": re.compile(r"\b(?:\+?(\d{1,3}))?[-. (]*(\d{3})[-. )]*(\d{3})[-. ]*(\d{4})\b"),
         "ssn": re.compile(r"\b\d{3}-\d{2}-\d{4}\b"),
         "credit_card": re.compile(r"\b(?:\d[ -]*?){13,16}\b"),
     }
@@ -168,6 +160,7 @@ class PIIRedactionGuardrail:
         try:
             from presidio_analyzer import AnalyzerEngine  # type: ignore[import-untyped]
             from presidio_anonymizer import AnonymizerEngine  # type: ignore[import-untyped]
+
             self._analyzer = AnalyzerEngine()
             self._anonymizer = AnonymizerEngine()
             self._presidio_available = True
@@ -204,8 +197,7 @@ class PIIRedactionGuardrail:
         violation_types = list({r.entity_type for r in results})
         violation_msg = f"PII detected: {', '.join(violation_types)}"
         violations = [
-            GuardrailViolation(self.name, f"PII detected: {r.entity_type}")
-            for r in results
+            GuardrailViolation(self.name, f"PII detected: {r.entity_type}") for r in results
         ]
 
         if self._on_fail == OnFail.FIX:
@@ -231,13 +223,9 @@ class PIIRedactionGuardrail:
 
         for pii_type, pattern in self._FALLBACK_PATTERNS.items():
             if pattern.search(text):
-                violations.append(
-                    GuardrailViolation(self.name, f"PII detected: {pii_type}")
-                )
+                violations.append(GuardrailViolation(self.name, f"PII detected: {pii_type}"))
                 if self._on_fail == OnFail.FIX:
-                    redacted_text = pattern.sub(
-                        self._REPLACEMENT_MAP[pii_type], redacted_text
-                    )
+                    redacted_text = pattern.sub(self._REPLACEMENT_MAP[pii_type], redacted_text)
 
         if not violations:
             return GuardrailResult(passed=True, output=text)

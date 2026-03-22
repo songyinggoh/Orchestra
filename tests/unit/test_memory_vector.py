@@ -19,12 +19,8 @@ Covers gaps left by the existing per-module unit tests:
 
 from __future__ import annotations
 
-import asyncio
-import importlib
 import json
-import sys
-from typing import Any
-from unittest.mock import AsyncMock, MagicMock, call, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import numpy as np
 import pytest
@@ -64,7 +60,7 @@ def _make_qdrant_client():
 
 class TestSLRUPolicyRemove:
     def test_remove_from_warm(self):
-        from orchestra.memory.tiers import SLRUPolicy, MemoryEntry
+        from orchestra.memory.tiers import MemoryEntry, SLRUPolicy
 
         policy = SLRUPolicy(hot_max=2, warm_max=2)
         policy.insert("k1", MemoryEntry("k1", "v1"))
@@ -75,7 +71,7 @@ class TestSLRUPolicyRemove:
         assert "k1" not in policy.hot_keys
 
     def test_remove_from_hot(self):
-        from orchestra.memory.tiers import SLRUPolicy, MemoryEntry
+        from orchestra.memory.tiers import MemoryEntry, SLRUPolicy
 
         policy = SLRUPolicy(hot_max=2, warm_max=2)
         policy.insert("k1", MemoryEntry("k1", "v1"))
@@ -93,7 +89,7 @@ class TestSLRUPolicyRemove:
 
     def test_remove_clears_from_both_tiers(self):
         """remove() must search both _hot and _warm, not just one."""
-        from orchestra.memory.tiers import SLRUPolicy, MemoryEntry
+        from orchestra.memory.tiers import MemoryEntry, SLRUPolicy
 
         policy = SLRUPolicy(hot_max=2, warm_max=2)
         policy.insert("k1", MemoryEntry("k1", "v1"))
@@ -109,7 +105,7 @@ class TestSLRUPolicyRemove:
 
 class TestSLRUPolicyReinsert:
     def test_reinsert_existing_warm_key_updates_value(self):
-        from orchestra.memory.tiers import SLRUPolicy, MemoryEntry, Tier
+        from orchestra.memory.tiers import MemoryEntry, SLRUPolicy
 
         policy = SLRUPolicy(hot_max=2, warm_max=2)
         policy.insert("k1", MemoryEntry("k1", "old"))
@@ -120,7 +116,7 @@ class TestSLRUPolicyReinsert:
         assert policy._warm["k1"].value == "new"
 
     def test_reinsert_existing_hot_key_updates_value(self):
-        from orchestra.memory.tiers import SLRUPolicy, MemoryEntry
+        from orchestra.memory.tiers import MemoryEntry, SLRUPolicy
 
         policy = SLRUPolicy(hot_max=2, warm_max=2)
         policy.insert("k1", MemoryEntry("k1", "old"))
@@ -134,7 +130,7 @@ class TestSLRUPolicyReinsert:
 class TestSLRUPolicyAccess:
     def test_access_hot_key_refreshes_lru_order(self):
         """Accessing a key already in HOT must move it to most-recently-used position."""
-        from orchestra.memory.tiers import SLRUPolicy, MemoryEntry
+        from orchestra.memory.tiers import MemoryEntry, SLRUPolicy
 
         policy = SLRUPolicy(hot_max=2, warm_max=2)
         policy.insert("k1", MemoryEntry("k1", "v1"))
@@ -164,7 +160,7 @@ class TestSLRUPolicyAccess:
         assert evictions == []
 
     def test_access_increments_access_count(self):
-        from orchestra.memory.tiers import SLRUPolicy, MemoryEntry
+        from orchestra.memory.tiers import MemoryEntry, SLRUPolicy
 
         policy = SLRUPolicy(hot_max=2, warm_max=2)
         policy.insert("k1", MemoryEntry("k1", "v1"))
@@ -176,7 +172,7 @@ class TestSLRUPolicyAccess:
 
 class TestSLRUPolicyEvictionsDue:
     def test_evictions_due_empty_when_within_capacity(self):
-        from orchestra.memory.tiers import SLRUPolicy, MemoryEntry
+        from orchestra.memory.tiers import MemoryEntry, SLRUPolicy
 
         policy = SLRUPolicy(hot_max=3, warm_max=3)
         for i in range(3):
@@ -186,7 +182,7 @@ class TestSLRUPolicyEvictionsDue:
 
     def test_evictions_due_returns_cold_evictions_when_warm_over_capacity(self):
         """When WARM is over capacity, evictions_due() must include COLD entries."""
-        from orchestra.memory.tiers import SLRUPolicy, MemoryEntry, Tier
+        from orchestra.memory.tiers import MemoryEntry, SLRUPolicy, Tier
 
         # warm_max=1: insert two items so WARM has 2 entries — one must be evicted to COLD
         policy = SLRUPolicy(hot_max=10, warm_max=1)
@@ -269,8 +265,6 @@ class TestStateCompressorPayloads:
         original = comp_mod.HAS_PYZSTD
         comp_mod.HAS_PYZSTD = False
         try:
-            import zlib
-
             # Also patch pyzstd out of scope for compress/decompress
             with patch.object(comp_mod, "HAS_PYZSTD", False):
                 from orchestra.memory.compression import StateCompressor
@@ -355,7 +349,7 @@ class TestSemanticDeduplicatorThreshold:
         # Construct new vector with cosine sim exactly 0.90 to existing[0]
         new_vec = np.zeros((1, 256))
         new_vec[0, 0] = 0.90
-        new_vec[0, 1] = np.sqrt(1 - 0.90 ** 2)
+        new_vec[0, 1] = np.sqrt(1 - 0.90**2)
 
         with patch.object(dedup, "embed", return_value=new_vec):
             is_dup, key = await dedup.is_duplicate("text", existing, ["k0"])
@@ -374,7 +368,7 @@ class TestSemanticDeduplicatorThreshold:
         # cosine sim ≈ 0.97 — below the threshold
         new_vec = np.zeros((1, 256))
         new_vec[0, 0] = 0.97
-        new_vec[0, 1] = np.sqrt(1 - 0.97 ** 2)
+        new_vec[0, 1] = np.sqrt(1 - 0.97**2)
 
         with patch.object(dedup, "embed", return_value=new_vec):
             is_dup, key = await dedup.is_duplicate("text", existing, ["k0"])
@@ -508,7 +502,7 @@ class TestTieredMemoryManagerDemote:
     @pytest.mark.asyncio
     async def test_demote_with_no_cold_backend_is_noop(self):
         """demote() to COLD when no cold backend is configured must not raise."""
-        from orchestra.memory.tiers import TieredMemoryManager, Tier
+        from orchestra.memory.tiers import Tier, TieredMemoryManager
 
         mgr = TieredMemoryManager(hot_max=2, warm_max=2)
         await mgr.store("k1", "v1")
@@ -518,7 +512,7 @@ class TestTieredMemoryManagerDemote:
     @pytest.mark.asyncio
     async def test_demote_nonexistent_key_is_noop(self):
         """demote() on a key absent from all tiers must not call cold.store."""
-        from orchestra.memory.tiers import TieredMemoryManager, Tier
+        from orchestra.memory.tiers import Tier, TieredMemoryManager
 
         mock_cold = AsyncMock()
         mock_warm = AsyncMock()
@@ -537,7 +531,7 @@ class TestTieredMemoryManagerPromote:
     @pytest.mark.asyncio
     async def test_promote_to_hot_moves_item_to_hot(self):
         """promote(key, HOT) must pull the item into the HOT tier."""
-        from orchestra.memory.tiers import TieredMemoryManager, Tier
+        from orchestra.memory.tiers import Tier, TieredMemoryManager
 
         mgr = TieredMemoryManager(hot_max=2, warm_max=2)
         await mgr.store("k1", "v1")
@@ -629,9 +623,7 @@ class TestVectorStoreRetrieve:
         assert result is None
 
     @pytest.mark.asyncio
-    async def test_retrieve_json_fallback_when_no_compressor_no_compressed_value(
-        self, pool_conn
-    ):
+    async def test_retrieve_json_fallback_when_no_compressor_no_compressed_value(self, pool_conn):
         """When compressed_value is absent and no compressor, content is JSON-decoded."""
         from orchestra.memory.vector_store import VectorStore
 
@@ -665,8 +657,8 @@ class TestVectorStoreRetrieve:
     @pytest.mark.asyncio
     async def test_retrieve_decompresses_when_compressor_present(self, pool_conn):
         """When a compressor is available and compressed_value is set, decompress."""
-        from orchestra.memory.vector_store import VectorStore
         from orchestra.memory.compression import StateCompressor
+        from orchestra.memory.vector_store import VectorStore
 
         pool, conn = pool_conn
         compressor = StateCompressor()
@@ -746,9 +738,7 @@ class TestVectorStoreSearch:
         conn.fetch.return_value = []
         store = VectorStore(pool, agent_id="a1")
 
-        await store.search(
-            embedding=[0.1] * 256, filter_metadata={"session_id": "xyz"}
-        )
+        await store.search(embedding=[0.1] * 256, filter_metadata={"session_id": "xyz"})
 
         sql = conn.fetch.call_args[0][0]
         assert "@>" in sql or "metadata" in sql
@@ -837,9 +827,7 @@ class TestVectorStoreHybridSearch:
         conn.fetch.return_value = []
         store = VectorStore(pool, agent_id="a1")
 
-        await store.hybrid_search(
-            query_text="q", query_embedding=[0.0] * 256, bm25_weight=0.5
-        )
+        await store.hybrid_search(query_text="q", query_embedding=[0.0] * 256, bm25_weight=0.5)
 
         args = conn.fetch.call_args[0]
         assert 0.5 in args
@@ -853,9 +841,7 @@ class TestVectorStoreHybridSearch:
         conn.fetch.return_value = []
         store = VectorStore(pool, agent_id="default")
 
-        await store.hybrid_search(
-            query_text="q", query_embedding=[0.0] * 256, agent_id="override"
-        )
+        await store.hybrid_search(query_text="q", query_embedding=[0.0] * 256, agent_id="override")
 
         args = conn.fetch.call_args[0]
         assert "override" in args
@@ -869,9 +855,7 @@ class TestVectorStoreHybridSearch:
         conn.fetch.return_value = [{"key": "k1", "score": 0.016}]
         store = VectorStore(pool, agent_id="a1")
 
-        results = await store.hybrid_search(
-            query_text="q", query_embedding=[0.0] * 256
-        )
+        results = await store.hybrid_search(query_text="q", query_embedding=[0.0] * 256)
         assert len(results) == 1
         assert isinstance(results[0][1], float)
 
@@ -1020,9 +1004,7 @@ class TestQdrantEnsureInitialized:
         mock_client = _make_qdrant_client()
         existing = MagicMock()
         existing.name = "existing_col"
-        mock_client.get_collections.return_value = MagicMock(
-            collections=[existing]
-        )
+        mock_client.get_collections.return_value = MagicMock(collections=[existing])
         with patch(
             "orchestra.memory.qdrant_backend.AsyncQdrantClient",
             return_value=mock_client,
@@ -1110,7 +1092,7 @@ class TestQdrantProtocolConformance:
 
 class TestCreateTieredMemoryFactory:
     def test_no_args_returns_manager_with_no_backends(self):
-        from orchestra.memory.tiers import create_tiered_memory, TieredMemoryManager
+        from orchestra.memory.tiers import TieredMemoryManager, create_tiered_memory
 
         mgr = create_tiered_memory()
         assert isinstance(mgr, TieredMemoryManager)
@@ -1125,8 +1107,8 @@ class TestCreateTieredMemoryFactory:
         via ``from orchestra.memory.backends import RedisMemoryBackend``, so we
         patch the name at its usage site.
         """
-        from orchestra.memory.tiers import create_tiered_memory
         from orchestra.memory.backends import RedisMemoryBackend
+        from orchestra.memory.tiers import create_tiered_memory
 
         mock_instance = MagicMock(spec=RedisMemoryBackend)
 
@@ -1141,9 +1123,9 @@ class TestCreateTieredMemoryFactory:
     def test_with_pg_pool_wires_cold_backend_and_deduplicator(self):
         """Passing a pg_pool must wire a VectorStore as cold backend and a
         SemanticDeduplicator as deduplicator."""
+        from orchestra.memory.dedup import SemanticDeduplicator
         from orchestra.memory.tiers import create_tiered_memory
         from orchestra.memory.vector_store import VectorStore
-        from orchestra.memory.dedup import SemanticDeduplicator
 
         mock_pool = MagicMock()
         mgr = create_tiered_memory(pg_pool=mock_pool, agent_id="agent-x")
@@ -1174,7 +1156,7 @@ class TestCreateTieredMemoryFactory:
 
     def test_cold_backend_satisfies_protocol_when_pg_given(self):
         """The wired cold backend must satisfy the ColdTierBackend protocol."""
-        from orchestra.memory.tiers import create_tiered_memory, ColdTierBackend
+        from orchestra.memory.tiers import ColdTierBackend, create_tiered_memory
 
         mock_pool = MagicMock()
         mgr = create_tiered_memory(pg_pool=mock_pool)

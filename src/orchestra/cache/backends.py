@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from typing import Any, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 from orchestra.core.types import LLMResponse
 
@@ -39,11 +39,11 @@ class InMemoryCacheBackend:
     def __init__(self, maxsize: int = 1024, default_ttl: int = 3600) -> None:
         try:
             from cachetools import TTLCache
-        except ImportError:
+        except ImportError as err:
             raise ImportError(
                 "cachetools is required for InMemoryCacheBackend. "
                 "Install it with: pip install orchestra-agents[cache]"
-            )
+            ) from err
 
         self._cache: TTLCache[str, str] = TTLCache(maxsize=maxsize, ttl=default_ttl)
 
@@ -78,11 +78,11 @@ class DiskCacheBackend:
     ) -> None:
         try:
             from diskcache import Cache, JSONDisk
-        except ImportError:
+        except ImportError as err:
             raise ImportError(
                 "diskcache is required for DiskCacheBackend. "
                 "Install it with: pip install orchestra-agents[cache]"
-            )
+            ) from err
 
         # Use JSONDisk instead of the default pickle-based Disk to avoid
         # unsafe deserialization (CVE-2025-69872). Orchestra only stores JSON

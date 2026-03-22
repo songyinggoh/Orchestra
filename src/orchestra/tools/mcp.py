@@ -20,7 +20,12 @@ from pathlib import Path
 from typing import Any
 
 from orchestra.core.context import ExecutionContext
-from orchestra.core.errors import MCPConnectionError, MCPTimeoutError, MCPToolError, ToolNotFoundError
+from orchestra.core.errors import (
+    MCPConnectionError,
+    MCPTimeoutError,
+    MCPToolError,
+    ToolNotFoundError,
+)
 from orchestra.core.types import ToolResult
 
 logger = logging.getLogger(__name__)
@@ -75,14 +80,12 @@ class MCPToolAdapter:
                 self._session.call_tool(self.name, arguments),
                 timeout=self._timeout,
             )
-        except asyncio.TimeoutError as exc:
+        except TimeoutError as exc:
             raise MCPTimeoutError(
                 f"MCP tool '{self.name}' timed out after {self._timeout}s"
             ) from exc
         except Exception as exc:
-            raise MCPToolError(
-                f"MCP tool '{self.name}' call failed: {exc}"
-            ) from exc
+            raise MCPToolError(f"MCP tool '{self.name}' call failed: {exc}") from exc
 
         # Handle MCP error response
         if getattr(raw, "isError", False):
@@ -295,10 +298,8 @@ class MCPClient:
                 self._session.list_tools(),
                 timeout=self._timeout,
             )
-        except asyncio.TimeoutError as exc:
-            raise MCPTimeoutError(
-                f"list_tools() timed out after {self._timeout}s"
-            ) from exc
+        except TimeoutError as exc:
+            raise MCPTimeoutError(f"list_tools() timed out after {self._timeout}s") from exc
 
         self._tools = {
             tool.name: MCPToolAdapter(self._session, tool, timeout=self._timeout)

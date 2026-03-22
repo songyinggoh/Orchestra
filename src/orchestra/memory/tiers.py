@@ -37,7 +37,8 @@ def _log_task_exception(task: asyncio.Task) -> None:  # pragma: no cover
 
 class Tier(str, Enum):
     """Memory tiers by latency and persistence."""
-    HOT = "hot"    # In-process, <0.01ms
+
+    HOT = "hot"  # In-process, <0.01ms
     WARM = "warm"  # Redis L2, 0.5-2ms
     COLD = "cold"  # pgvector, 5-50ms
 
@@ -45,6 +46,7 @@ class Tier(str, Enum):
 @dataclass
 class MemoryEntry:
     """Metadata for a memory item."""
+
     key: str
     value: Any
     tier: Tier = Tier.HOT
@@ -57,6 +59,7 @@ class MemoryEntry:
 @dataclass(frozen=True)
 class TierStats:
     """Statistics for each tier."""
+
     hot_count: int
     warm_count: int
     cold_count: int
@@ -65,9 +68,17 @@ class TierStats:
 @runtime_checkable
 class ColdTierBackend(Protocol):
     """Protocol for cold tier storage (pgvector)."""
+
     async def store(self, key: str, value: Any, embedding: list[float] | None = None) -> None: ...
     async def retrieve(self, key: str) -> Any | None: ...
-    async def search(self, embedding: list[float], limit: int = 10, *, filter_metadata: dict | None = None, agent_id: str | None = None) -> list[tuple[str, float]]: ...
+    async def search(
+        self,
+        embedding: list[float],
+        limit: int = 10,
+        *,
+        filter_metadata: dict | None = None,
+        agent_id: str | None = None,
+    ) -> list[tuple[str, float]]: ...
     async def delete(self, key: str) -> None: ...
     async def count(self) -> int: ...
 
@@ -128,7 +139,7 @@ class SLRUPolicy:
             k, e = self._warm.popitem(last=False)
             e.tier = Tier.COLD
             evicted.append((k, Tier.COLD))
-            
+
         return evicted
 
     def remove(self, key: str) -> None:
@@ -282,7 +293,7 @@ class TieredMemoryManager(MemoryManager):
         """Explicitly promote an item."""
         if to_tier == Tier.HOT:
             await self.retrieve(key, promote=True)
-            
+
     async def demote(self, key: str, to_tier: Tier) -> None:
         """Explicitly demote an item."""
         if to_tier == Tier.COLD and self._cold:
@@ -341,9 +352,7 @@ class TieredMemoryManager(MemoryManager):
             try:
                 cold_count = await self._cold.count()
             except Exception:
-                _stdlib_logger.exception(
-                    "failed to retrieve cold-tier count; reporting 0"
-                )
+                _stdlib_logger.exception("failed to retrieve cold-tier count; reporting 0")
 
         async with self._policy_lock:
             hot_count = len(self._policy._hot)
@@ -366,35 +375,28 @@ def create_tiered_memory(
     pg_pool: Any | None = None,
     agent_id: str = "default",
     hot_max: int = 1000,
-    warm_max: int = 10000
+    warm_max: int = 10000,
 ) -> TieredMemoryManager:
     """Factory function for convenient tiered memory setup."""
-    from orchestra.memory.backends import RedisMemoryBackend, InMemoryMemoryBackend
-    
+    from orchestra.memory.backends import RedisMemoryBackend
+
     warm = None
     if redis_url:
         warm = RedisMemoryBackend(url=redis_url)
-    
+
     cold = None
     dedup = None
     if pg_pool:
-        from orchestra.memory.vector_store import VectorStore
-        from orchestra.memory.dedup import SemanticDeduplicator
         from orchestra.memory.compression import StateCompressor
-        
+        from orchestra.memory.dedup import SemanticDeduplicator
+        from orchestra.memory.vector_store import VectorStore
+
         compressor = StateCompressor()
         dedup = SemanticDeduplicator()
         cold = VectorStore(
-            pool=pg_pool, 
-            agent_id=agent_id, 
-            compressor=compressor, 
-            deduplicator=dedup
+            pool=pg_pool, agent_id=agent_id, compressor=compressor, deduplicator=dedup
         )
-        
+
     return TieredMemoryManager(
-        warm_backend=warm,
-        cold_backend=cold,
-        deduplicator=dedup,
-        hot_max=hot_max,
-        warm_max=warm_max
+        warm_backend=warm, cold_backend=cold, deduplicator=dedup, hot_max=hot_max, warm_max=warm_max
     )

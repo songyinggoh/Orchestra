@@ -1,4 +1,5 @@
 """Fixture tool file: web search tool."""
+
 from orchestra.tools.base import tool
 
 

@@ -14,9 +14,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
-
-    from orchestra.core.types import Message
+    pass
 
 # EdgeCondition is any callable that takes state dict and returns a bool or route.
 EdgeCondition = "Callable[[dict[str, Any]], Any]"
@@ -47,7 +45,7 @@ class HandoffPayload:
         conversation_history: list[Any],
         metadata: dict[str, Any] | None = None,
         distilled: bool = False,
-    ) -> "HandoffPayload":
+    ) -> HandoffPayload:
         """Convenience constructor from mutable Python types."""
         return cls(
             from_agent=from_agent,

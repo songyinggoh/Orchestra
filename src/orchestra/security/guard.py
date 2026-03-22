@@ -1,27 +1,27 @@
 """Integrated security guard for prompt injection and capability attenuation (T-4.10).
 
-Combines Rebuff (detection) with CapabilityAttenuator (mitigation) 
+Combines Rebuff (detection) with CapabilityAttenuator (mitigation)
 and post-execution output scanning for secrets/PII leaks.
 """
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 import structlog
-from typing import Any, Sequence
 
 from orchestra.core.context import ExecutionContext
-from orchestra.core.types import AgentResult, Message, MessageRole
+from orchestra.core.types import AgentResult, MessageRole
 from orchestra.identity.types import UCANCapability
 from orchestra.security.attenuation import CapabilityAttenuator
-from orchestra.security.rebuff import RebuffChecker, InjectionReport
-
+from orchestra.security.rebuff import RebuffChecker
 
 logger = structlog.get_logger(__name__)
 
 
 class PromptShieldGuard:
     """Orchestrates multi-layer security for an agent execution.
-    
+
     Layers:
       1. Pre-execution: Rebuff scan for injection.
       2. Dynamic: Attenuate capabilities if risk is detected.
@@ -43,7 +43,7 @@ class PromptShieldGuard:
         self,
         context: ExecutionContext,
         user_input: str,
-        base_capabilities: Sequence[UCANCapability]
+        base_capabilities: Sequence[UCANCapability],
     ) -> list[UCANCapability]:
         """Check for injection and return allowed (potentially attenuated) capabilities."""
         if not self._checker:
@@ -66,6 +66,7 @@ class PromptShieldGuard:
         # (isinstance check) rather than string-matching violation_type.
         if not was_restricted and context.restricted_mode and context.event_bus is not None:
             from orchestra.storage.events import RestrictedModeEntered
+
             await context.event_bus.emit(
                 RestrictedModeEntered(
                     run_id=context.run_id,
@@ -79,9 +80,7 @@ class PromptShieldGuard:
         return self._attenuator.get_allowed_capabilities(context, base_capabilities)
 
     async def post_execute_scan(
-        self,
-        context: ExecutionContext,
-        result: AgentResult
+        self, context: ExecutionContext, result: AgentResult
     ) -> AgentResult:
         """Scan agent output for anomalies or leaks."""
         if not context.restricted_mode:
@@ -94,12 +93,13 @@ class PromptShieldGuard:
             logger.error("secret_leak_detected_in_restricted_mode", run_id=context.run_id)
             result.output = "[REDACTED] Output blocked due to potential security leak."
             result.state_updates["security_violation"] = "leaked_secret_in_restricted_mode"
-            
+
         return result
 
 
 def make_security_guard_middleware(guard: PromptShieldGuard):
     """Factory for middleware that applies PromptShieldGuard to every run."""
+
     async def security_middleware(run_func, input, context):
         # 1. Identify user input
         user_text = ""
@@ -112,14 +112,14 @@ def make_security_guard_middleware(guard: PromptShieldGuard):
         # Note: In a real system, base_caps would come from the context's UCAN
         base_caps = getattr(context, "capabilities", [])
         allowed_caps = await guard.pre_execute_scan(context, user_text, base_caps)
-        
+
         # Override context capabilities for this run
         context.capabilities = allowed_caps
-        
+
         # 3. Execute
         result = await run_func(input, context)
-        
+
         # 4. Post-scan
         return await guard.post_execute_scan(context, result)
-        
+
     return security_middleware

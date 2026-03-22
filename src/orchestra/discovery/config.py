@@ -61,7 +61,7 @@ class SecuritySection(BaseModel):
 
     model_config = {"extra": "forbid"}
 
-    allowed_imports: list[str] = Field(default_factory=lambda: ["lib."])
+    allowed_imports: list[str] = Field(default_factory=list)
 
 
 class ProjectConfig(BaseModel):

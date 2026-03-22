@@ -11,7 +11,7 @@ if TYPE_CHECKING:
 
 
 def rag_tool(
-    memory_manager: "TieredMemoryManager",
+    memory_manager: TieredMemoryManager,
     *,
     name: str = "search_memory",
     description: str | None = None,

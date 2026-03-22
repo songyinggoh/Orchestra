@@ -48,9 +48,7 @@ async def stream_run_events(run_id: str, request: Request) -> Any:
 
         # Replay missed events from store
         if after_sequence >= 0:
-            stored_events = await event_store.get_events(
-                run_id, after_sequence=after_sequence
-            )
+            stored_events = await event_store.get_events(run_id, after_sequence=after_sequence)
             for evt in stored_events:
                 yield {
                     "event": evt.event_type.value,
@@ -64,7 +62,7 @@ async def stream_run_events(run_id: str, request: Request) -> Any:
                 event = await asyncio.wait_for(
                     active_run.event_queue.get(), timeout=heartbeat_interval
                 )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 # Send heartbeat as SSE comment
                 yield {"event": "ping", "data": "", "id": ""}
                 continue

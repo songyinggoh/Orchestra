@@ -52,6 +52,7 @@ class FunctionNode:
 
     async def __call__(self, state: dict[str, Any]) -> dict[str, Any]:
         import inspect
+
         result = self.func(state)
         if inspect.isawaitable(result):
             return await result

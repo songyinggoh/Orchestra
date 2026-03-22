@@ -8,6 +8,8 @@ Usage:
 
 from __future__ import annotations
 
+import re
+
 import typer
 from rich.console import Console
 
@@ -38,6 +40,13 @@ def init(
     and orchestra.yaml configuration. Run ``orchestra up`` to start.
     """
     from pathlib import Path
+
+    if not re.match(r'^[a-zA-Z0-9][a-zA-Z0-9_-]*$', project_name):
+        raise typer.BadParameter(
+            f"Invalid project name '{project_name}'. "
+            "Use only letters, numbers, hyphens, and underscores.",
+            param_hint="project_name",
+        )
 
     project_dir = Path(directory) / project_name
     project_dir.mkdir(parents=True, exist_ok=True)
@@ -142,8 +151,23 @@ def run(
     """Run a workflow file."""
     import importlib.util
     import sys
+    from pathlib import Path
 
-    spec = importlib.util.spec_from_file_location("workflow", workflow_file)
+    resolved = Path(workflow_file).resolve()
+    cwd = Path.cwd().resolve()
+    if not str(resolved).startswith(str(cwd) + "/") and resolved != cwd:
+        raise typer.BadParameter(
+            f"Path '{workflow_file}' is outside the project directory. "
+            f"Use a path within {cwd}.",
+            param_hint="workflow_file",
+        )
+    if resolved.suffix != ".py":
+        raise typer.BadParameter(
+            f"Workflow file must be a .py file, got: {resolved.suffix!r}",
+            param_hint="workflow_file",
+        )
+
+    spec = importlib.util.spec_from_file_location("workflow", resolved)
     if spec is None or spec.loader is None:
         console.print(f"[red]Error:[/red] Cannot load {workflow_file}")
         raise typer.Exit(1)
@@ -164,8 +188,10 @@ def run(
 @app.command()
 def resume(
     run_id: str = typer.Argument(..., help="Run ID of the interrupted workflow to resume"),
-    set_state: list[str] = typer.Option(
-        [], "--set", "-s",
+    set_state: list[str] = typer.Option(  # noqa: B008
+        [],
+        "--set",
+        "-s",
         help="State overrides as key=value pairs (e.g. --set approved=true)",
     ),
 ) -> None:
@@ -188,7 +214,6 @@ def resume(
 
     async def _resume() -> None:
         from orchestra.core.graph import WorkflowGraph
-        from orchestra.core.compiled import CompiledGraph
 
         # Build a minimal CompiledGraph with no nodes -- resume() only needs the store
         graph = WorkflowGraph()
@@ -203,7 +228,7 @@ def resume(
             console.print(f"Final state: {final_state}")
         except Exception as exc:
             console.print(f"[red]Error:[/red] {exc}")
-            raise typer.Exit(1)
+            raise typer.Exit(1) from exc
 
     asyncio.run(_resume())
 
@@ -223,7 +248,7 @@ def serve(
     except ImportError:
         console.print("[red]Error:[/red] Server dependencies not installed.")
         console.print("Install with: pip install orchestra-agents[server]")
-        raise typer.Exit(1)
+        raise typer.Exit(1)  # noqa: B904
 
     config = ServerConfig(host=host, port=port)
     app_instance = create_app(config)
@@ -258,7 +283,7 @@ def up(
     except ImportError:
         console.print("[red]Error:[/red] Server dependencies not installed.")
         console.print("Install with: pip install orchestra-agents[server]")
-        raise typer.Exit(1)
+        raise typer.Exit(1)  # noqa: B904
 
     from orchestra.discovery.scanner import ProjectScanner
 
@@ -327,7 +352,8 @@ def validate(
     and reports any errors. Exits non-zero if problems are found.
     """
     from pathlib import Path
-    from orchestra.discovery.validation import validate_project, format_validation_report
+
+    from orchestra.discovery.validation import format_validation_report, validate_project
 
     root = Path(project_dir).resolve()
     result = validate_project(root)

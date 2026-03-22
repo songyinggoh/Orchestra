@@ -43,9 +43,6 @@ from typing import Any
 import pytest
 
 try:
-    import httpx
-    from fastapi.testclient import TestClient
-
     HAS_SERVER_DEPS = True
 except ImportError:
     HAS_SERVER_DEPS = False
@@ -141,22 +138,20 @@ class TestProjectScannerLayer:
 
     def test_scan_minimal_project_finds_workflow(self, tmp_path: Path) -> None:
         """A well-formed project produces one workflow with no errors."""
-        from orchestra.discovery.scanner import ProjectScanner
         from orchestra.core.compiled import CompiledGraph
+        from orchestra.discovery.scanner import ProjectScanner
 
         _write_minimal_project(tmp_path)
         result = ProjectScanner().scan(tmp_path)
 
         assert result.errors == [], f"Scanner errors: {result.errors}"
-        assert "hello" in result.workflows, (
-            f"Expected workflow 'hello' in {list(result.workflows)}"
-        )
+        assert "hello" in result.workflows, f"Expected workflow 'hello' in {list(result.workflows)}"
         assert isinstance(result.workflows["hello"], CompiledGraph)
 
     def test_scan_finds_agent(self, tmp_path: Path) -> None:
         """The scanner loads agent YAML and stores a BaseAgent by name."""
-        from orchestra.discovery.scanner import ProjectScanner
         from orchestra.core.agent import BaseAgent
+        from orchestra.discovery.scanner import ProjectScanner
 
         _write_minimal_project(tmp_path)
         result = ProjectScanner().scan(tmp_path)
@@ -165,9 +160,7 @@ class TestProjectScannerLayer:
         assert isinstance(result.agents["greeter"], BaseAgent)
         assert result.agents["greeter"].system_prompt == "Say hello."
 
-    def test_scan_workflow_is_compiledgraph_with_correct_structure(
-        self, tmp_path: Path
-    ) -> None:
+    def test_scan_workflow_is_compiledgraph_with_correct_structure(self, tmp_path: Path) -> None:
         """The compiled graph has the node and entry point declared in YAML."""
         from orchestra.discovery.scanner import ProjectScanner
 
@@ -187,9 +180,7 @@ class TestProjectScannerLayer:
 
         assert result.config.project.name == "smoke-test"
 
-    def test_scan_warns_about_unused_agent_when_no_workflow(
-        self, tmp_path: Path
-    ) -> None:
+    def test_scan_warns_about_unused_agent_when_no_workflow(self, tmp_path: Path) -> None:
         """An agent that is not referenced in any workflow generates a warning."""
         from orchestra.discovery.scanner import ProjectScanner
 
@@ -263,9 +254,9 @@ class TestGraphRegistryLayer:
 
     def test_registry_get_returns_compiled_graph(self, tmp_path: Path) -> None:
         """GraphRegistry.get() returns the exact CompiledGraph that was registered."""
+        from orchestra.core.compiled import CompiledGraph
         from orchestra.discovery.scanner import ProjectScanner
         from orchestra.server.lifecycle import GraphRegistry
-        from orchestra.core.compiled import CompiledGraph
 
         _write_minimal_project(tmp_path)
         result = ProjectScanner().scan(tmp_path)
@@ -284,9 +275,7 @@ class TestGraphRegistryLayer:
         registry = GraphRegistry()
         assert registry.get("does-not-exist") is None
 
-    def test_registry_list_graphs_includes_node_and_entry_point(
-        self, tmp_path: Path
-    ) -> None:
+    def test_registry_list_graphs_includes_node_and_entry_point(self, tmp_path: Path) -> None:
         """GraphInfo returned by list_graphs() reflects the workflow structure."""
         from orchestra.discovery.scanner import ProjectScanner
         from orchestra.server.lifecycle import GraphRegistry
@@ -350,9 +339,7 @@ class TestServerGraphsEndpoint:
                 app.state.graph_registry.register(name, graph)
 
             transport = ASGITransport(app=app)
-            async with AsyncClient(
-                transport=transport, base_url="http://test"
-            ) as client:
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
                 response = await client.get("/api/v1/graphs")
 
         assert response.status_code == 200
@@ -375,9 +362,7 @@ class TestServerGraphsEndpoint:
                 app.state.graph_registry.register(name, graph)
 
             transport = ASGITransport(app=app)
-            async with AsyncClient(
-                transport=transport, base_url="http://test"
-            ) as client:
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
                 response = await client.get("/api/v1/graphs/hello")
 
         assert response.status_code == 200
@@ -385,14 +370,13 @@ class TestServerGraphsEndpoint:
         assert data["name"] == "hello"
         assert "greeter" in data["nodes"]
         assert data["entry_point"] == "greeter"
-        assert "graph TD" in data.get("mermaid", ""), (
-            "Expected Mermaid diagram in response"
-        )
+        assert "graph TD" in data.get("mermaid", ""), "Expected Mermaid diagram in response"
 
     @pytest.mark.asyncio
     async def test_empty_registry_returns_empty_list(self) -> None:
         """An app with no registered graphs returns an empty list."""
         from httpx import ASGITransport, AsyncClient
+
         from orchestra.server.app import create_app
         from orchestra.server.config import ServerConfig
 
@@ -400,9 +384,7 @@ class TestServerGraphsEndpoint:
 
         async with app.router.lifespan_context(app):
             transport = ASGITransport(app=app)
-            async with AsyncClient(
-                transport=transport, base_url="http://test"
-            ) as client:
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
                 response = await client.get("/api/v1/graphs")
 
         assert response.status_code == 200
@@ -504,9 +486,7 @@ class TestUpCommandWiringGap:
 
         async with app.router.lifespan_context(app):
             transport = ASGITransport(app=app)
-            async with AsyncClient(
-                transport=transport, base_url="http://test"
-            ) as client:
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
                 response = await client.get("/api/v1/graphs")
 
         assert response.status_code == 200

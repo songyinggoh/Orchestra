@@ -92,9 +92,7 @@ class TaskConsumer:
             try:
                 plaintext = self._provider.decrypt(msg.data.decode("utf-8"))
                 if heartbeat_interval > 0:
-                    await self._run_with_heartbeat(
-                        handler, plaintext, msg, heartbeat_interval
-                    )
+                    await self._run_with_heartbeat(handler, plaintext, msg, heartbeat_interval)
                 else:
                     await handler(plaintext)
                 await msg.ack()

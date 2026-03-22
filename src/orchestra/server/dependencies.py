@@ -15,17 +15,17 @@ if TYPE_CHECKING:
 _bearer = HTTPBearer(auto_error=False)
 
 
-def get_graph_registry(request: Request) -> "GraphRegistry":
+def get_graph_registry(request: Request) -> GraphRegistry:
     """Return the GraphRegistry from app state."""
     return request.app.state.graph_registry  # type: ignore[no-any-return]
 
 
-def get_run_manager(request: Request) -> "RunManager":
+def get_run_manager(request: Request) -> RunManager:
     """Return the RunManager from app state."""
     return request.app.state.run_manager  # type: ignore[no-any-return]
 
 
-def get_event_store(request: Request) -> "EventStore":
+def get_event_store(request: Request) -> EventStore:
     """Return the EventStore from app state."""
     return request.app.state.event_store  # type: ignore[no-any-return]
 

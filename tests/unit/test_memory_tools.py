@@ -1,7 +1,8 @@
 """Unit tests for rag_tool() factory."""
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 
 from orchestra.memory.tools import rag_tool
 from orchestra.tools.base import ToolWrapper
@@ -19,6 +20,7 @@ def mock_memory():
 # ---------------------------------------------------------------------------
 # Factory behaviour
 # ---------------------------------------------------------------------------
+
 
 def test_rag_tool_returns_tool_wrapper(mock_memory):
     t = rag_tool(mock_memory)
@@ -61,6 +63,7 @@ def test_rag_tool_limit_has_default_not_required(mock_memory):
 # Execution behaviour
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_rag_tool_no_results(mock_memory):
     mock_memory.search_memories = AsyncMock(return_value=[])
@@ -72,9 +75,7 @@ async def test_rag_tool_no_results(mock_memory):
 
 @pytest.mark.asyncio
 async def test_rag_tool_returns_ranked_results(mock_memory):
-    mock_memory.search_memories = AsyncMock(
-        return_value=[("key-a", 0.95), ("key-b", 0.80)]
-    )
+    mock_memory.search_memories = AsyncMock(return_value=[("key-a", 0.95), ("key-b", 0.80)])
     mock_memory.retrieve = AsyncMock(side_effect=["value A", "value B"])
 
     t = rag_tool(mock_memory)

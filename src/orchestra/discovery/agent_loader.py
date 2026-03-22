@@ -48,9 +48,7 @@ def load_agent(
     """
     try:
         yaml = YAML(typ="safe")
-        data: dict[str, Any] | None = yaml.load(
-            yaml_path.read_text(encoding="utf-8")
-        )
+        data: dict[str, Any] | None = yaml.load(yaml_path.read_text(encoding="utf-8"))
     except Exception as exc:
         raise AgentLoadError(f"Cannot parse {yaml_path}: {exc}") from exc
 

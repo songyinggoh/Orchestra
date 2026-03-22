@@ -15,12 +15,12 @@ Covers:
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import MagicMock, patch
 
 import pytest
 
 try:
     from orchestra.discovery.scanner import ProjectScanner, ScanResult
+
     _IMPORT_OK = True
 except ImportError:
     _IMPORT_OK = False

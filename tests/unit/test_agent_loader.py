@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import pytest
 from pathlib import Path
-from unittest.mock import MagicMock
+
+import pytest
 
 from orchestra.discovery.agent_loader import load_agent
 from orchestra.discovery.config import DefaultsSection
@@ -95,7 +95,7 @@ def test_load_agent_missing_tool_lists_available(tmp_path: Path):
     agent_file.write_text(yaml_text, encoding="utf-8")
 
     registry = {"alpha": _make_tool("alpha"), "beta": _make_tool("beta")}
-    with pytest.raises(ToolNotFoundError, match="alpha.*beta"):
+    with pytest.raises(ToolNotFoundError, match=r"alpha.*beta"):
         load_agent(agent_file, tool_registry=registry)
 
 

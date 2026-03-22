@@ -23,8 +23,8 @@ import pytest
 
 joserfc = pytest.importorskip("joserfc", reason="joserfc not installed")
 
-from joserfc import jwe
-from joserfc.jwk import OKPKey
+from joserfc import jwe  # noqa: E402
+from joserfc.jwk import OKPKey  # noqa: E402
 
 # ------------------------------------------------------------------ helpers
 
@@ -36,9 +36,7 @@ _HEADER = {
 
 
 def _make_jwm(body: dict) -> bytes:
-    return json.dumps(
-        {"id": str(uuid.uuid4()), "type": "task/1.0/request", "body": body}
-    ).encode()
+    return json.dumps({"id": str(uuid.uuid4()), "type": "task/1.0/request", "body": body}).encode()
 
 
 def _encrypt(pub_key: OKPKey, body: dict) -> str:
@@ -88,8 +86,7 @@ def test_epk_unique_per_message() -> None:
 
     # JWE compact = header.key.iv.ciphertext.tag — part[0] contains the EPK
     headers = {
-        jwe.encrypt_compact(dict(_HEADER), b"same payload", pub).split(".")[0]
-        for _ in range(10)
+        jwe.encrypt_compact(dict(_HEADER), b"same payload", pub).split(".")[0] for _ in range(10)
     }
     assert len(headers) == 10, "EPK must differ on every encrypt call"
 
@@ -152,7 +149,7 @@ def test_secure_nats_provider_wrong_recipient_raises() -> None:
         eve.decrypt(token)
 
 
-# ------------------------------------------------------------------ key rotation tests (CRITICAL-4.2)
+# ------------------------------------------------------------------ key rotation tests
 
 
 def test_key_rotation_generates_new_key_after_interval() -> None:
@@ -228,9 +225,7 @@ def test_key_rotation_kid_changes() -> None:
     assert "kid" in header_before, "JWE header must contain a kid field"
     kid_before = header_before["kid"]
     assert kid_before.startswith("key-"), f"kid format unexpected: {kid_before!r}"
-    assert kid_before == f"key-{int(T0)}", (
-        f"Expected kid 'key-{int(T0)}', got {kid_before!r}"
-    )
+    assert kid_before == f"key-{int(T0)}", f"Expected kid 'key-{int(T0)}', got {kid_before!r}"
 
     # Fast-forward monotonic clock so rotation fires, and advance wall clock to T1.
     alice._key_created_at = time.monotonic() - 2  # elapsed > 1 s interval
@@ -241,9 +236,7 @@ def test_key_rotation_kid_changes() -> None:
 
         token_after = alice.encrypt_for({"seq": 1}, bob.own_did)
 
-    raw_header_after = base64.urlsafe_b64decode(
-        token_after.split(".")[0] + "=="
-    )
+    raw_header_after = base64.urlsafe_b64decode(token_after.split(".")[0] + "==")
     header_after = json.loads(raw_header_after)
     kid_after = header_after["kid"]
 
@@ -255,7 +248,7 @@ def test_key_rotation_kid_changes() -> None:
     )
 
 
-# ------------------------------------------------------------------ CRITICAL-4.2 explicit rotation and history tests
+# ------------------------------------------------------------------ rotation and history tests
 
 
 def test_rotate_keys_generates_new_keypair() -> None:
@@ -274,9 +267,7 @@ def test_rotate_keys_generates_new_keypair() -> None:
     assert provider._own_keys.keypair is not original_keypair, (
         "rotate_keys() must generate a new keypair object"
     )
-    assert provider.own_did != original_did, (
-        "DID must change when the X25519 keypair changes"
-    )
+    assert provider.own_did != original_did, "DID must change when the X25519 keypair changes"
     assert provider.key_version_number == 2, (
         "version counter must increment from 1 to 2 after first rotation"
     )

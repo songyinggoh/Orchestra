@@ -34,10 +34,7 @@ class ToolRegistry:
         return name in self._tools
 
     def list_tools(self) -> list[dict[str, str]]:
-        return [
-            {"name": t.name, "description": t.description}
-            for t in self._tools.values()
-        ]
+        return [{"name": t.name, "description": t.description} for t in self._tools.values()]
 
     def get_schemas(self, tool_names: list[str] | None = None) -> list[dict[str, Any]]:
         """Get OpenAI function-calling schemas for tools."""

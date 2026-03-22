@@ -116,28 +116,32 @@ class AgentCard:
 
     A2A / Google ADK compatible structure for discovery and capability verification.
     """
+
     did: str
     name: str
     agent_type: str
     capabilities: list[str] = field(default_factory=list)
-    version: int = 1                           # NEW: incremented on rotation
-    expires_at: float | None = None            # NEW: Unix timestamp (DD-3: 1h overlap)
+    version: int = 1  # NEW: incremented on rotation
+    expires_at: float | None = None  # NEW: Unix timestamp (DD-3: 1h overlap)
     nats_url: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
-    signature: str | None = None               # JWS Compact Serialization
+    signature: str | None = None  # JWS Compact Serialization
 
     def to_json(self) -> str:
         # Note: excludes signature from the canonical JSON representation for signing
-        return json.dumps({
-            "did": self.did,
-            "name": self.name,
-            "agent_type": self.agent_type,
-            "capabilities": self.capabilities,
-            "version": self.version,
-            "expires_at": self.expires_at,
-            "nats_url": self.nats_url,
-            "metadata": self.metadata
-        }, sort_keys=True)
+        return json.dumps(
+            {
+                "did": self.did,
+                "name": self.name,
+                "agent_type": self.agent_type,
+                "capabilities": self.capabilities,
+                "version": self.version,
+                "expires_at": self.expires_at,
+                "nats_url": self.nats_url,
+                "metadata": self.metadata,
+            },
+            sort_keys=True,
+        )
 
     @property
     def is_expired(self) -> bool:
@@ -147,11 +151,12 @@ class AgentCard:
 
     def sign_jws(self, signing_key: Any) -> None:
         """Sign card using JWS Compact Serialization with EdDSA (DD-3).
-        
+
         Args:
             signing_key: joserfc OKPKey instance.
         """
         from joserfc import jws
+
         payload = self.to_json().encode("utf-8")
         header = {"alg": "EdDSA"}
         # RFC 9864: algorithms=['EdDSA'] is mandatory for EdDSA in joserfc 1.6+
@@ -186,6 +191,7 @@ class AgentCard:
         if not self.signature:
             return False
         from joserfc import jws
+
         try:
             result = jws.deserialize_compact(self.signature, verification_key, algorithms=["EdDSA"])
             return result.payload == self.to_json().encode("utf-8")
@@ -303,9 +309,7 @@ class AgentIdentityValidator:
                 *public_key_bytes* are provided.
         """
         if verification_key is None and public_key_bytes is None:
-            raise ValueError(
-                "Provide exactly one of 'verification_key' or 'public_key_bytes'."
-            )
+            raise ValueError("Provide exactly one of 'verification_key' or 'public_key_bytes'.")
         if verification_key is not None and public_key_bytes is not None:
             raise ValueError(
                 "Provide exactly one of 'verification_key' or 'public_key_bytes', not both."
@@ -332,22 +336,23 @@ class AgentIdentity:
         signing_key: Ed25519PrivateKey,
         encryption_key_raw: bytes,  # Raw X25519 private key bytes
         nats_url: str = "nats://localhost:4222",
-        max_delegation_depth: int = 3
+        max_delegation_depth: int = 3,
     ) -> None:
         self._signing_key = signing_key
         self._encryption_key_raw = encryption_key_raw
         self._max_delegation_depth = max_delegation_depth
-        
+
         # Generate DID:peer:2
         ed_pub = signing_key.public_key().public_bytes_raw()
         from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
+
         x_priv = X25519PrivateKey.from_private_bytes(encryption_key_raw)
         x_pub = x_priv.public_key().public_bytes_raw()
-        
+
         self._did = create_peer_did_numalgo_2(
             encryption_keys=[x_pub],
             signing_keys=[ed_pub],
-            service={"type": "DIDCommMessaging", "serviceEndpoint": nats_url}
+            service={"type": "DIDCommMessaging", "serviceEndpoint": nats_url},
         )
         self._signer = Ed25519Signer(self._signing_key, self._did)
 
@@ -355,6 +360,7 @@ class AgentIdentity:
     def create(cls, nats_url: str = "nats://localhost:4222") -> AgentIdentity:
         """Generate a fresh ephemeral identity."""
         from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
+
         ed_priv = Ed25519PrivateKey.generate()
         x_priv = X25519PrivateKey.generate()
         return cls(ed_priv, x_priv.private_bytes_raw(), nats_url)
@@ -370,15 +376,17 @@ class AgentIdentity:
     @property
     def delegation_context(self) -> DelegationContext:
         return DelegationContext.root(self._did, self._max_delegation_depth)
-    
-    def create_card(self, name: str, agent_type: str, capabilities: list[str], ttl: int = 3600) -> AgentCard:
+
+    def create_card(
+        self, name: str, agent_type: str, capabilities: list[str], ttl: int = 3600
+    ) -> AgentCard:
         """Create and sign an AgentCard for this identity using JWS (DD-3)."""
         card = AgentCard(
             did=self._did,
             name=name,
             agent_type=agent_type,
             capabilities=capabilities,
-            expires_at=time.time() + ttl
+            expires_at=time.time() + ttl,
         )
         card.sign_jws(self._make_okp_key())
         return card
@@ -386,15 +394,17 @@ class AgentIdentity:
     def _make_okp_key(self) -> Any:
         """Convert cryptography Ed25519 key to joserfc OKPKey for JWS signing."""
         from joserfc.jwk import OKPKey
-        
+
         def base64url_encode(data: bytes) -> str:
             return base64.urlsafe_b64encode(data).rstrip(b"=").decode("utf-8")
 
         d_bytes = self._signing_key.private_bytes_raw()
         x_bytes = self._signing_key.public_key().public_bytes_raw()
-        return OKPKey.import_key({
-            "kty": "OKP", 
-            "crv": "Ed25519",
-            "d": base64url_encode(d_bytes),
-            "x": base64url_encode(x_bytes)
-        })
+        return OKPKey.import_key(
+            {
+                "kty": "OKP",
+                "crv": "Ed25519",
+                "d": base64url_encode(d_bytes),
+                "x": base64url_encode(x_bytes),
+            }
+        )

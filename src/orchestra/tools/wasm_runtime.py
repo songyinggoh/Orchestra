@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import atexit
 import threading
-import time
 import weakref
 from typing import TYPE_CHECKING, Any
 
@@ -59,7 +58,7 @@ class WasmToolSandbox:
             ) from exc
 
         cfg = wasmtime.Config()
-        cfg.consume_fuel = True        # Enable per-store fuel budget
+        cfg.consume_fuel = True  # Enable per-store fuel budget
         cfg.epoch_interruption = True  # Enable wall-clock timeout via epoch
         self._engine = wasmtime.Engine(cfg)
         self._epoch_interval = epoch_interval
@@ -140,9 +139,7 @@ class WasmToolSandbox:
         exports = instance.exports(store)
         start_fn = exports.get("_start") or exports.get("run")
         if start_fn is None:
-            raise ToolExecutionError(
-                "Wasm module must export '_start' or 'run' function"
-            )
+            raise ToolExecutionError("Wasm module must export '_start' or 'run' function")
 
         try:
             start_fn(store)
@@ -179,8 +176,7 @@ class WasmToolSandbox:
         min_pages = mem_type.limits.min
         if min_pages > policy.max_memory_pages:
             raise ToolMemoryError(
-                f"Module requests {min_pages} memory pages "
-                f"(policy max: {policy.max_memory_pages})"
+                f"Module requests {min_pages} memory pages (policy max: {policy.max_memory_pages})"
             )
 
     def _read_output(self, instance: object, store: object) -> bytes:
@@ -201,9 +197,7 @@ class WasmToolSandbox:
         """Re-raise *exc* as the appropriate typed error."""
         msg = str(exc).lower()
         if "fuel" in msg or "out of fuel" in msg:
-            raise ToolCPUExceeded(
-                f"Tool exceeded {policy.fuel} fuel units"
-            ) from exc
+            raise ToolCPUExceeded(f"Tool exceeded {policy.fuel} fuel units") from exc
         if "epoch" in msg or "interrupt" in msg:
             raise ToolTimeoutError(
                 f"Tool exceeded {policy.timeout_epochs} second(s) timeout"
@@ -226,7 +220,7 @@ class WasmToolSandbox:
                 log.warning("wasm_epoch_ticker_did_not_stop_cleanly")
         log.debug("wasm_epoch_ticker_stopped")
 
-    def __enter__(self) -> "WasmToolSandbox":
+    def __enter__(self) -> WasmToolSandbox:
         return self
 
     def __exit__(self, *exc: object) -> None:

@@ -1,22 +1,19 @@
 """Dynamic Graph Construction and YAML Serialization (T-4.12).
 
-Provides the SubgraphBuilder for programmatic construction and 
+Provides the SubgraphBuilder for programmatic construction and
 YAML-to-Graph hydration with security allowlisting.
 """
 
 from __future__ import annotations
 
 import importlib
-from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 import structlog
-from pydantic import BaseModel, Field
 from ruamel.yaml import YAML
 
-from orchestra.core.graph import WorkflowGraph
-from orchestra.core.nodes import SubgraphNode
 from orchestra.core.compiled import CompiledGraph
+from orchestra.core.graph import WorkflowGraph
 from orchestra.core.types import END
 
 logger = structlog.get_logger(__name__)
@@ -60,12 +57,9 @@ class SubgraphBuilder:
             raise ImportError(f"Failed to resolve ref '{ref}': {e}") from e
 
 
-def load_graph_yaml(
-    yaml_str: str, 
-    builder: SubgraphBuilder | None = None
-) -> CompiledGraph:
+def load_graph_yaml(yaml_str: str, builder: SubgraphBuilder | None = None) -> CompiledGraph:
     """Hydrate a YAML graph definition into a CompiledGraph.
-    
+
     Uses ruamel.yaml for round-trip support.
     """
     if builder is None:
@@ -73,14 +67,14 @@ def load_graph_yaml(
 
     yaml = YAML(typ="safe")
     data = yaml.load(yaml_str)
-    
+
     graph = WorkflowGraph(name=data.get("name", "dynamic_graph"))
-    
+
     # 1. Add Nodes
     for node_id, node_data in data.get("nodes", {}).items():
         node_type = node_data.get("type", "function")
         ref = node_data.get("ref")
-        
+
         if node_type == "agent":
             agent_factory = builder.resolve_ref(ref)
             config = node_data.get("config", {})
@@ -98,7 +92,7 @@ def load_graph_yaml(
     for edge_data in data.get("edges", []):
         source = edge_data["source"]
         target = edge_data["target"]
-        
+
         if isinstance(target, list):
             graph.add_parallel(source, target, join_node=edge_data.get("join"))
         elif edge_data.get("type") == "conditional":
@@ -116,6 +110,7 @@ def load_graph_yaml(
 def dump_graph_yaml(graph_data: dict[str, Any]) -> str:
     """Dump graph metadata to YAML string, preserving comments."""
     from io import StringIO
+
     yaml = YAML()
     stream = StringIO()
     yaml.dump(graph_data, stream)

@@ -10,7 +10,6 @@ RichTraceRenderer. All OTel imports are guarded with try/except.
 from __future__ import annotations
 
 import logging
-from datetime import timedelta
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -18,7 +17,7 @@ logger = logging.getLogger(__name__)
 # Guard all OTel imports
 try:
     from opentelemetry import trace
-    from opentelemetry.trace import StatusCode, Span, Tracer
+    from opentelemetry.trace import Span, StatusCode, Tracer  # noqa: F401
 
     _OTEL_AVAILABLE = True
 except ImportError:
@@ -38,7 +37,7 @@ class OTelTraceSubscriber:
                 "opentelemetry-api and opentelemetry-sdk are required for tracing. "
                 "Install with: pip install orchestra-agents[telemetry]"
             )
-        self._tracer: "Tracer" = trace.get_tracer(tracer_name)
+        self._tracer: Tracer = trace.get_tracer(tracer_name)
 
         # Span tracking: run_id -> span context
         self._spans: dict[str, dict[str, Any]] = {}
@@ -239,7 +238,7 @@ class OTelTraceSubscriber:
             span.set_status(StatusCode.OK)
 
         # End any remaining node spans (shouldn't happen, but be safe)
-        for node_id, node_entry in run_data["nodes"].items():
+        for _node_id, node_entry in run_data["nodes"].items():
             try:
                 node_entry[0].end()
             except Exception:

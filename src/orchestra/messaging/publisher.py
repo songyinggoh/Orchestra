@@ -66,9 +66,7 @@ class TaskPublisher:
             headers["Nats-Msg-Id"] = dedup_id
         _inject_trace_context(headers)
 
-        ack = await self._js.publish(
-            subject, token.encode("utf-8"), headers=headers or None
-        )
+        ack = await self._js.publish(subject, token.encode("utf-8"), headers=headers or None)
         log.debug("task_published", subject=subject, seq=ack.seq)
         return PublishResult(subject=subject, sequence=ack.seq)
 

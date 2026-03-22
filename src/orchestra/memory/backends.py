@@ -7,6 +7,7 @@ import time
 from typing import Any, Protocol, runtime_checkable
 
 import structlog
+
 from orchestra.memory.serialization import pack, unpack
 
 logger = structlog.get_logger(__name__)
@@ -36,12 +37,12 @@ class InMemoryMemoryBackend:
     async def get(self, key: str) -> Any | None:
         if key not in self._data:
             return None
-        
+
         val, expiry = self._data[key]
         if expiry and time.time() > expiry:
             del self._data[key]
             return None
-            
+
         return val
 
     async def set(self, key: str, value: Any, ttl: int | None = None) -> None:
@@ -61,7 +62,7 @@ class InMemoryMemoryBackend:
         expired = [k for k, (_, exp) in self._data.items() if exp and now > exp]
         for k in expired:
             del self._data[k]
-            
+
         return fnmatch.filter(self._data.keys(), pattern)
 
 
@@ -72,10 +73,10 @@ class RedisMemoryBackend:
     """
 
     def __init__(
-        self, 
+        self,
         url: str = "redis://localhost:6379/0",
         prefix: str = "orch:mem:",
-        max_connections: int = 20
+        max_connections: int = 20,
     ) -> None:
         import redis.asyncio as redis
         from redis.asyncio.connection import BlockingConnectionPool
@@ -88,7 +89,7 @@ class RedisMemoryBackend:
             max_connections=max_connections,
             timeout=5.0,
             retry=Retry(ExponentialBackoff(), 3),
-            health_check_interval=3
+            health_check_interval=3,
         )
         self.client = redis.Redis(connection_pool=self.pool)
 

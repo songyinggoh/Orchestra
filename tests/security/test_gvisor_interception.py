@@ -1,6 +1,7 @@
-import os
-import pytest
 import platform
+
+import pytest
+
 
 def is_gvisor_detected():
     """
@@ -9,24 +10,26 @@ def is_gvisor_detected():
     """
     if platform.system() != "Linux":
         return False
-    
+
     try:
-        with open("/proc/cpuinfo", "r") as f:
+        with open("/proc/cpuinfo") as f:
             content = f.read().lower()
             # gVisor often uses "google" or a very generic model
             return "google" in content or "gvisor" in content
     except FileNotFoundError:
         return False
 
+
 @pytest.mark.skipif(not is_gvisor_detected(), reason="gVisor not detected")
 def test_gvisor_filesystem_interception():
     """
     Verify that gVisor intercepts and blocks access to sensitive host files.
     """
-    # This should be blocked by the gVisor sandbox even if the container has 
+    # This should be blocked by the gVisor sandbox even if the container has
     # theoretically high privileges.
     with pytest.raises(PermissionError):
-        open("/etc/shadow", "r")
+        open("/etc/shadow")  # noqa: SIM115
+
 
 @pytest.mark.skipif(not is_gvisor_detected(), reason="gVisor not detected")
 def test_gvisor_syscall_filtering():
@@ -37,6 +40,7 @@ def test_gvisor_syscall_filtering():
     # In Python, we can try os.mount (on Linux) if available.
     try:
         import ctypes
+
         libc = ctypes.CDLL("libc.so.6")
         # mount(source, target, filesystemtype, mountflags, data)
         # 21 is MS_REMOUNT for testing

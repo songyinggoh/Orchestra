@@ -87,9 +87,7 @@ class CachedProvider:
                 output_type=output_type,
             )
 
-        key = self._cache_key(
-            messages, model, temperature, max_tokens, tools, output_type
-        )
+        key = self._cache_key(messages, model, temperature, max_tokens, tools, output_type)
 
         # Cache lookup
         cached = await self._cache.get(key)

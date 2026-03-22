@@ -1,8 +1,14 @@
 import pytest
-import time
+
 from orchestra.core.errors import AgentRevokedException
-from orchestra.identity.agent_identity import AgentIdentity, AgentCard, AgentIdentityValidator, RevocationList
+from orchestra.identity.agent_identity import (
+    AgentCard,
+    AgentIdentity,
+    AgentIdentityValidator,
+    RevocationList,
+)
 from orchestra.identity.did_web import DidWebManager
+
 
 def test_create_ephemeral_identity():
     identity = AgentIdentity.create()
@@ -11,59 +17,65 @@ def test_create_ephemeral_identity():
     assert identity.delegation_context.current_did == identity.did
     assert identity.delegation_context.depth == 0
 
+
 def test_agent_card_jws_sign_verify():
     identity = AgentIdentity.create()
     card = identity.create_card("agent-1", "worker", ["web_search"])
-    
+
     # Sign manually with internal helper to verify
     okp_key = identity._make_okp_key()
     assert card.signature is not None
     assert card.verify_jws(okp_key) is True
 
+
 def test_agent_card_jws_tampered_rejected():
     identity = AgentIdentity.create()
     card = identity.create_card("agent-1", "worker", ["web_search"])
-    original_signature = card.signature
-    
+    _original_signature = card.signature
+
     # Tamper with content
     card.name = "malicious-agent"
     okp_key = identity._make_okp_key()
     assert card.verify_jws(okp_key) is False
 
+
 def test_agent_card_versioning():
     identity = AgentIdentity.create()
     card = identity.create_card("agent-1", "worker", ["web_search"])
     assert card.version == 1
-    
+
     card.version = 2
     card.sign_jws(identity._make_okp_key())
     assert card.version == 2
     assert card.verify_jws(identity._make_okp_key()) is True
+
 
 def test_agent_card_expiry():
     identity = AgentIdentity.create()
     # Expired card (ttl = -10)
     card = identity.create_card("agent-1", "worker", ["web_search"], ttl=-10)
     assert card.is_expired is True
-    
+
     # Valid card
     card2 = identity.create_card("agent-1", "worker", ["web_search"], ttl=3600)
     assert card2.is_expired is False
+
 
 def test_did_web_create_and_document():
     manager = DidWebManager("orchestra.dev")
     did = manager.create_did("worker-1")
     assert did == "did:web:orchestra.dev:agents:worker-1"
-    
+
     doc = manager.build_did_document(
         did=did,
         ed_pub_bytes=b"ed-pub-32-bytes-length-exactly--",
         x_pub_bytes=b"x-pub-32-bytes-length-exactly---",
-        service_endpoint="nats://localhost:4222"
+        service_endpoint="nats://localhost:4222",
     )
     assert doc["id"] == did
     assert doc["verificationMethod"][0]["publicKeyJwk"]["x"] is not None
     assert doc["service"][0]["serviceEndpoint"] == "nats://localhost:4222"
+
 
 def test_backward_compat_sign_raw():
     identity = AgentIdentity.create()
@@ -76,6 +88,7 @@ def test_backward_compat_sign_raw():
 # ---------------------------------------------------------------------------
 # CRITICAL-4.3 — Revocation tests
 # ---------------------------------------------------------------------------
+
 
 def test_revoked_agent_card_fails_verification_jws():
     """A DID that is revoked must raise AgentRevokedException on verify_jws,
@@ -148,8 +161,8 @@ def test_revocation_list_unrevoke():
 def test_tool_acl_blocks_revoked_agent():
     """ToolACL.is_authorized must raise AgentRevokedException for a revoked DID
     BEFORE ACL or UCAN checks are applied."""
-    from orchestra.security.acl import ToolACL
     from orchestra.core.errors import AgentRevokedException
+    from orchestra.security.acl import ToolACL
 
     identity = AgentIdentity.create()
     rl = RevocationList()
@@ -251,9 +264,7 @@ def test_validator_revoked_did_raw_path_raises():
     validator = AgentIdentityValidator(revocation_list=rl)
 
     with pytest.raises(AgentRevokedException):
-        validator.validate_with_revocation(
-            card, public_key_bytes=identity.signer.public_key_bytes
-        )
+        validator.validate_with_revocation(card, public_key_bytes=identity.signer.public_key_bytes)
 
 
 def test_validator_no_revocation_list_skips_check():

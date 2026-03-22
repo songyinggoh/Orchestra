@@ -4,6 +4,7 @@ Validates agent outputs against JSON Schema before they become state.
 Contracts are opt-in -- when no contract is registered for an agent,
 validation is skipped.
 """
+
 from __future__ import annotations
 
 import warnings

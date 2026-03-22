@@ -24,6 +24,7 @@ from typing import TYPE_CHECKING, Any
 try:
     from rich.live import Live
     from rich.tree import Tree
+
     _RICH_AVAILABLE = True
 except ImportError:  # pragma: no cover
     _RICH_AVAILABLE = False
@@ -93,7 +94,7 @@ class RichTraceRenderer:
     # EventBus subscriber
     # ------------------------------------------------------------------
 
-    def on_event(self, event: "AnyEvent") -> None:  # type: ignore[override]
+    def on_event(self, event: AnyEvent) -> None:  # type: ignore[override]
         """Sync EventBus subscriber. Updates tree based on event type."""
         try:
             self._dispatch(event)
@@ -162,11 +163,7 @@ class RichTraceRenderer:
         self._total_tokens += in_tok + out_tok
         self._total_cost += cost
 
-        label = (
-            f"[dim]LLM [{duration_s:.1f}s] "
-            f"{in_tok} in / {out_tok} out "
-            f"${cost:.4f}[/dim]"
-        )
+        label = f"[dim]LLM [{duration_s:.1f}s] {in_tok} in / {out_tok} out ${cost:.4f}[/dim]"
         branch.add(label)
 
     def _on_tool_called(self, event: Any) -> None:
@@ -194,8 +191,7 @@ class RichTraceRenderer:
             )
         else:
             label = (
-                f"[cyan]tool: {tool_name}({args_str}) -> "
-                f"{result_str} [{duration_s:.2f}s][/cyan]"
+                f"[cyan]tool: {tool_name}({args_str}) -> {result_str} [{duration_s:.2f}s][/cyan]"
             )
 
         branch.add(label)
@@ -213,10 +209,7 @@ class RichTraceRenderer:
         cost = self._node_cost.get(node_id, 0.0)
 
         # Update branch label (replace the spinner/dim label)
-        branch.label = (
-            f"[green]✓ {node_id} [{duration_s:.1f}s] "
-            f"{total_tok} tok ${cost:.4f}[/green]"
-        )
+        branch.label = f"[green]✓ {node_id} [{duration_s:.1f}s] {total_tok} tok ${cost:.4f}[/green]"
 
     def _on_run_completed(self, event: Any) -> None:
         status = getattr(event, "status", "completed") or "completed"
@@ -232,9 +225,7 @@ class RichTraceRenderer:
             self._total_cost = total_cost
 
         if status == "failed":
-            self._tree.add(
-                f"[red]FAILED after {duration_s:.1f}s[/red]"
-            )
+            self._tree.add(f"[red]FAILED after {duration_s:.1f}s[/red]")
         else:
             self._tree.add(
                 f"[bold]TOTAL: {self._total_tokens} tokens, "

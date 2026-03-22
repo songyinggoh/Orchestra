@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import structlog
-from watchfiles import awatch, Change
+from watchfiles import awatch
 
 from orchestra.core.agent import BaseAgent
 from orchestra.core.dynamic import SubgraphBuilder
@@ -40,7 +40,7 @@ class DiscoveryHotReloader:
         agents_dir: Path,
         tools_dir: Path,
         workflows_dir: Path,
-        registry: "GraphRegistry",
+        registry: GraphRegistry,
         agent_registry: dict[str, BaseAgent],
         tool_registry: dict[str, ToolWrapper],
         defaults: DefaultsSection | None = None,
@@ -96,8 +96,7 @@ class DiscoveryHotReloader:
     async def _run_loop(self) -> None:
         """Watch all three directories for changes."""
         watch_dirs = [
-            d for d in (self._agents_dir, self._tools_dir, self._workflows_dir)
-            if d.exists()
+            d for d in (self._agents_dir, self._tools_dir, self._workflows_dir) if d.exists()
         ]
         if not watch_dirs:
             return

@@ -1,13 +1,17 @@
 import asyncio
 import logging
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
-from orchestra.memory.tiers import TieredMemoryManager, Tier, TierStats
+
 from orchestra.memory.backends import MemoryBackend
+from orchestra.memory.tiers import TieredMemoryManager
+
 
 @pytest.fixture
 def mock_warm():
     return AsyncMock(spec=MemoryBackend)
+
 
 @pytest.fixture
 def mock_cold():
@@ -15,66 +19,71 @@ def mock_cold():
     m = AsyncMock()
     return m
 
+
 @pytest.mark.asyncio
 async def test_tiered_memory_basic_flow():
     mgr = TieredMemoryManager(hot_max=2, warm_max=2)
-    
+
     # Store k1 -> goes to policy (WARM by default)
     await mgr.store("k1", "v1")
     assert await mgr.retrieve("k1") == "v1"
-    
+
     # Retrieval should promote to HOT
     stats = await mgr.stats()
     assert stats.hot_count == 1
     assert stats.warm_count == 0
 
+
 @pytest.mark.asyncio
 async def test_tiered_memory_hot_to_warm_demotion():
     mgr = TieredMemoryManager(hot_max=1, warm_max=2)
-    
+
     await mgr.store("k1", "v1")
-    await mgr.retrieve("k1") # promote to HOT
-    
+    await mgr.retrieve("k1")  # promote to HOT
+
     await mgr.store("k2", "v2")
-    await mgr.retrieve("k2") # promote to HOT, should demote k1
-    
+    await mgr.retrieve("k2")  # promote to HOT, should demote k1
+
     stats = await mgr.stats()
     assert stats.hot_count == 1
     assert stats.warm_count == 1
-    
+
     # k2 should be in HOT, k1 in WARM
     assert "k2" in mgr._policy._hot
     assert "k1" in mgr._policy._warm
 
+
 @pytest.mark.asyncio
 async def test_tiered_memory_warm_backend_fallthrough(mock_warm):
     mgr = TieredMemoryManager(warm_backend=mock_warm, hot_max=2, warm_max=2)
-    
+
     # Simulate item only in Redis
     mock_warm.get.return_value = "redis_val"
-    
+
     val = await mgr.retrieve("missing_locally")
     assert val == "redis_val"
     mock_warm.get.assert_called_with("missing_locally")
-    
+
     # Should now be in HOT
     stats = await mgr.stats()
     assert stats.hot_count == 1
 
+
 @pytest.mark.asyncio
 async def test_tiered_memory_cold_backend_fallthrough(mock_cold, mock_warm):
     mgr = TieredMemoryManager(warm_backend=mock_warm, cold_backend=mock_cold, hot_max=2, warm_max=2)
-    
+
     # Simulate item only in pgvector
     mock_warm.get.return_value = None
     mock_cold.retrieve.return_value = "cold_val"
-    
+
     val = await mgr.retrieve("in_cold")
     assert val == "cold_val"
-    
+
     # Should be back-filled to WARM backend and HOT
     mock_warm.set.assert_called_with("in_cold", "cold_val")
     assert "in_cold" in mgr._policy._hot
+
 
 @pytest.mark.asyncio
 async def test_tiered_memory_demote_to_cold(mock_cold, mock_warm):
@@ -82,9 +91,9 @@ async def test_tiered_memory_demote_to_cold(mock_cold, mock_warm):
 
     # Fill HOT and WARM
     await mgr.store("k1", "v1")
-    await mgr.retrieve("k1") # k1 in HOT
+    await mgr.retrieve("k1")  # k1 in HOT
 
-    await mgr.store("k2", "v2") # k2 in WARM
+    await mgr.store("k2", "v2")  # k2 in WARM
 
     # Store k3 -> k2 should be evicted from WARM to COLD
     await mgr.store("k3", "v3")
@@ -104,6 +113,7 @@ async def test_tiered_memory_demote_to_cold(mock_cold, mock_warm):
 # ---------------------------------------------------------------------------
 # CRITICAL-1.1: exception-suppression fixes
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_stats_cold_count_error_is_logged(mock_cold, caplog):
@@ -213,6 +223,7 @@ async def test_background_task_done_callback_installed():
 #   collapses that window to a single uninterrupted critical section.
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_concurrent_retrieve_no_corruption():
     """50 concurrent retrieve() calls on the same key must all return the
@@ -223,9 +234,7 @@ async def test_concurrent_retrieve_no_corruption():
     # promoted to HOT after the first retrieve).
     await mgr.store("shared_key", "expected_value")
 
-    results = await asyncio.gather(
-        *[mgr.retrieve("shared_key") for _ in range(50)]
-    )
+    results = await asyncio.gather(*[mgr.retrieve("shared_key") for _ in range(50)])
 
     # Every coroutine must get the correct value — no None, no KeyError.
     assert all(r == "expected_value" for r in results), (
@@ -260,9 +269,7 @@ async def test_concurrent_store_and_retrieve():
     errors_list = await asyncio.gather(store_many(), retrieve_many())
     # errors_list[0] is None (store_many returns None); errors_list[1] is the list.
     key_errors = errors_list[1]
-    assert key_errors == [], (
-        f"KeyError(s) raised during concurrent store+retrieve: {key_errors}"
-    )
+    assert key_errors == [], f"KeyError(s) raised during concurrent store+retrieve: {key_errors}"
 
 
 @pytest.mark.asyncio
@@ -296,12 +303,10 @@ async def test_promotion_under_concurrent_load():
 
     # No coroutine should have raised any exception.
     exceptions = [r for r in results if isinstance(r, BaseException)]
-    assert exceptions == [], (
-        f"Exceptions raised during concurrent promotion: {exceptions}"
-    )
+    assert exceptions == [], f"Exceptions raised during concurrent promotion: {exceptions}"
 
     # Every result must be the correct value — no None, no corruption.
-    for k, r in zip(keys, results):
+    for k, r in zip(keys, results, strict=False):
         expected = f"v{int(k[1:])}"
         assert r == expected, f"{k} returned {r!r}, expected {expected!r}"
 

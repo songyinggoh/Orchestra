@@ -23,7 +23,6 @@ from orchestra.providers.cached import CachedProvider
 from orchestra.security.guardrails import GuardrailChain, OnFail
 from orchestra.security.validators import MaxLengthGuardrail
 
-
 # ---------------------------------------------------------------------------
 # Inline ScriptedLLM (independent of conftest — tests are self-contained)
 # ---------------------------------------------------------------------------

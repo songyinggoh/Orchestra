@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import asyncio
-import pytest
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
+
+import pytest
 
 from orchestra.core.agent import BaseAgent
 from orchestra.discovery.hotreload import DiscoveryHotReloader
@@ -45,9 +45,7 @@ async def test_reload_agent(tmp_path: Path):
     wf_dir.mkdir()
 
     agent_file = agents_dir / "test_agent.yaml"
-    agent_file.write_text(
-        "name: test_agent\nsystem_prompt: Hello.\n", encoding="utf-8"
-    )
+    agent_file.write_text("name: test_agent\nsystem_prompt: Hello.\n", encoding="utf-8")
 
     agent_registry: dict[str, BaseAgent] = {}
     reloader = DiscoveryHotReloader(
@@ -279,8 +277,9 @@ async def test_atomic_abort_neither_workflow_registered_on_failure(tmp_path: Pat
     result = await reloader._recompile_affected_workflows("shared_agent")
 
     assert result is False, "Expected failure when any workflow fails to compile"
-    registry.register.assert_not_called(), (
-        "No workflow should be registered when the batch compilation fails"
+    (
+        registry.register.assert_not_called(),
+        ("No workflow should be registered when the batch compilation fails"),
     )
 
 
@@ -300,6 +299,7 @@ async def test_no_op_when_no_workflows_reference_agent(tmp_path: Path):
     result = await reloader._recompile_affected_workflows("unused_agent")
 
     assert result is True, "No-op counts as success — nothing to update"
-    registry.register.assert_not_called(), (
-        "Registry must not be touched when no workflows reference the changed agent"
+    (
+        registry.register.assert_not_called(),
+        ("Registry must not be touched when no workflows reference the changed agent"),
     )

@@ -23,6 +23,7 @@ Prerequisites (at least one):
     export GOOGLE_API_KEY=AIza...
     ollama serve && ollama pull llama3.1
 """
+
 from __future__ import annotations
 
 from typing import Annotated, Any
@@ -258,6 +259,7 @@ class TestToolCalling:
     async def test_google_tool_result_correct(self, google_provider, google_model):
         result = await self._run_tool_agent(google_provider, google_model)
         assert "46" in result.output
+
     @pytest.mark.asyncio
     async def test_ollama_tool_called(self, ollama_provider, ollama_model):
         result = await self._run_tool_agent(ollama_provider, ollama_model)
@@ -283,9 +285,6 @@ class TestToolCalling:
         provider, model = any_provider_and_model
         result = await self._run_tool_agent(provider, model)
         assert "46" in result.output
-
-
-
 
 
 # ---------------------------------------------------------------------------
@@ -371,12 +370,11 @@ class TestMultiTurnToolUse:
             max_iterations=8,
         )
         ctx = ExecutionContext(provider=provider)
-        result = await agent.run(
-            "What are the capitals of France and Japan?", ctx
-        )
+        result = await agent.run("What are the capitals of France and Japan?", ctx)
         assert result.tool_calls_made, "Expected tool calls"
         assert "Paris" in result.output
         assert "Tokyo" in result.output
+
 
 # ---------------------------------------------------------------------------
 # 4. BaseAgent.run() — single agent returns coherent AgentResult
@@ -627,12 +625,8 @@ class TestParallelFanOut:
 
         async def run_synthesizer(state: dict[str, Any]) -> dict[str, Any]:
             ctx = ExecutionContext(provider=provider)
-            combined = "\n".join(
-                f"[{k}] {v}" for k, v in state["findings"].items()
-            )
-            r = await synthesizer.run(
-                f"Topic: {state['topic']}\n\nFindings:\n{combined}", ctx
-            )
+            combined = "\n".join(f"[{k}] {v}" for k, v in state["findings"].items())
+            r = await synthesizer.run(f"Topic: {state['topic']}\n\nFindings:\n{combined}", ctx)
             return {"synthesis": r.output, "log": ["synthesizer done"]}
 
         graph = WorkflowGraph(state_schema=ResearchState)

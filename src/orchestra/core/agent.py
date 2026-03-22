@@ -16,7 +16,7 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from orchestra.security.acl import ToolACL
+    pass
 
 import structlog
 from pydantic import BaseModel, Field
@@ -140,6 +140,7 @@ class BaseAgent(BaseModel):
             _replay = getattr(context, "replay_mode", False)
             if context.event_bus is not None and not _replay:
                 from orchestra.storage.events import LLMCalled
+
                 _in_tok = response.usage.input_tokens if response.usage else 0
                 _out_tok = response.usage.output_tokens if response.usage else 0
                 _cost = response.usage.estimated_cost_usd if response.usage else 0.0
@@ -194,6 +195,7 @@ class BaseAgent(BaseModel):
                     # Emit ToolCalled event
                     if context.event_bus is not None and not _replay:
                         from orchestra.storage.events import ToolCalled
+
                         await context.event_bus.emit(
                             ToolCalled(
                                 run_id=context.run_id,
@@ -283,12 +285,14 @@ class BaseAgent(BaseModel):
         # --- Time-Travel: Replay Check ---
         if context.replay_mode:
             from orchestra.storage.events import ToolCalled
+
             for event in context.replay_events:
-                if (isinstance(event, ToolCalled) 
+                if (
+                    isinstance(event, ToolCalled)
                     and event.tool_name == tool_call.name
                     # arguments check could be more robust (json match)
-                    and event.arguments == (tool_call.arguments or {})):
-                    
+                    and event.arguments == (tool_call.arguments or {})
+                ):
                     logger.debug("replaying_tool_call", tool=tool_call.name)
                     return ToolResult(
                         tool_call_id=tool_call.id,
@@ -300,10 +304,12 @@ class BaseAgent(BaseModel):
         # 1. Authorization check
         if self.acl is None:
             from orchestra.security.acl import ToolACL
+
             object.__setattr__(self, "acl", ToolACL.open())
 
         if not self.acl.is_authorized(tool_call.name):
             from orchestra.storage.events import SecurityViolation
+
             if context.event_bus is not None:
                 await context.event_bus.emit(
                     SecurityViolation(
@@ -318,7 +324,10 @@ class BaseAgent(BaseModel):
                 tool_call_id=tool_call.id,
                 name=tool_call.name,
                 content="",
-                error=f"Security Policy Violation: Agent '{self.name}' is not authorized to use tool '{tool_call.name}'.",
+                error=(
+                    f"Security Policy Violation: Agent '{self.name}' is not authorized"
+                    f" to use tool '{tool_call.name}'."
+                ),
             )
 
         # 2. Tool lookup

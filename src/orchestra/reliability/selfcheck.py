@@ -32,10 +32,10 @@ logger = structlog.get_logger(__name__)
 class SelfCheckMethod(str, Enum):
     """Available SelfCheckGPT scoring methods."""
 
-    NLI = "nli"            # DeBERTa-v3-large NLI — best offline method
+    NLI = "nli"  # DeBERTa-v3-large NLI — best offline method
     BERTSCORE = "bertscore"  # Semantic BERTScore similarity
-    NGRAM = "ngram"        # N-gram negative log-probability (no model required)
-    LLM = "llm"            # LLM-as-judge via orchestra provider — best overall
+    NGRAM = "ngram"  # N-gram negative log-probability (no model required)
+    LLM = "llm"  # LLM-as-judge via orchestra provider — best overall
 
 
 class SentenceScore(BaseModel):
@@ -50,8 +50,8 @@ class SelfCheckResult(BaseModel):
 
     response: str
     sentences: list[SentenceScore] = Field(default_factory=list)
-    consistency_score: float        # 0.0–1.0, higher = more consistent
-    hallucination_risk: str         # "low" | "medium" | "high"
+    consistency_score: float  # 0.0-1.0, higher = more consistent
+    hallucination_risk: str  # "low" | "medium" | "high"
     num_samples: int
     method: str
     sample_token_usage: TokenUsage = Field(default_factory=TokenUsage)
@@ -103,7 +103,7 @@ class SelfChecker:
         method: SelfCheckMethod = SelfCheckMethod.NLI,
         num_samples: int = 3,
         sample_temperature: float = 1.0,
-        low_risk_threshold: float = 0.7,   # consistency_score >= this → "low"
+        low_risk_threshold: float = 0.7,  # consistency_score >= this → "low"
         high_risk_threshold: float = 0.3,  # consistency_score <  this → "high"
         device: str = "cpu",
     ) -> None:
@@ -138,9 +138,7 @@ class SelfChecker:
         if not sentences:
             return self._empty_result(response)
 
-        samples, token_usage = await self._sample_passages(
-            messages, provider=provider, model=model
-        )
+        samples, token_usage = await self._sample_passages(messages, provider=provider, model=model)
 
         if not samples:
             logger.warning(
@@ -149,13 +147,11 @@ class SelfChecker:
             )
             return self._empty_result(response, token_usage=token_usage)
 
-        scores = await self._score(
-            sentences, samples, provider=provider, model=model
-        )
+        scores = await self._score(sentences, samples, provider=provider, model=model)
 
         sentence_scores = [
             SentenceScore(sentence=s, score=sc)
-            for s, sc in zip(sentences, scores)
+            for s, sc in zip(sentences, scores, strict=False)
         ]
         consistency_score = 1.0 - (sum(scores) / len(scores))
 
@@ -232,27 +228,17 @@ class SelfChecker:
         loop = asyncio.get_event_loop()
 
         if self.method == SelfCheckMethod.NLI:
-            return await loop.run_in_executor(
-                None, self._score_nli, sentences, samples
-            )
+            return await loop.run_in_executor(None, self._score_nli, sentences, samples)
         elif self.method == SelfCheckMethod.BERTSCORE:
-            return await loop.run_in_executor(
-                None, self._score_bertscore, sentences, samples
-            )
+            return await loop.run_in_executor(None, self._score_bertscore, sentences, samples)
         elif self.method == SelfCheckMethod.NGRAM:
-            return await loop.run_in_executor(
-                None, self._score_ngram, sentences, samples
-            )
+            return await loop.run_in_executor(None, self._score_ngram, sentences, samples)
         elif self.method == SelfCheckMethod.LLM:
-            return await self._score_llm(
-                sentences, samples, provider=provider, model=model
-            )
+            return await self._score_llm(sentences, samples, provider=provider, model=model)
         else:
             raise ValueError(f"Unknown SelfCheckMethod: {self.method}")
 
-    def _score_nli(
-        self, sentences: list[str], samples: list[str]
-    ) -> list[float]:
+    def _score_nli(self, sentences: list[str], samples: list[str]) -> list[float]:
         """DeBERTa-v3-large NLI scorer. Loaded once and cached."""
         if SelfChecker._nli_model is None:
             from selfcheckgpt.modeling_selfcheck import SelfCheckNLI
@@ -266,17 +252,13 @@ class SelfChecker:
         )
         return [float(s) for s in result]
 
-    def _score_bertscore(
-        self, sentences: list[str], samples: list[str]
-    ) -> list[float]:
+    def _score_bertscore(self, sentences: list[str], samples: list[str]) -> list[float]:
         """BERTScore semantic similarity scorer. Loaded once and cached."""
         if SelfChecker._bertscore_model is None:
             from selfcheckgpt.modeling_selfcheck import SelfCheckBERTScore
 
             logger.info("selfcheck_loading_model", model="BERTScore")
-            SelfChecker._bertscore_model = SelfCheckBERTScore(
-                rescale_with_baseline=True
-            )
+            SelfChecker._bertscore_model = SelfCheckBERTScore(rescale_with_baseline=True)
 
         result = SelfChecker._bertscore_model.predict(
             sentences=sentences,
@@ -284,9 +266,7 @@ class SelfChecker:
         )
         return [float(s) for s in result]
 
-    def _score_ngram(
-        self, sentences: list[str], samples: list[str]
-    ) -> list[float]:
+    def _score_ngram(self, sentences: list[str], samples: list[str]) -> list[float]:
         """N-gram negative log-probability scorer. No model required."""
         if SelfChecker._ngram_model is None:
             from selfcheckgpt.modeling_selfcheck import SelfCheckNgram
@@ -353,11 +333,11 @@ class SelfChecker:
                     continue
                 text = (r.content or "").strip().lower()
                 if text.startswith("yes"):
-                    votes.append(0.0)   # supported → not hallucinated
+                    votes.append(0.0)  # supported → not hallucinated
                 elif text.startswith("no"):
-                    votes.append(1.0)   # not supported → hallucinated
+                    votes.append(1.0)  # not supported → hallucinated
                 else:
-                    votes.append(0.5)   # ambiguous / N/A
+                    votes.append(0.5)  # ambiguous / N/A
 
             sentence_scores.append(sum(votes) / len(votes) if votes else 0.5)
 

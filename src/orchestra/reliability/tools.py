@@ -25,10 +25,9 @@ Usage:
 from __future__ import annotations
 
 from orchestra.core.context import ExecutionContext
-from orchestra.core.types import ToolResult
-from orchestra.tools.base import ToolWrapper
-from orchestra.reliability.selfcheck import SelfCheckMethod, SelfChecker
 from orchestra.reliability.factscore import FactScoreChecker
+from orchestra.reliability.selfcheck import SelfChecker, SelfCheckMethod
+from orchestra.tools.base import ToolWrapper
 
 
 def selfcheck_tool(
@@ -152,6 +151,6 @@ def factscore_tool(
         description=(
             "Score the factual precision of a response using FActScore. "
             "Provide the topic (named entity) and the generated response. "
-            "Returns a FActScore (0–1) and hallucination risk level."
+            "Returns a FActScore (0-1) and hallucination risk level."
         ),
     )

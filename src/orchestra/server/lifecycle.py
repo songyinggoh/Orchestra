@@ -4,9 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import threading
-import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 import structlog
@@ -54,18 +53,22 @@ class GraphRegistry:
                         target = str(target)
                     elif isinstance(target, list):
                         target = [str(t) if not isinstance(t, str) else t for t in target]
-                    edges_list.append({
-                        "type": type(edge).__name__,
-                        "source": getattr(edge, "source", ""),
-                        "target": target,
-                    })
-                result.append(GraphInfo(
-                    name=name,
-                    nodes=list(graph._nodes.keys()),
-                    edges=edges_list,
-                    entry_point=graph._entry_point,
-                    mermaid=graph.to_mermaid(),
-                ))
+                    edges_list.append(
+                        {
+                            "type": type(edge).__name__,
+                            "source": getattr(edge, "source", ""),
+                            "target": target,
+                        }
+                    )
+                result.append(
+                    GraphInfo(
+                        name=name,
+                        nodes=list(graph._nodes.keys()),
+                        edges=edges_list,
+                        entry_point=graph._entry_point,
+                        mermaid=graph.to_mermaid(),
+                    )
+                )
             return result
 
 
@@ -78,10 +81,8 @@ class ActiveRun:
     event_store: EventStore
     status: str = "running"
     graph_name: str = ""
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    event_queue: asyncio.Queue[WorkflowEvent | None] = field(
-        default_factory=asyncio.Queue
-    )
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    event_queue: asyncio.Queue[WorkflowEvent | None] = field(default_factory=asyncio.Queue)
 
 
 class RunManager:
@@ -102,7 +103,6 @@ class RunManager:
         event_store: EventStore,
     ) -> ActiveRun:
         """Start a workflow run as a background asyncio.Task."""
-        from orchestra.storage.store import EventBus
 
         active_run = ActiveRun(
             run_id=run_id,
@@ -123,7 +123,9 @@ class RunManager:
         class _BroadcastStore:
             """Wraps an EventStore to also feed an asyncio.Queue."""
 
-            def __init__(self, inner: EventStore, queue: asyncio.Queue[WorkflowEvent | None]) -> None:
+            def __init__(
+                self, inner: EventStore, queue: asyncio.Queue[WorkflowEvent | None]
+            ) -> None:
                 self._inner = inner
                 self._queue = queue
 
@@ -186,10 +188,12 @@ class RunManager:
         """List all tracked runs with their current status."""
         result: list[RunStatus] = []
         for run_id, active in self._runs.items():
-            result.append(RunStatus(
-                run_id=run_id,
-                status=active.status,
-                created_at=active.created_at.isoformat(),
-                event_count=active.event_queue.qsize(),
-            ))
+            result.append(
+                RunStatus(
+                    run_id=run_id,
+                    status=active.status,
+                    created_at=active.created_at.isoformat(),
+                    event_count=active.event_queue.qsize(),
+                )
+            )
         return result

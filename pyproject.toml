@@ -167,3 +167,8 @@ omit = ["tests/*"]
 [tool.coverage.report]
 fail_under = 80
 show_missing = true
+[tool.bandit]
+# B104: binding to 0.0.0.0 is intentional for an HTTP server
+# B608: SQL f-strings in vector_store.py use parameterized $N values for user data;
+#       only table_name (a trusted constructor arg) is interpolated directly
+skips = ["B104", "B608"]

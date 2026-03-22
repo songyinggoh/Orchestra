@@ -17,6 +17,7 @@ import pytest
 
 try:
     from orchestra.discovery.validation import did_you_mean, validate_scan_result
+
     _IMPORT_OK = True
 except ImportError:
     _IMPORT_OK = False
@@ -43,6 +44,7 @@ def _make_scan_result(
 ) -> object:
     """Build a minimal ScanResult-like object using a simple namespace."""
     from types import SimpleNamespace
+
     return SimpleNamespace(
         tools=tools or {},
         agents=agents or {},
@@ -111,6 +113,7 @@ class TestValidateScanResult:
     def test_valid_result_returns_no_new_errors(self):
         """A fully consistent ScanResult must not gain additional errors."""
         from unittest.mock import MagicMock
+
         tool_mock = MagicMock()
         tool_mock.name = "web_search"
         agent_mock = MagicMock()
@@ -147,6 +150,7 @@ class TestValidateScanResult:
     def test_validation_produces_report_with_entity_counts(self):
         """validate_scan_result() must return a report summarising discovered entities."""
         from unittest.mock import MagicMock
+
         result = _make_scan_result(
             tools={"t1": MagicMock(), "t2": MagicMock()},
             agents={"a1": MagicMock()},

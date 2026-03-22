@@ -1,8 +1,11 @@
 import json
-import pytest
 import time
+
+import pytest
+
+from orchestra.identity.types import UCANCapability, UCANToken
 from orchestra.security.acl import ToolACL, validate_narrowing
-from orchestra.identity.types import UCANToken, UCANCapability
+
 
 def create_mock_ucan(capabilities, expired=False, ttl=3600):
     return UCANToken(
@@ -13,55 +16,62 @@ def create_mock_ucan(capabilities, expired=False, ttl=3600):
         not_before=int(time.time()) - 60,
         expires_at=int(time.time()) + (-ttl if expired else ttl),
         nonce="nonce",
-        proofs=()
+        proofs=(),
     )
+
 
 def test_acl_only_backward_compatible():
     acl = ToolACL.allow_list(["web_search", "calculator"])
-    
+
     # Existing behavior: True if in allow_list
     assert acl.is_authorized("web_search") is True
     assert acl.is_authorized("calculator") is True
     assert acl.is_authorized("shell") is False
 
+
 def test_ucan_intersection_allows():
     # ACL allows {web_search, calculator, shell}
     acl = ToolACL.allow_list(["web_search", "calculator", "shell"])
-    
+
     # UCAN only grants {calculator, shell}
-    ucan = create_mock_ucan([
-        UCANCapability("orchestra:tools/calculator", "tool/invoke"),
-        UCANCapability("orchestra:tools/shell", "tool/invoke"),
-    ])
-    
+    ucan = create_mock_ucan(
+        [
+            UCANCapability("orchestra:tools/calculator", "tool/invoke"),
+            UCANCapability("orchestra:tools/shell", "tool/invoke"),
+        ]
+    )
+
     # Intersection: calculator and shell allowed, web_search denied
     assert acl.is_authorized("calculator", ucan=ucan) is True
     assert acl.is_authorized("shell", ucan=ucan) is True
     assert acl.is_authorized("web_search", ucan=ucan) is False
 
+
 def test_ucan_not_in_acl_denied():
     # ACL only allows web_search
     acl = ToolACL.allow_list(["web_search"])
-    
+
     # UCAN grants shell
-    ucan = create_mock_ucan([
-        UCANCapability("orchestra:tools/shell", "tool/invoke"),
-    ])
-    
+    ucan = create_mock_ucan(
+        [
+            UCANCapability("orchestra:tools/shell", "tool/invoke"),
+        ]
+    )
+
     # Even if UCAN grants it, ACL must also allow it
     assert acl.is_authorized("shell", ucan=ucan) is False
 
+
 def test_expired_ucan_denies_all():
-    acl = ToolACL.open() # Allows everything
-    
+    acl = ToolACL.open()  # Allows everything
+
     # Expired UCAN that grants everything
-    ucan = create_mock_ucan([
-        UCANCapability("orchestra:tools", "*")
-    ], expired=True)
-    
+    ucan = create_mock_ucan([UCANCapability("orchestra:tools", "*")], expired=True)
+
     # Expired UCAN must deny ALL, even if ACL is open
     assert acl.is_authorized("web_search", ucan=ucan) is False
     assert acl.is_authorized("any_tool", ucan=ucan) is False
+
 
 def test_deny_list_overrides_ucan():
     # ACL denies 'rm'
@@ -69,9 +79,7 @@ def test_deny_list_overrides_ucan():
 
     # UCAN grants everything — must use explicit wildcard "orchestra:tools/*"
     # (bare "orchestra:tools" no longer counts as an implicit wildcard per DD-4)
-    ucan = create_mock_ucan([
-        UCANCapability("orchestra:tools/*", "*")
-    ])
+    ucan = create_mock_ucan([UCANCapability("orchestra:tools/*", "*")])
 
     # 'rm' is denied by ACL, so intersection is False
     assert acl.is_authorized("rm", ucan=ucan) is False
@@ -82,6 +90,7 @@ def test_deny_list_overrides_ucan():
 # CRITICAL-3.4 regression tests — DD-4 scope-narrowing enforcement
 # ---------------------------------------------------------------------------
 
+
 def test_broad_ucan_does_not_authorize_specific_tool():
     """Bare parent scope 'orchestra:tools' must NOT authorize a specific tool.
 
@@ -91,9 +100,11 @@ def test_broad_ucan_does_not_authorize_specific_tool():
     """
     acl = ToolACL.open()  # ACL is fully open — only UCAN check matters
 
-    broad_ucan = create_mock_ucan([
-        UCANCapability("orchestra:tools", "tool/invoke"),
-    ])
+    broad_ucan = create_mock_ucan(
+        [
+            UCANCapability("orchestra:tools", "tool/invoke"),
+        ]
+    )
 
     # Must be denied: broad scope is not an implicit wildcard
     assert acl.is_authorized("my_specific_tool", ucan=broad_ucan) is False
@@ -105,9 +116,11 @@ def test_exact_ucan_authorizes_specific_tool():
     """Exact resource pointer 'orchestra:tools/{name}' must authorize that tool only."""
     acl = ToolACL.open()
 
-    exact_ucan = create_mock_ucan([
-        UCANCapability("orchestra:tools/web_search", "tool/invoke"),
-    ])
+    exact_ucan = create_mock_ucan(
+        [
+            UCANCapability("orchestra:tools/web_search", "tool/invoke"),
+        ]
+    )
 
     assert acl.is_authorized("web_search", ucan=exact_ucan) is True
     # Other tools must still be denied
@@ -119,41 +132,41 @@ def test_wildcard_ucan_authorizes_any_tool():
     """Explicit wildcard 'orchestra:tools/*' must authorize any tool."""
     acl = ToolACL.open()
 
-    wildcard_ucan = create_mock_ucan([
-        UCANCapability("orchestra:tools/*", "tool/invoke"),
-    ])
+    wildcard_ucan = create_mock_ucan(
+        [
+            UCANCapability("orchestra:tools/*", "tool/invoke"),
+        ]
+    )
 
     assert acl.is_authorized("web_search", ucan=wildcard_ucan) is True
     assert acl.is_authorized("calculator", ucan=wildcard_ucan) is True
     assert acl.is_authorized("shell", ucan=wildcard_ucan) is True
     assert acl.is_authorized("any_arbitrary_tool", ucan=wildcard_ucan) is True
 
+
 def test_max_calls_enforcement():
     acl = ToolACL.open()
-    ucan = create_mock_ucan([
-        UCANCapability("orchestra:tools/count", "tool/invoke", max_calls=3)
-    ])
-    
+    ucan = create_mock_ucan([UCANCapability("orchestra:tools/count", "tool/invoke", max_calls=3)])
+
     counts = {}
-    
+
     # First 3 calls succeed
     assert acl.check_ucan_call_limit("count", ucan, counts) is True
     assert acl.check_ucan_call_limit("count", ucan, counts) is True
     assert acl.check_ucan_call_limit("count", ucan, counts) is True
-    
+
     # 4th call fails
     assert acl.check_ucan_call_limit("count", ucan, counts) is False
     assert counts["count"] == 3
 
+
 def test_allow_all_acl_with_ucan():
     # ACL allow_all=True
     acl = ToolACL.open()
-    
+
     # UCAN only grants web_search
-    ucan = create_mock_ucan([
-        UCANCapability("orchestra:tools/web_search", "tool/invoke")
-    ])
-    
+    ucan = create_mock_ucan([UCANCapability("orchestra:tools/web_search", "tool/invoke")])
+
     # UCAN narrows the open ACL
     assert acl.is_authorized("web_search", ucan=ucan) is True
     assert acl.is_authorized("calculator", ucan=ucan) is False
@@ -162,6 +175,7 @@ def test_allow_all_acl_with_ucan():
 # ---------------------------------------------------------------------------
 # CRITICAL-3.4 — validate_narrowing() unit tests (DD-4 delegation chain)
 # ---------------------------------------------------------------------------
+
 
 def _cap(resource: str, ability: str, max_calls: int | None = None) -> UCANCapability:
     return UCANCapability(resource=resource, ability=ability, max_calls=max_calls)
@@ -258,23 +272,24 @@ def _make_proof_ucan(capabilities, parent_proofs=()) -> UCANToken:
 
 def _serialise_caps(ucan: UCANToken) -> str:
     """Serialise a UCANToken to the JSON format understood by _parse_proof."""
-    return json.dumps({
-        "issuer_did": ucan.issuer_did,
-        "audience_did": ucan.audience_did,
-        "capabilities": [
-            {"resource": c.resource, "ability": c.ability, "max_calls": c.max_calls}
-            for c in ucan.capabilities
-        ],
-        "not_before": ucan.not_before,
-        "expires_at": ucan.expires_at,
-        "nonce": ucan.nonce,
-        "proofs": list(ucan.proofs),
-    })
+    return json.dumps(
+        {
+            "issuer_did": ucan.issuer_did,
+            "audience_did": ucan.audience_did,
+            "capabilities": [
+                {"resource": c.resource, "ability": c.ability, "max_calls": c.max_calls}
+                for c in ucan.capabilities
+            ],
+            "not_before": ucan.not_before,
+            "expires_at": ucan.expires_at,
+            "nonce": ucan.nonce,
+            "proofs": list(ucan.proofs),
+        }
+    )
 
 
 def test_delegation_chain_valid_narrowing_passes():
     """A UCAN whose proof grants more and the leaf narrows — authorized."""
-    from orchestra.core.errors import CapabilityDeniedError
 
     acl = ToolACL.open()
 

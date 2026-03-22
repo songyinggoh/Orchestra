@@ -2,21 +2,20 @@
 
 from __future__ import annotations
 
-import pytest
 from pathlib import Path
-from typing import Annotated, get_type_hints, get_origin, get_args
-from unittest.mock import MagicMock, patch
+from typing import Annotated, get_args, get_origin, get_type_hints
+
+import pytest
 
 from orchestra.core.agent import BaseAgent
 from orchestra.core.state import WorkflowState, merge_dict, sum_numbers
+from orchestra.discovery.errors import WorkflowLoadError
 from orchestra.discovery.workflow_loader import (
+    REDUCER_MAP,
+    TYPE_MAP,
     build_state_class,
     load_workflow,
-    TYPE_MAP,
-    REDUCER_MAP,
 )
-from orchestra.discovery.errors import WorkflowLoadError
-
 
 # ---- build_state_class ----
 
@@ -67,8 +66,15 @@ def test_type_map_completeness():
 
 def test_reducer_map_completeness():
     expected = {
-        "merge_list", "merge_dict", "sum", "last_write_wins",
-        "merge_set", "concat", "keep_first", "max", "min",
+        "merge_list",
+        "merge_dict",
+        "sum",
+        "last_write_wins",
+        "merge_set",
+        "concat",
+        "keep_first",
+        "max",
+        "min",
     }
     assert set(REDUCER_MAP.keys()) == expected
 
@@ -257,6 +263,7 @@ edges:
         result = load_workflow(wf_file, agent_registry=agents)
         # If it doesn't raise, result should still be a CompiledGraph
         from orchestra.core.compiled import CompiledGraph
+
         assert isinstance(result, CompiledGraph)
     except WorkflowLoadError:
         pass  # This is the desired behaviour per spec
@@ -310,6 +317,7 @@ entry_point: step_one
     wf_file.write_text(yaml_text, encoding="utf-8")
 
     from orchestra.core.compiled import CompiledGraph
+
     agents = {
         "step_one": BaseAgent(name="step_one"),
         "step_two": BaseAgent(name="step_two"),

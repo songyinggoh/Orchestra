@@ -77,7 +77,7 @@ import os
 from typing import Any
 
 import structlog
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from orchestra.core.agent import BaseAgent
 from orchestra.core.context import ExecutionContext
@@ -96,6 +96,7 @@ def _require_rebuff() -> Any:
     """Import RebuffSdk or raise a helpful error."""
     try:
         from rebuff import RebuffSdk  # type: ignore[import]
+
         return RebuffSdk
     except ImportError as exc:
         raise ImportError(
@@ -109,9 +110,7 @@ def _resolve_key(value: str | None, env_var: str, label: str) -> str:
     """Return value if set, else read env_var, else raise."""
     resolved = value or os.environ.get(env_var, "")
     if not resolved:
-        raise ValueError(
-            f"Rebuff requires {label}. Pass it explicitly or set {env_var}."
-        )
+        raise ValueError(f"Rebuff requires {label}. Pass it explicitly or set {env_var}.")
     return resolved
 
 
@@ -218,9 +217,7 @@ class RebuffChecker:
 
         Returns (buffed_prompt, canary_word).
         """
-        buffed, canary = await asyncio.to_thread(
-            self._sdk.add_canary_word, prompt_template
-        )
+        buffed, canary = await asyncio.to_thread(self._sdk.add_canary_word, prompt_template)
         return buffed, canary
 
     async def check_canary_leak(
@@ -244,12 +241,10 @@ class RebuffChecker:
 # ---------------------------------------------------------------------------
 
 _DEFAULT_BLOCKED = (
-    "I'm unable to process this request because it appears to contain "
-    "a prompt injection attempt."
+    "I'm unable to process this request because it appears to contain a prompt injection attempt."
 )
 _DEFAULT_CANARY_LEAK = (
-    "I'm unable to return this response because it appears to contain "
-    "leaked system instructions."
+    "I'm unable to return this response because it appears to contain leaked system instructions."
 )
 
 
@@ -351,15 +346,11 @@ class PromptInjectionAgent(BaseAgent):
 
         # Run the parent agent with the canary-injected system prompt.
         # model_copy() creates a new Pydantic instance — safe for concurrency.
-        canary_agent: BaseAgent = self.model_copy(
-            update={"system_prompt": buffed_system}
-        )
+        canary_agent: BaseAgent = self.model_copy(update={"system_prompt": buffed_system})
         result = await BaseAgent.run(canary_agent, input, context)
 
         # ── Canary leak check ──────────────────────────────────────────────
-        canary_leaked = await checker.check_canary_leak(
-            user_text, result.output, canary_word
-        )
+        canary_leaked = await checker.check_canary_leak(user_text, result.output, canary_word)
 
         if canary_leaked:
             logger.warning(

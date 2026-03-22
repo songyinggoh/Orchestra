@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from orchestra.observability.console import RichTraceRenderer
 from orchestra.storage.events import (
     ExecutionCompleted,
@@ -15,7 +13,6 @@ from orchestra.storage.events import (
     NodeStarted,
     ToolCalled,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -99,9 +96,7 @@ class TestNodeCompleted:
         # First, create the branch via NodeStarted
         renderer.on_event(NodeStarted(run_id=RUN_ID, node_id="billing"))
         # Then complete it
-        renderer.on_event(
-            NodeCompleted(run_id=RUN_ID, node_id="billing", duration_ms=1100.0)
-        )
+        renderer.on_event(NodeCompleted(run_id=RUN_ID, node_id="billing", duration_ms=1100.0))
         branch = renderer._node_branches["billing"]
         label = str(branch.label)
         assert "billing" in label
@@ -122,17 +117,13 @@ class TestRunCompleted:
     def test_run_completed_adds_totals_line(self) -> None:
         renderer = make_renderer()
         renderer.on_event(ExecutionStarted(run_id=RUN_ID, workflow_name="wf"))
-        renderer.on_event(
-            ExecutionCompleted(run_id=RUN_ID, duration_ms=3200.0, status="completed")
-        )
+        renderer.on_event(ExecutionCompleted(run_id=RUN_ID, duration_ms=3200.0, status="completed"))
         # Tree should have at least one child (the TOTAL line)
         assert len(renderer._tree.children) >= 1
 
     def test_run_completed_failed_adds_failed_line(self) -> None:
         renderer = make_renderer()
-        renderer.on_event(
-            ExecutionCompleted(run_id=RUN_ID, duration_ms=500.0, status="failed")
-        )
+        renderer.on_event(ExecutionCompleted(run_id=RUN_ID, duration_ms=500.0, status="failed"))
         last_child = renderer._tree.children[-1]
         assert "FAILED" in str(last_child.label) or "failed" in str(last_child.label).lower()
 

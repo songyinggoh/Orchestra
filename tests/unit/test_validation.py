@@ -2,17 +2,17 @@
 
 from __future__ import annotations
 
-import pytest
 from pathlib import Path
+
 from typer.testing import CliRunner
 
+from orchestra.cli.main import app
 from orchestra.discovery.validation import (
     _edit_distance,
     did_you_mean,
-    validate_project,
     format_validation_report,
+    validate_project,
 )
-from orchestra.cli.main import app
 
 runner = CliRunner()
 

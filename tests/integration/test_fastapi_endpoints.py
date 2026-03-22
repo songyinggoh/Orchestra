@@ -6,8 +6,8 @@ They are skipped automatically if dependencies are not installed.
 
 from __future__ import annotations
 
-import asyncio
 import time
+from collections.abc import AsyncIterator
 from typing import Any
 
 import pytest
@@ -134,6 +134,7 @@ def test_get_run_status(client: Any) -> None:
 
     # Give the background task a moment to start
     import time
+
     time.sleep(0.2)
 
     response = client.get(f"/api/v1/runs/{run_id}")
@@ -165,9 +166,9 @@ async def test_full_run_lifecycle(aclient: AsyncClient) -> None:
         async for line in response.aiter_lines():
             line = line.strip()
             if line.startswith("event:"):
-                current_event_type = line[len("event:"):].strip()
+                current_event_type = line[len("event:") :].strip()
             elif line.startswith("data:"):
-                payload = line[len("data:"):].strip()
+                payload = line[len("data:") :].strip()
                 if payload:
                     try:
                         events.append({"event": current_event_type, "data": _json.loads(payload)})
@@ -183,7 +184,6 @@ async def test_full_run_lifecycle(aclient: AsyncClient) -> None:
     assert status_resp.status_code == 200
     status_data = status_resp.json()
     assert status_data["status"] == "completed"
-
 
 
 def test_list_runs(client: Any) -> None:
@@ -257,6 +257,7 @@ def test_resume_run(client: Any) -> None:
     run_id = create_resp.json()["run_id"]
 
     import time
+
     time.sleep(0.2)
 
     # Try to resume — it will attempt but the graph likely completed already

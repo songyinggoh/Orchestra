@@ -1,9 +1,9 @@
 import pytest
-import time
-from joserfc.errors import JoseError, BadSignatureError, DecodeError
-from orchestra.identity.agent_identity import AgentIdentity
-from orchestra.identity.ucan import UCANManager, UCANCapability
+from joserfc.errors import BadSignatureError, JoseError
+
 from orchestra.core.errors import UCANVerificationError
+from orchestra.identity.agent_identity import AgentIdentity
+from orchestra.identity.ucan import UCANCapability, UCANManager
 
 
 def test_issue_and_verify_ucan():
@@ -63,16 +63,30 @@ def test_check_capability():
     }
 
     # Exact match on the granted resource itself — still valid
-    assert manager.check_capability(exact_payload, UCANCapability("orchestra:tools", "tool/invoke")) is True
+    assert (
+        manager.check_capability(exact_payload, UCANCapability("orchestra:tools", "tool/invoke"))
+        is True
+    )
 
     # CRITICAL-3.4: bare parent scope must NOT grant child resources (DD-4)
-    assert manager.check_capability(exact_payload, UCANCapability("orchestra:tools/web_search", "tool/invoke")) is False
+    assert (
+        manager.check_capability(
+            exact_payload, UCANCapability("orchestra:tools/web_search", "tool/invoke")
+        )
+        is False
+    )
 
     # Ability mismatch
-    assert manager.check_capability(exact_payload, UCANCapability("orchestra:tools", "delete")) is False
+    assert (
+        manager.check_capability(exact_payload, UCANCapability("orchestra:tools", "delete"))
+        is False
+    )
 
     # Resource mismatch
-    assert manager.check_capability(exact_payload, UCANCapability("orchestra:other", "tool/invoke")) is False
+    assert (
+        manager.check_capability(exact_payload, UCANCapability("orchestra:other", "tool/invoke"))
+        is False
+    )
 
     # ---- wildcard payload --------------------------------------------------
     wildcard_payload = {
@@ -83,17 +97,40 @@ def test_check_capability():
     }
 
     # Explicit wildcard grants child resources
-    assert manager.check_capability(wildcard_payload, UCANCapability("orchestra:tools/web_search", "tool/invoke")) is True
-    assert manager.check_capability(wildcard_payload, UCANCapability("orchestra:tools/calculator", "tool/invoke")) is True
+    assert (
+        manager.check_capability(
+            wildcard_payload, UCANCapability("orchestra:tools/web_search", "tool/invoke")
+        )
+        is True
+    )
+    assert (
+        manager.check_capability(
+            wildcard_payload, UCANCapability("orchestra:tools/calculator", "tool/invoke")
+        )
+        is True
+    )
 
     # Explicit wildcard ability grant ("*") matches any ability
-    assert manager.check_capability(wildcard_payload, UCANCapability("orchestra:secrets/api_key", "read")) is True
+    assert (
+        manager.check_capability(
+            wildcard_payload, UCANCapability("orchestra:secrets/api_key", "read")
+        )
+        is True
+    )
 
     # Wildcard does NOT grant its own namespace root (no exact match)
-    assert manager.check_capability(wildcard_payload, UCANCapability("orchestra:tools", "tool/invoke")) is False
+    assert (
+        manager.check_capability(wildcard_payload, UCANCapability("orchestra:tools", "tool/invoke"))
+        is False
+    )
 
     # Cross-namespace isolation
-    assert manager.check_capability(wildcard_payload, UCANCapability("orchestra:other/thing", "tool/invoke")) is False
+    assert (
+        manager.check_capability(
+            wildcard_payload, UCANCapability("orchestra:other/thing", "tool/invoke")
+        )
+        is False
+    )
 
 
 def test_ucan_delegation():
@@ -112,7 +149,9 @@ def test_ucan_delegation():
     token_delegated = manager_sub.delegate(token_root, "did:example:final", [narrowed_cap])
 
     # Verify the delegated token (it's signed by sub_agent)
-    payload = UCANManager.verify(token_delegated, sub_agent._make_okp_key(), expected_audience="did:example:final")
+    payload = UCANManager.verify(
+        token_delegated, sub_agent._make_okp_key(), expected_audience="did:example:final"
+    )
     assert payload["iss"] == sub_agent.did
     assert payload["prf"][0] == token_root
     assert manager_sub.check_capability(payload, narrowed_cap) is True
@@ -121,6 +160,7 @@ def test_ucan_delegation():
 # ---------------------------------------------------------------------------
 # CRITICAL-3.3 regression tests — narrow exception handling in verify()
 # ---------------------------------------------------------------------------
+
 
 def test_ucan_verification_legitimate_errors_caught():
     """JoseError subclasses from joserfc are caught and re-raised as UCANVerificationError.

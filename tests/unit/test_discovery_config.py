@@ -16,6 +16,7 @@ import pytest
 
 try:
     from orchestra.discovery.config import ProjectConfig
+
     _IMPORT_OK = True
 except ImportError:
     _IMPORT_OK = False
@@ -32,9 +33,10 @@ pytestmark = pytest.mark.skipif(
 # ---------------------------------------------------------------------------
 
 
-def _load_config(yaml_text: str) -> "ProjectConfig":
+def _load_config(yaml_text: str) -> ProjectConfig:
     """Parse YAML text into ProjectConfig."""
     from ruamel.yaml import YAML
+
     yaml = YAML(typ="safe")
     data = yaml.load(yaml_text) or {}
     return ProjectConfig(**data)
@@ -162,13 +164,16 @@ class TestProjectConfigValidation:
     def test_unknown_top_level_field_rejected(self):
         """extra='forbid' must reject unknown keys like 'systm_prompt'."""
         from pydantic import ValidationError
+
         with pytest.raises((ValidationError, TypeError)):
             ProjectConfig(**{"systm_prompt": "typo field"})
 
     def test_unknown_nested_server_field_rejected(self):
         from pydantic import ValidationError
+
         try:
             from orchestra.discovery.config import ServerConfig
+
             with pytest.raises((ValidationError, TypeError)):
                 ServerConfig(**{"unknown_field": True})
         except ImportError:
@@ -184,15 +189,12 @@ class TestProjectConfigFromFile:
     def test_load_from_fixture_file(self):
         """Fixture orchestra.yaml should parse without errors."""
         from pathlib import Path
-        fixture_path = (
-            Path(__file__).parent.parent
-            / "fixtures"
-            / "discovery"
-            / "orchestra.yaml"
-        )
+
+        fixture_path = Path(__file__).parent.parent / "fixtures" / "discovery" / "orchestra.yaml"
         if not fixture_path.exists():
             pytest.skip("Fixture file not present")
         from ruamel.yaml import YAML
+
         yaml = YAML(typ="safe")
         data = yaml.load(fixture_path.read_text(encoding="utf-8")) or {}
         config = ProjectConfig(**data)

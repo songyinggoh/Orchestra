@@ -8,7 +8,8 @@ from __future__ import annotations
 
 import enum
 import time
-from typing import Any, Sequence
+from collections.abc import Sequence
+from typing import Any
 
 import structlog
 
@@ -16,8 +17,6 @@ from orchestra.core.errors import AllProvidersUnavailableError
 from orchestra.core.types import LLMResponse
 from orchestra.security.circuit_breaker import (
     AsyncCircuitBreaker,
-    CircuitOpenError,
-    CircuitState,
 )
 
 logger = structlog.get_logger(__name__)
@@ -25,41 +24,53 @@ logger = structlog.get_logger(__name__)
 
 class ErrorCategory(enum.Enum):
     """Categories for provider errors to determine failover behavior."""
-    RETRYABLE = "retryable"           # Rate limit, timeout, 5xx -> try next provider
-    TERMINAL = "terminal"             # Auth failure -> fail immediately
-    MODEL_MISMATCH = "model_mismatch" # Context window exceeded -> fail/retry smaller model
+
+    RETRYABLE = "retryable"  # Rate limit, timeout, 5xx -> try next provider
+    TERMINAL = "terminal"  # Auth failure -> fail immediately
+    MODEL_MISMATCH = "model_mismatch"  # Context window exceeded -> fail/retry smaller model
 
 
 def classify_error(exc: Exception) -> ErrorCategory:
     """Classify an exception into a retryable or terminal category."""
     from orchestra.core.errors import AuthenticationError, ContextWindowError, RateLimitError
-    
+
     if isinstance(exc, AuthenticationError):
         return ErrorCategory.TERMINAL
     if isinstance(exc, ContextWindowError):
         return ErrorCategory.MODEL_MISMATCH
     if isinstance(exc, RateLimitError):
         return ErrorCategory.RETRYABLE
-        
+
     msg = str(exc).lower()
     # Terminal errors
     if any(kw in msg for kw in ["unauthorized", "invalid api key", "401", "403"]):
         return ErrorCategory.TERMINAL
-    
+
     # Model mismatch errors
     if any(kw in msg for kw in ["context_length_exceeded", "max tokens", "too long"]):
         return ErrorCategory.MODEL_MISMATCH
-        
+
     # Default to retryable for most network/server issues
     retryable_keywords = [
-        "rate_limit", "429", "timeout", "deadline",
-        "500", "502", "503", "504", "server error", "connection",
-        "unavailable", "overloaded"
+        "rate_limit",
+        "429",
+        "timeout",
+        "deadline",
+        "500",
+        "502",
+        "503",
+        "504",
+        "server error",
+        "connection",
+        "unavailable",
+        "overloaded",
     ]
     if any(kw in msg for kw in retryable_keywords):
         return ErrorCategory.RETRYABLE
-        
-    return ErrorCategory.TERMINAL  # Unknown errors should surface, not be silently swallowed by failover
+
+    return (
+        ErrorCategory.TERMINAL
+    )  # Unknown errors should surface, not be silently swallowed by failover
 
 
 class ProviderFailover:
@@ -116,7 +127,7 @@ class ProviderFailover:
 
                 breaker.record_success()
                 await self._track_latency(i, latency_ms)
-                
+
                 logger.debug(
                     "provider_call_success",
                     provider=getattr(provider, "provider_name", i),
@@ -127,19 +138,19 @@ class ProviderFailover:
                 breaker.record_failure()
                 category = classify_error(exc)
                 errors.append((exc, category))
-                
+
                 logger.warning(
                     "provider_failover_attempt_failed",
                     provider=getattr(provider, "provider_name", i),
                     category=category.value,
                     error=str(exc),
                 )
-                
+
                 if category == ErrorCategory.TERMINAL:
                     raise
                 if category == ErrorCategory.MODEL_MISMATCH:
                     raise
-                
+
                 # Continue to next provider for RETRYABLE errors
 
         raise AllProvidersUnavailableError(
@@ -173,11 +184,14 @@ class ProviderFailover:
 
         if history:
             import numpy as np
-            health.update({
-                "p50_latency_ms": float(np.percentile(history, 50)),
-                "p95_latency_ms": float(np.percentile(history, 95)),
-                "avg_latency_ms": float(np.mean(history)),
-            })
+
+            health.update(
+                {
+                    "p50_latency_ms": float(np.percentile(history, 50)),
+                    "p95_latency_ms": float(np.percentile(history, 95)),
+                    "avg_latency_ms": float(np.mean(history)),
+                }
+            )
 
         return health
 

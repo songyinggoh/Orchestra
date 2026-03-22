@@ -3,6 +3,7 @@
 Tests that the FastAPI server handles SSE streaming correctly under
 adverse conditions: normal completion and multiple concurrent clients.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -13,7 +14,7 @@ import pytest
 
 try:
     from fastapi.testclient import TestClient
-    from httpx import AsyncClient, ASGITransport
+    from httpx import ASGITransport, AsyncClient
 
     HAS_SERVER_DEPS = True
 except ImportError:
@@ -69,7 +70,7 @@ def _parse_sse_data_events(raw: str) -> list[dict]:
     for line in raw.splitlines():
         line = line.strip()
         if line.startswith("data:"):
-            payload = line[len("data:"):].strip()
+            payload = line[len("data:") :].strip()
             if payload:
                 try:
                     events.append(json.loads(payload))
@@ -114,8 +115,6 @@ def test_concurrent_sse_streams(app: Any) -> None:
 
     async def _run_one_stream() -> list[dict]:
         """Create a run and stream its events; return parsed data events."""
-        from orchestra.server.app import create_app
-        from orchestra.server.config import ServerConfig
 
         # Each coroutine uses its own async client against the shared app
         transport = ASGITransport(app=app)
@@ -135,7 +134,7 @@ def test_concurrent_sse_streams(app: Any) -> None:
                 async for line in resp.aiter_lines():
                     line = line.strip()
                     if line.startswith("data:"):
-                        payload = line[len("data:"):].strip()
+                        payload = line[len("data:") :].strip()
                         if payload:
                             try:
                                 events.append(json.loads(payload))

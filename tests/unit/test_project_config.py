@@ -2,19 +2,17 @@
 
 from __future__ import annotations
 
-import pytest
 from pathlib import Path
 
+import pytest
+
 from orchestra.discovery.config import (
-    ProjectConfig,
     DefaultsSection,
     DirectoriesSection,
-    ServerSection,
-    SecuritySection,
+    ProjectConfig,
     load_config,
 )
 from orchestra.discovery.errors import ConfigError
-
 
 # ---- Defaults ----
 
@@ -30,7 +28,7 @@ def test_project_config_all_defaults():
     assert cfg.directories.workflows == "workflows"
     assert cfg.server.host == "0.0.0.0"
     assert cfg.server.port == 8000
-    assert cfg.security.allowed_imports == ["lib."]
+    assert cfg.security.allowed_imports == []
 
 
 def test_defaults_section_override():
@@ -90,7 +88,7 @@ def test_load_config_invalid_raises(tmp_path: Path):
         "typo_section:\n  foo: bar\n",
         encoding="utf-8",
     )
-    with pytest.raises(ConfigError, match="Invalid orchestra.yaml"):
+    with pytest.raises(ConfigError, match=r"Invalid orchestra\.yaml"):
         load_config(tmp_path)
 
 

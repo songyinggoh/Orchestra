@@ -29,8 +29,6 @@ import pytest
 from orchestra.cost.persistent_budget import (
     BudgetExceededError,
     PersistentBudgetStore,
-    micro_to_usd,
-    usd_to_micro,
 )
 
 pytestmark = pytest.mark.load
@@ -41,9 +39,9 @@ pytestmark = pytest.mark.load
 
 CONCURRENCY = 1_000
 SEMAPHORE_LIMIT = 200
-DEBIT_USD = 0.01          # per-task cost
-LIMIT_USD = 5.00          # $5 → exactly 500 tasks can succeed at $0.01 each
-OVERDRAFT_TOLERANCE = 0   # zero tolerance — must never exceed limit
+DEBIT_USD = 0.01  # per-task cost
+LIMIT_USD = 5.00  # $5 → exactly 500 tasks can succeed at $0.01 each
+OVERDRAFT_TOLERANCE = 0  # zero tolerance — must never exceed limit
 
 
 # ---------------------------------------------------------------------------
@@ -113,7 +111,7 @@ async def _debit(
             return task_index, True, None
         except BudgetExceededError:
             return task_index, False, "BudgetExceededError"
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             return task_index, False, type(exc).__name__ + ": " + str(exc)
 
 
@@ -140,7 +138,7 @@ async def test_no_overdraft_1000_concurrent_debits(store: PersistentBudgetStore)
     elapsed = time.monotonic() - t0
 
     successes = [r for r in results if r[1]]
-    failures  = [r for r in results if not r[1]]
+    failures = [r for r in results if not r[1]]
     unexpected = [r for r in failures if r[2] != "BudgetExceededError"]
 
     # Read authoritative balance from the store
@@ -152,7 +150,7 @@ async def test_no_overdraft_1000_concurrent_debits(store: PersistentBudgetStore)
         f"\n[budget contention — file WAL]\n"
         f"  total={CONCURRENCY}  succeeded={len(successes)}  budget_exceeded={len(failures)}\n"
         f"  spent=${spent_usd:.6f}  limit=${LIMIT_USD:.2f}  remaining=${remaining_usd:.6f}\n"
-        f"  unexpected_errors={len(unexpected)}  throughput={throughput:.1f} debits/s  wall={elapsed:.2f}s"
+        f"  unexpected_errors={len(unexpected)}  throughput={throughput:.1f} debits/s  wall={elapsed:.2f}s"  # noqa: E501
     )
     if unexpected:
         for _, _, err in unexpected[:5]:
@@ -169,10 +167,10 @@ async def test_no_overdraft_1000_concurrent_debits(store: PersistentBudgetStore)
         f"{[e[2] for e in unexpected[:3]]}"
     )
 
-    # Accounting identity: successes × $0.01 == spent (within floating-point tolerance)
+    # Accounting identity: successes x $0.01 == spent (within floating-point tolerance)
     expected_spent = len(successes) * DEBIT_USD
     assert abs(spent_usd - expected_spent) < 1e-4, (
-        f"Ledger mismatch: {len(successes)} successes × ${DEBIT_USD} = ${expected_spent:.6f} "
+        f"Ledger mismatch: {len(successes)} successes x ${DEBIT_USD} = ${expected_spent:.6f} "
         f"but store reports ${spent_usd:.6f}"
     )
 
@@ -220,14 +218,12 @@ async def test_idempotency_same_key_concurrent(idempotency_store: PersistentBudg
         f"  recorded_successes={len(successes)}  spent=${spent_usd:.6f}  expected=${DEBIT_USD:.6f}"
     )
 
-    assert not unexpected, (
-        f"Unexpected errors: {[e[2] for e in unexpected[:3]]}"
-    )
+    assert not unexpected, f"Unexpected errors: {[e[2] for e in unexpected[:3]]}"
 
     # INV-2: exactly $0.01 debited regardless of concurrency
     assert abs(spent_usd - DEBIT_USD) < 1e-6, (
         f"Idempotency violated: expected exactly ${DEBIT_USD} debited "
-        f"but store shows ${spent_usd:.6f} (debited {spent_usd / DEBIT_USD:.1f}×)"
+        f"but store shows ${spent_usd:.6f} (debited {spent_usd / DEBIT_USD:.1f}x)"
     )
 
 
@@ -252,15 +248,11 @@ async def test_memory_store_concurrent_transactions_raises() -> None:
     sem = asyncio.Semaphore(50)
 
     tasks = [
-        _debit(s, "tenant-mem", sem, i, idempotency_key=f"{shared_key_base}-{i}")
-        for i in range(50)
+        _debit(s, "tenant-mem", sem, i, idempotency_key=f"{shared_key_base}-{i}") for i in range(50)
     ]
     results = await asyncio.gather(*tasks, return_exceptions=False)
 
-    operational_errors = [
-        r for r in results
-        if not r[1] and r[2] and "OperationalError" in r[2]
-    ]
+    operational_errors = [r for r in results if not r[1] and r[2] and "OperationalError" in r[2]]
 
     await s.close()
 
@@ -301,11 +293,11 @@ async def test_critical_4_1_concurrent_init_races_on_wal(tmp_path: Path) -> None
     )
 
     lock_errors = [
-        o for o in outcomes
-        if isinstance(o, Exception) and "database is locked" in str(o).lower()
+        o for o in outcomes if isinstance(o, Exception) and "database is locked" in str(o).lower()
     ]
     other_errors = [
-        o for o in outcomes
+        o
+        for o in outcomes
         if isinstance(o, Exception) and "database is locked" not in str(o).lower()
     ]
 
@@ -403,13 +395,13 @@ async def test_concurrent_multitenant_no_balance_bleed(tmp_path: Path) -> None:
     store = PersistentBudgetStore(db_path)
     await store.initialize()
     await store.create_account("alpha", parent_id=None, limit_usd=LIMIT_USD)
-    await store.create_account("beta",  parent_id=None, limit_usd=LIMIT_USD)
+    await store.create_account("beta", parent_id=None, limit_usd=LIMIT_USD)
 
     sem = asyncio.Semaphore(SEMAPHORE_LIMIT)
-    n_per_tenant = 300  # 300 tasks × $0.01 = $3.00 each (under the $5 limit)
+    n_per_tenant = 300  # 300 tasks x $0.01 = $3.00 each (under the $5 limit)
 
-    alpha_tasks = [_debit(store, "alpha", sem, i)       for i in range(n_per_tenant)]
-    beta_tasks  = [_debit(store, "beta",  sem, i + n_per_tenant) for i in range(n_per_tenant)]
+    alpha_tasks = [_debit(store, "alpha", sem, i) for i in range(n_per_tenant)]
+    beta_tasks = [_debit(store, "beta", sem, i + n_per_tenant) for i in range(n_per_tenant)]
 
     results = await asyncio.wait_for(
         asyncio.gather(*alpha_tasks, *beta_tasks, return_exceptions=False),
@@ -417,13 +409,13 @@ async def test_concurrent_multitenant_no_balance_bleed(tmp_path: Path) -> None:
     )
 
     alpha_results = results[:n_per_tenant]
-    beta_results  = results[n_per_tenant:]
+    beta_results = results[n_per_tenant:]
 
     alpha_spent = LIMIT_USD - await store.get_remaining_usd("alpha")
-    beta_spent  = LIMIT_USD - await store.get_remaining_usd("beta")
+    beta_spent = LIMIT_USD - await store.get_remaining_usd("beta")
 
     alpha_successes = sum(1 for r in alpha_results if r[1])
-    beta_successes  = sum(1 for r in beta_results  if r[1])
+    beta_successes = sum(1 for r in beta_results if r[1])
 
     print(
         f"\n[multi-tenant isolation]\n"
@@ -441,6 +433,6 @@ async def test_concurrent_multitenant_no_balance_bleed(tmp_path: Path) -> None:
 
     # Neither tenant must overdraft
     assert alpha_spent <= LIMIT_USD + 1e-6, f"Alpha overdraft: ${alpha_spent:.6f}"
-    assert beta_spent  <= LIMIT_USD + 1e-6, f"Beta overdraft: ${beta_spent:.6f}"
+    assert beta_spent <= LIMIT_USD + 1e-6, f"Beta overdraft: ${beta_spent:.6f}"
 
     await store.close()

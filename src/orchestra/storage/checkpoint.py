@@ -8,7 +8,7 @@ potentially in a different process.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -27,7 +27,7 @@ class Checkpoint(BaseModel):
     state: dict[str, Any]
     loop_counters: dict[str, int] = Field(default_factory=dict)
     node_execution_order: list[str] = Field(default_factory=list)
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
     metadata: dict[str, Any] = Field(default_factory=dict)
 
     @classmethod

@@ -12,26 +12,26 @@ import os
 import sqlite3
 import uuid
 import warnings
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 import structlog
 
 from orchestra.core.context import ExecutionContext
-from orchestra.core.edges import ConditionalEdge, Edge, ParallelEdge
-from orchestra.core.handoff import HandoffEdge, HandoffPayload
 from orchestra.core.context_distill import distill_context, full_passthrough
+from orchestra.core.edges import ConditionalEdge, Edge, ParallelEdge
 from orchestra.core.errors import AgentError, GraphCompileError, MaxIterationsError
-from orchestra.core.nodes import AgentNode, FunctionNode, GraphNode, NodeFunction, SubgraphNode
+from orchestra.core.handoff import HandoffPayload
+from orchestra.core.nodes import AgentNode, FunctionNode, GraphNode, SubgraphNode
 from orchestra.core.state import (
     WorkflowState,
     apply_state_update,
     extract_reducers,
     merge_parallel_updates,
 )
-from orchestra.core.types import END, AgentResult, WorkflowStatus, Send
-from orchestra.storage.checkpoint import Checkpoint
+from orchestra.core.types import END, AgentResult, Send, WorkflowStatus
 from orchestra.debugging.timetravel import TimeTravelController
+from orchestra.storage.checkpoint import Checkpoint
 
 if TYPE_CHECKING:
     from orchestra.storage.store import EventStore
@@ -83,7 +83,7 @@ class CompiledGraph:
         context: ExecutionContext | None = None,
         provider: Any = None,
         persist: bool = True,
-        event_store: "EventStore | None" = None,
+        event_store: EventStore | None = None,
         run_id: str | None = None,
         start_at: str | None = None,
     ) -> dict[str, Any]:
@@ -105,12 +105,7 @@ class CompiledGraph:
             Final state as a dict.
         """
         from orchestra.storage.events import (
-            ErrorOccurred,
-            ExecutionCompleted,
             ExecutionStarted,
-            ForkCreated,
-            NodeCompleted,
-            NodeStarted,
         )
         from orchestra.storage.store import EventBus
 
@@ -144,6 +139,7 @@ class CompiledGraph:
         if persist and event_store is None:
             try:
                 from orchestra.storage.sqlite import SQLiteEventStore
+
                 _sqlite_store = SQLiteEventStore()
                 await _sqlite_store.initialize()
                 await _sqlite_store.create_run(
@@ -178,6 +174,7 @@ class CompiledGraph:
         if trace_mode != "off":
             try:
                 from orchestra.observability.console import RichTraceRenderer
+
                 _renderer = RichTraceRenderer(verbose=(trace_mode == "verbose"))
                 event_bus.subscribe(_renderer.on_event)
                 _renderer.start()
@@ -187,6 +184,7 @@ class CompiledGraph:
         # 2c. OTel trace subscriber (optional)
         try:
             from orchestra.observability.tracing import OTelTraceSubscriber
+
             _otel_subscriber = OTelTraceSubscriber()
             event_bus.subscribe(_otel_subscriber.on_event)
         except ImportError:
@@ -195,6 +193,7 @@ class CompiledGraph:
         # 2d. OTel metrics subscriber (optional)
         try:
             from orchestra.observability.metrics import OTelMetricsSubscriber
+
             _otel_metrics = OTelMetricsSubscriber()
             event_bus.subscribe(_otel_metrics.on_event)
         except ImportError:
@@ -204,6 +203,7 @@ class CompiledGraph:
         _cost_aggregator = None
         try:
             from orchestra.cost.aggregator import CostAggregator
+
             _cost_aggregator = CostAggregator()
             event_bus.subscribe(_cost_aggregator.on_event)
             context.config["_cost_aggregator"] = _cost_aggregator
@@ -211,7 +211,6 @@ class CompiledGraph:
             pass
 
         # 3. Emit RunStarted
-        run_start_time = datetime.now(timezone.utc)
         await event_bus.emit(
             ExecutionStarted(
                 run_id=effective_run_id,
@@ -241,7 +240,7 @@ class CompiledGraph:
         run_id: str,
         *,
         state_updates: dict[str, Any] | None = None,
-        event_store: "EventStore | None" = None,
+        event_store: EventStore | None = None,
         provider: Any = None,
     ) -> dict[str, Any]:
         """Resume an interrupted workflow run from its latest checkpoint.
@@ -262,10 +261,11 @@ class CompiledGraph:
             # Try to auto-load SQLite if no store provided
             try:
                 from orchestra.storage.sqlite import SQLiteEventStore
+
                 event_store = SQLiteEventStore()
                 await event_store.initialize()  # type: ignore[attr-defined]
             except (ImportError, OSError, sqlite3.Error) as e:
-                raise AgentError(f"Failed to auto-initialize event store for resume: {e}")
+                raise AgentError(f"Failed to auto-initialize event store for resume: {e}") from e
 
         # 1. Load latest checkpoint
         checkpoint = await event_store.get_latest_checkpoint(run_id)
@@ -324,7 +324,7 @@ class CompiledGraph:
         sequence_number: int,
         *,
         state_overrides: dict[str, Any] | None = None,
-        event_store: "EventStore | None" = None,
+        event_store: EventStore | None = None,
     ) -> tuple[str, dict[str, Any], str]:
         """Fork a new run from a historical point in a parent run.
 
@@ -341,6 +341,7 @@ class CompiledGraph:
 
         if event_store is None:
             from orchestra.storage.sqlite import SQLiteEventStore
+
             event_store = SQLiteEventStore()
             await event_store.initialize()  # type: ignore[attr-defined]
 
@@ -356,11 +357,11 @@ class CompiledGraph:
 
         # 3. Determine where to start the new execution path.
         # If the fork point was a NodeCompleted, we resolve the next edge.
-        # If it was a NodeStarted, we might want to re-run that node (defaulting to history.node_id).
+        # If it was a NodeStarted, we might want to re-run that node
+        # (defaulting to history.node_id).
         # To be safe, we'll try to resolve the next node from this state.
-        
+
         # We need a dummy context for resolution
-        from orchestra.core.state import WorkflowState
         if self._state_schema:
             state_obj = self._state_schema.model_validate(fork_state_dict)
         else:
@@ -368,10 +369,7 @@ class CompiledGraph:
 
         dummy_context = ExecutionContext(run_id=new_run_id)
         next_node, _ = await self._resolve_next(
-            history.node_id, 
-            fork_state_dict, 
-            state_obj, 
-            dummy_context
+            history.node_id, fork_state_dict, state_obj, dummy_context
         )
 
         # 4. Record the fork link in the parent's event stream
@@ -393,16 +391,16 @@ class CompiledGraph:
         state_dict: dict[str, Any],
         context: ExecutionContext,
         event_bus: Any,
-        event_store: "EventStore | None",
+        event_store: EventStore | None,
         bypass_interrupt_on_start: bool = False,
     ) -> dict[str, Any]:
         """Internal execution loop shared by run() and resume()."""
         from orchestra.storage.events import (
             ErrorOccurred,
             ExecutionCompleted,
+            InterruptRequested,
             NodeCompleted,
             NodeStarted,
-            InterruptRequested,
         )
 
         # Re-resolve state object if schema exists
@@ -412,7 +410,7 @@ class CompiledGraph:
             state = state_dict
 
         effective_run_id = context.run_id
-        run_start_time = datetime.now(timezone.utc)
+        run_start_time = datetime.now(UTC)
         turns = context.turn_number
         _renderer = None
 
@@ -422,6 +420,7 @@ class CompiledGraph:
         if trace_mode != "off":
             try:
                 from orchestra.observability.console import RichTraceRenderer
+
                 _renderer = RichTraceRenderer(verbose=(trace_mode == "verbose"))
                 event_bus.subscribe(_renderer.on_event)
                 _renderer.start()
@@ -429,8 +428,11 @@ class CompiledGraph:
                 _renderer = None
 
         try:
-            while (current_node_id != END and not isinstance(current_node_id, type(END))
-                   and turns < self._max_turns):
+            while (
+                current_node_id != END
+                and not isinstance(current_node_id, type(END))
+                and turns < self._max_turns
+            ):
                 turns += 1
                 async with context.mutate():
                     context.turn_number = turns
@@ -499,9 +501,9 @@ class CompiledGraph:
                 async with context.mutate():
                     context.state = state_dict
 
-                node_start = datetime.now(timezone.utc)
+                node_start = datetime.now(UTC)
                 update = await self._execute_node(str(current_node_id), node, state_dict, context)
-                node_duration_ms = (datetime.now(timezone.utc) - node_start).total_seconds() * 1000
+                node_duration_ms = (datetime.now(UTC) - node_start).total_seconds() * 1000
                 async with context.mutate():
                     context.node_execution_order.append(str(current_node_id))
 
@@ -572,8 +574,11 @@ class CompiledGraph:
                     str(current_node_id), state_dict, state, context
                 )
 
-            if (turns >= self._max_turns and current_node_id != END
-                    and not isinstance(current_node_id, type(END))):
+            if (
+                turns >= self._max_turns
+                and current_node_id != END
+                and not isinstance(current_node_id, type(END))
+            ):
                 raise MaxIterationsError(
                     f"Workflow exceeded max_turns ({self._max_turns}).\n"
                     f"  Last node: {current_node_id}\n"
@@ -582,7 +587,7 @@ class CompiledGraph:
 
         except Exception as exc:
             # 5b. Emit RunFailed
-            duration_ms = (datetime.now(timezone.utc) - run_start_time).total_seconds() * 1000
+            duration_ms = (datetime.now(UTC) - run_start_time).total_seconds() * 1000
             await event_bus.emit(
                 ErrorOccurred(
                     run_id=effective_run_id,
@@ -614,7 +619,7 @@ class CompiledGraph:
                 )
             )
             if event_store:
-                completed_at = datetime.now(timezone.utc).isoformat()
+                completed_at = datetime.now(UTC).isoformat()
                 try:
                     await event_store.update_run_status(  # type: ignore[attr-defined]
                         effective_run_id, "failed", completed_at
@@ -627,7 +632,7 @@ class CompiledGraph:
 
         # 5a. Emit RunCompleted
         final_state_dict = state.model_dump() if isinstance(state, WorkflowState) else dict(state)
-        duration_ms = (datetime.now(timezone.utc) - run_start_time).total_seconds() * 1000
+        duration_ms = (datetime.now(UTC) - run_start_time).total_seconds() * 1000
         totals = context.config.get("_usage_totals", {}) if context is not None else {}
         _tok = int(totals.get("total_tokens", 0) or 0)
         _cost = float(totals.get("total_cost_usd", 0.0) or 0.0)
@@ -649,7 +654,7 @@ class CompiledGraph:
             )
         )
         if event_store:
-            completed_at = datetime.now(timezone.utc).isoformat()
+            completed_at = datetime.now(UTC).isoformat()
             try:
                 await event_store.update_run_status(  # type: ignore[attr-defined]
                     effective_run_id, "completed", completed_at
@@ -702,8 +707,7 @@ class CompiledGraph:
             raise
         except Exception as e:
             raise AgentError(
-                f"Node '{node_id}' failed: {e}\n"
-                f"  Node type: {type(node).__name__}"
+                f"Node '{node_id}' failed: {e}\n  Node type: {type(node).__name__}"
             ) from e
 
     async def _execute_agent_node(
@@ -745,17 +749,21 @@ class CompiledGraph:
                 messages = agent_input
             elif isinstance(agent_input, str):
                 from orchestra.core.types import Message, MessageRole
+
                 messages = [Message(role=MessageRole.USER, content=agent_input)]
 
             violations: list[str] = []
             for g in guardrails:
                 if (isinstance(g, Guardrail) or hasattr(g, "validate_input")) and messages:
-                    v = await g.validate_input(messages=messages, model=getattr(agent, "model", None))
+                    v = await g.validate_input(
+                        messages=messages, model=getattr(agent, "model", None)
+                    )
                     violations.extend([getattr(vv, "message", str(vv)) for vv in v])
 
             if violations:
                 try:
                     from orchestra.storage.events import InputRejected
+
                     if context.event_bus is not None and not context.replay_mode:
                         await context.event_bus.emit(
                             InputRejected(
@@ -771,7 +779,10 @@ class CompiledGraph:
                     pass
                 if str(guard_fail) == "raise":
                     raise AgentError("Guardrail rejected input")
-                return {"output": "Guardrail rejected input", "guardrails": {"violations": violations}}
+                return {
+                    "output": "Guardrail rejected input",
+                    "guardrails": {"violations": violations},
+                }
 
         result: AgentResult = await agent.run(agent_input, context)
 
@@ -782,12 +793,15 @@ class CompiledGraph:
             post_violations: list[str] = []
             for g in guardrails:
                 if isinstance(g, Guardrail) or hasattr(g, "validate_output"):
-                    v = await g.validate_output(output_text=result.output, model=getattr(agent, "model", None))
+                    v = await g.validate_output(
+                        output_text=result.output, model=getattr(agent, "model", None)
+                    )
                     post_violations.extend([getattr(vv, "message", str(vv)) for vv in v])
 
             if post_violations:
                 try:
                     from orchestra.storage.events import OutputRejected
+
                     if context.event_bus is not None and not context.replay_mode:
                         await context.event_bus.emit(
                             OutputRejected(
@@ -803,7 +817,10 @@ class CompiledGraph:
                     pass
                 if str(guard_fail) == "raise":
                     raise AgentError("Guardrail rejected output")
-                return {"output": "Guardrail rejected output", "guardrails": {"violations": post_violations}}
+                return {
+                    "output": "Guardrail rejected output",
+                    "guardrails": {"violations": post_violations},
+                }
 
         # Custom output mapper overrides everything
         if node.output_mapper:
@@ -871,20 +888,18 @@ class CompiledGraph:
                 return result, state
 
             elif isinstance(edge, ParallelEdge):
-                new_state = await self._execute_parallel(
-                    edge, state_dict, state, context
-                )
+                new_state = await self._execute_parallel(edge, state_dict, state, context)
                 next_node = edge.join_node if edge.join_node is not None else END
                 return next_node, new_state
 
         # 2. Check for handoff edges
-        from orchestra.storage.events import HandoffCompleted, HandoffInitiated
+        from orchestra.storage.events import HandoffInitiated
+
         for edge in self._handoff_edges:
             if edge.source == current_node_id:
                 # Check condition if present
-                if edge.condition:
-                    if not edge.condition(state_dict):
-                        continue
+                if edge.condition and not edge.condition(state_dict):
+                    continue
 
                 # Handoff triggered!
                 # Distill context
@@ -950,17 +965,14 @@ class CompiledGraph:
         tasks = []
         for target_id in edge.targets:
             node = self._nodes[target_id]
-            tasks.append(
-                self._execute_node(target_id, node, dict(state_dict), context)
-            )
+            tasks.append(self._execute_node(target_id, node, dict(state_dict), context))
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         errors = [r for r in results if isinstance(r, Exception)]
         if errors:
             raise AgentError(
-                f"Parallel execution failed.\n"
-                f"  Failed nodes: {[str(e) for e in errors]}"
+                f"Parallel execution failed.\n  Failed nodes: {[str(e) for e in errors]}"
             ) from errors[0]
 
         updates = [r for r in results if isinstance(r, dict)]
@@ -987,9 +999,7 @@ class CompiledGraph:
             # Each send gets its own state slice (shallow copy of base state + its specific state)
             scoped_state = dict(state_dict)
             scoped_state.update(send.state)
-            tasks.append(
-                self._execute_node(send.node, node, scoped_state, context)
-            )
+            tasks.append(self._execute_node(send.node, node, scoped_state, context))
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
 

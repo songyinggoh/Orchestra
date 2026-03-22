@@ -4,6 +4,7 @@ Provides the event type hierarchy, EventBus for dispatching,
 EventStore protocol for backends, and state projection utilities.
 """
 
+from orchestra.storage.contracts import BoundaryContract, ContractRegistry
 from orchestra.storage.events import (
     AnyEvent,
     CheckpointCreated,
@@ -27,11 +28,16 @@ from orchestra.storage.events import (
     WorkflowEvent,
     create_event,
 )
-from orchestra.storage.contracts import BoundaryContract, ContractRegistry
-from orchestra.storage.store import EventBus, EventStore, InMemoryEventStore, RunSummary, project_state
+from orchestra.storage.store import (
+    EventBus,
+    EventStore,
+    InMemoryEventStore,
+    RunSummary,
+    project_state,
+)
 
 try:
-    from orchestra.storage.sqlite import SQLiteEventStore, SnapshotManager
+    from orchestra.storage.sqlite import SnapshotManager, SQLiteEventStore
 
     _sqlite_available = True
 except ImportError:

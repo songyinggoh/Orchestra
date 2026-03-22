@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import patch
 
 import pytest
@@ -28,7 +28,7 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-NOW = datetime(2025, 1, 15, 12, 0, 0, tzinfo=timezone.utc)
+NOW = datetime(2025, 1, 15, 12, 0, 0, tzinfo=UTC)
 RUN_ID = "test-metrics-001"
 
 

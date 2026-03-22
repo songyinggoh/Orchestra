@@ -1,12 +1,13 @@
 """Replay LLM Provider for side-effect safe time-travel.
 
-Wraps historical events and returns recorded LLM responses instead of 
+Wraps historical events and returns recorded LLM responses instead of
 calling real APIs during replay/forked phases.
 """
 
 from __future__ import annotations
 
-from typing import Any, Iterable
+from collections.abc import Iterable
+from typing import Any
 
 from orchestra.core.types import LLMResponse, Message, TokenUsage, ToolCall
 from orchestra.storage.events import LLMCalled

@@ -1,10 +1,11 @@
 """Workflow event types for event-sourced persistence."""
+
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Annotated, Any, Literal, Union
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -42,7 +43,7 @@ class WorkflowEvent(BaseModel):
 
     event_id: str = Field(default_factory=lambda: uuid.uuid4().hex)
     run_id: str
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
     sequence: int = 0  # Assigned by EventBus at emit time
     event_type: EventType
     schema_version: int = 1
@@ -283,29 +284,27 @@ class HandoffCompleted(WorkflowEvent):
 # --- Discriminated Union ---
 
 AnyEvent = Annotated[
-    Union[
-        ExecutionStarted,
-        ExecutionCompleted,
-        ForkCreated,
-        NodeStarted,
-        NodeCompleted,
-        StateUpdated,
-        ErrorOccurred,
-        LLMCalled,
-        ToolCalled,
-        EdgeTraversed,
-        ParallelStarted,
-        ParallelCompleted,
-        InterruptRequested,
-        InterruptResumed,
-        CheckpointCreated,
-        SecurityViolation,
-        RestrictedModeEntered,
-        InputRejected,
-        OutputRejected,
-        HandoffInitiated,
-        HandoffCompleted,
-    ],
+    ExecutionStarted
+    | ExecutionCompleted
+    | ForkCreated
+    | NodeStarted
+    | NodeCompleted
+    | StateUpdated
+    | ErrorOccurred
+    | LLMCalled
+    | ToolCalled
+    | EdgeTraversed
+    | ParallelStarted
+    | ParallelCompleted
+    | InterruptRequested
+    | InterruptResumed
+    | CheckpointCreated
+    | SecurityViolation
+    | RestrictedModeEntered
+    | InputRejected
+    | OutputRejected
+    | HandoffInitiated
+    | HandoffCompleted,
     Field(discriminator="event_type"),
 ]
 

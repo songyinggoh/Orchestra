@@ -11,6 +11,7 @@ Or pick a single backend:
     pytest tests/live/ -m live -k openai -v
     pytest tests/live/ -m live -k ollama -v
 """
+
 from __future__ import annotations
 
 import os
@@ -62,6 +63,7 @@ def google_provider():
     if not key:
         pytest.skip("GOOGLE_API_KEY not set")
     from orchestra.providers.google import GoogleProvider
+
     return GoogleProvider(api_key=key, default_model="gemini-2.0-flash")
 
 
@@ -73,6 +75,7 @@ def google_model():
 @pytest.fixture
 async def ollama_provider():
     from orchestra.providers.ollama import OllamaProvider
+
     p = OllamaProvider()
     if not await p.health_check():
         pytest.skip("Ollama not running — start with: ollama serve")

@@ -14,7 +14,6 @@ Coverage:
 
 from __future__ import annotations
 
-import importlib
 import sys
 import types
 from typing import Any
@@ -56,9 +55,7 @@ def _make_fake_rebuff_sdk() -> types.ModuleType:
         def add_canary_word(self, template: str) -> tuple[str, str]:
             return template + " [CANARY:test123]", "test123"
 
-        def is_canaryword_leaked(
-            self, user_input: str, response: str, canary_word: str
-        ) -> bool:
+        def is_canaryword_leaked(self, user_input: str, response: str, canary_word: str) -> bool:
             return self._canary_leaked
 
     mod.RebuffSdk = FakeRebuffSdk  # type: ignore[attr-defined]
@@ -111,6 +108,7 @@ def _make_context(state: dict[str, Any] | None = None) -> Any:
 def _llm_response(text: str = "LLM output") -> Any:
     """Fake LLMResponse returned by a mocked provider."""
     from orchestra.core.types import LLMResponse, TokenUsage
+
     return LLMResponse(
         content=text,
         finish_reason="stop",
@@ -308,6 +306,7 @@ class TestPromptInjectionAgent:
     @pytest.mark.asyncio
     async def test_accepts_message_list(self) -> None:
         from orchestra.core.types import Message, MessageRole
+
         agent = self._make_agent()
         ctx = _make_context()
         ctx.provider.complete = AsyncMock(return_value=_llm_response("ok"))
@@ -407,21 +406,17 @@ class TestMakeInjectionGuardNode:
     async def test_injection_flagged_in_state(self) -> None:
         node = self._make_node()
         # Set the SDK inside the checker to detect
-        node.__closure__  # access closure to get checker
-        # Patch via the SDK directly
-        checker = None
-        for cell in node.__code__.co_freevars:
-            pass  # can't easily patch inner closure; patch asyncio.to_thread instead
+        # Can't easily patch inner closure; use asyncio.to_thread mock instead
+        for _cell in node.__code__.co_freevars:
+            pass
 
         with patch("asyncio.to_thread") as mock_thread:
-            from orchestra.security.rebuff import InjectionDetectionResult
             mock_thread.return_value = _fake_rebuff.RebuffSdk().detect_injection.__func__  # type: ignore
             # Simpler: just set _set_detected on a fresh SDK
             pass
 
         # Create a fresh node whose SDK has detection on
         node2 = self._make_node()
-        node2.__globals__  # type: ignore
         # Access via direct SDK manipulation through asyncio.to_thread mock
         fake_result = MagicMock()
         fake_result.injection_detected = True

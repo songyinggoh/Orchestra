@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from orchestra.server.config import ServerConfig
 
 
-def add_cors_middleware(app: "FastAPI", config: "ServerConfig") -> None:
+def add_cors_middleware(app: FastAPI, config: ServerConfig) -> None:
     """Configure CORS middleware on the FastAPI app."""
     from fastapi.middleware.cors import CORSMiddleware
 
@@ -30,12 +30,12 @@ def add_cors_middleware(app: "FastAPI", config: "ServerConfig") -> None:
     )
 
 
-def add_body_size_middleware(app: "FastAPI", config: "ServerConfig") -> None:
+def add_body_size_middleware(app: FastAPI, config: ServerConfig) -> None:
     """Reject requests whose body exceeds config.max_request_body_bytes (HTTP 413)."""
     app.add_middleware(BodySizeLimitMiddleware, max_bytes=config.max_request_body_bytes)
 
 
-def add_rate_limit_middleware(app: "FastAPI", config: "ServerConfig") -> None:
+def add_rate_limit_middleware(app: FastAPI, config: ServerConfig) -> None:
     """Apply per-credential token-bucket rate limiting (HTTP 429 on excess)."""
     app.add_middleware(
         RateLimitMiddleware,
@@ -44,19 +44,15 @@ def add_rate_limit_middleware(app: "FastAPI", config: "ServerConfig") -> None:
     )
 
 
-def add_request_id_middleware(app: "FastAPI") -> None:
+def add_request_id_middleware(app: FastAPI) -> None:
     """Add middleware that generates a UUID request ID for each request.
 
     The ID is returned in the ``X-Request-ID`` response header.
     """
     from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
-    from starlette.requests import Request
-    from starlette.responses import Response
 
     class RequestIDMiddleware(BaseHTTPMiddleware):
-        async def dispatch(
-            self, request: Request, call_next: RequestResponseEndpoint
-        ) -> Response:
+        async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
             request_id = request.headers.get("X-Request-ID", uuid.uuid4().hex)
             response = await call_next(request)
             response.headers["X-Request-ID"] = request_id
@@ -101,9 +97,7 @@ class BodySizeLimitMiddleware:
             if message["type"] == "http.request":
                 received_bytes += len(message.get("body", b""))
                 if received_bytes > self.max_bytes:
-                    raise ValueError(
-                        f"Request body exceeds {self.max_bytes} bytes"
-                    )
+                    raise ValueError(f"Request body exceeds {self.max_bytes} bytes")
             return message
 
         await self.app(scope, limited_receive, send)
@@ -112,14 +106,16 @@ class BodySizeLimitMiddleware:
         body = json.dumps(
             {"detail": "Request body too large", "error_type": "payload_too_large"}
         ).encode()
-        await send({
-            "type": "http.response.start",
-            "status": 413,
-            "headers": [
-                (b"content-type", b"application/json"),
-                (b"content-length", str(len(body)).encode()),
-            ],
-        })
+        await send(
+            {
+                "type": "http.response.start",
+                "status": 413,
+                "headers": [
+                    (b"content-type", b"application/json"),
+                    (b"content-length", str(len(body)).encode()),
+                ],
+            }
+        )
         await send({"type": "http.response.body", "body": body})
 
 
@@ -175,17 +171,19 @@ class RateLimitMiddleware:
             ).encode()
             retry_after = str(int(self._bucket.window_seconds))
             limit = str(self._bucket.max_tokens)
-            await send({
-                "type": "http.response.start",
-                "status": 429,
-                "headers": [
-                    (b"content-type", b"application/json"),
-                    (b"content-length", str(len(body)).encode()),
-                    (b"retry-after", retry_after.encode()),
-                    (b"x-ratelimit-limit", limit.encode()),
-                    (b"x-ratelimit-remaining", b"0"),
-                ],
-            })
+            await send(
+                {
+                    "type": "http.response.start",
+                    "status": 429,
+                    "headers": [
+                        (b"content-type", b"application/json"),
+                        (b"content-length", str(len(body)).encode()),
+                        (b"retry-after", retry_after.encode()),
+                        (b"x-ratelimit-limit", limit.encode()),
+                        (b"x-ratelimit-remaining", b"0"),
+                    ],
+                }
+            )
             await send({"type": "http.response.body", "body": body})
             return
 

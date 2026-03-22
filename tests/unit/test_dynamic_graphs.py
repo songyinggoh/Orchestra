@@ -11,7 +11,6 @@ from orchestra.core.dynamic import (
     load_graph_yaml,
 )
 
-
 # ---------------------------------------------------------------------------
 # SubgraphBuilder — resolve_ref
 # ---------------------------------------------------------------------------
@@ -27,6 +26,7 @@ class TestSubgraphBuilderResolveRef:
         # orchestra.core.graph is within the allowed "orchestra.core." prefix
         cls = builder.resolve_ref("orchestra.core.graph.WorkflowGraph")
         from orchestra.core.graph import WorkflowGraph
+
         assert cls is WorkflowGraph
 
     def test_resolve_blocked_ref_raises_import_error(self):
@@ -49,6 +49,7 @@ class TestSubgraphBuilderResolveRef:
         builder = SubgraphBuilder(allowed_prefixes=["os.path."])
         result = builder.resolve_ref("os.path.join")
         import os.path
+
         assert result is os.path.join
 
     def test_custom_prefixes_stored_as_tuple(self):

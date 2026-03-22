@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request
 
 from orchestra.server.dependencies import get_event_store, get_graph_registry, get_run_manager
 from orchestra.server.models import ResumeRequest, RunCreate, RunResponse, RunStatus
@@ -103,8 +103,6 @@ async def resume_run(run_id: str, body: ResumeRequest, request: Request) -> RunR
 
     # Use the graph's resume method directly via a new task
     import asyncio
-    from orchestra.server.lifecycle import ActiveRun
-    from datetime import datetime, timezone
 
     async def _resume_workflow() -> dict[str, Any]:
         try:

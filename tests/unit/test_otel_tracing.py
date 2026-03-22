@@ -3,16 +3,16 @@
 from __future__ import annotations
 
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 # Try to import OTel SDK for real-span tests; skip if not installed
 try:
+    from opentelemetry import trace as trace_api
     from opentelemetry.sdk.trace import TracerProvider
     from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
-    from opentelemetry import trace as trace_api
 
     _OTEL_SDK_AVAILABLE = True
 except ImportError:
@@ -61,7 +61,7 @@ def subscriber(otel_setup):
 
 
 RUN_ID = "test-run-001"
-NOW = datetime(2025, 1, 15, 12, 0, 0, tzinfo=timezone.utc)
+NOW = datetime(2025, 1, 15, 12, 0, 0, tzinfo=UTC)
 
 
 def _exec_started(run_id: str = RUN_ID) -> ExecutionStarted:
@@ -198,8 +198,8 @@ class TestNodeSpan:
         subscriber.on_event(_exec_completed())
 
         spans = otel_setup.get_finished_spans()
-        workflow_span = [s for s in spans if s.name == "workflow.run"][0]
-        node_span = [s for s in spans if s.name == "node.triage"][0]
+        workflow_span = next(s for s in spans if s.name == "workflow.run")
+        node_span = next(s for s in spans if s.name == "node.triage")
 
         # Node span's parent should be the workflow span
         assert node_span.parent is not None
@@ -252,8 +252,8 @@ class TestLLMSpan:
         subscriber.on_event(_exec_completed())
 
         spans = otel_setup.get_finished_spans()
-        node_span = [s for s in spans if s.name == "node.triage"][0]
-        llm_span = [s for s in spans if s.name == "gen_ai.chat"][0]
+        node_span = next(s for s in spans if s.name == "node.triage")
+        llm_span = next(s for s in spans if s.name == "gen_ai.chat")
 
         assert llm_span.parent is not None
         assert llm_span.parent.span_id == node_span.context.span_id
@@ -313,8 +313,8 @@ class TestToolSpan:
         subscriber.on_event(_exec_completed())
 
         spans = otel_setup.get_finished_spans()
-        node_span = [s for s in spans if s.name == "node.triage"][0]
-        tool_span = [s for s in spans if s.name.startswith("tool.")][0]
+        node_span = next(s for s in spans if s.name == "node.triage")
+        tool_span = next(s for s in spans if s.name.startswith("tool."))
 
         assert tool_span.parent is not None
         assert tool_span.parent.span_id == node_span.context.span_id
@@ -371,7 +371,7 @@ class TestErrorHandling:
         subscriber.on_event(_exec_completed())
 
         spans = otel_setup.get_finished_spans()
-        node_span = [s for s in spans if s.name == "node.triage"][0]
+        node_span = next(s for s in spans if s.name == "node.triage")
         assert node_span.status.status_code == StatusCode.ERROR
 
         # Check that exception was recorded
@@ -386,7 +386,6 @@ class TestGracefulDegradation:
     def test_no_crash_without_otel_installed(self):
         """Importing the module and calling on_event should not crash
         when opentelemetry is not available."""
-        import importlib
         import sys
 
         # Temporarily hide OTel modules

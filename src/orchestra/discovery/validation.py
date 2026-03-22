@@ -7,7 +7,6 @@ including did-you-mean suggestions via Levenshtein edit distance.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
 
 import structlog
 

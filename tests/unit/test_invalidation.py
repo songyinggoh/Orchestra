@@ -1,20 +1,24 @@
 import asyncio
 from unittest.mock import AsyncMock, MagicMock
+
 import pytest
-from orchestra.memory.invalidation import InvalidationSubscriber, CHANNEL
+
+from orchestra.memory.invalidation import CHANNEL, InvalidationSubscriber
+
 
 @pytest.mark.asyncio
 async def test_invalidation_subscriber():
     redis = MagicMock()
     pubsub = AsyncMock()
     redis.pubsub.return_value = pubsub
-    
+
     invalidated_keys = []
+
     def on_invalidate(key):
         invalidated_keys.append(key)
-        
+
     subscriber = InvalidationSubscriber(redis, on_invalidate)
-    
+
     # Mock ps.listen() to yield one message then stop
     async def mock_listen():
         # First message: initial connect/reconnect trigger (handled in _listen_loop)
@@ -27,14 +31,14 @@ async def test_invalidation_subscriber():
 
     pubsub.listen = mock_listen
     pubsub.__aenter__.return_value = pubsub
-    
+
     await subscriber.start()
     await asyncio.sleep(0.2)
     await subscriber.stop()
-    
+
     # "*" is appended by the initial connect logic in _listen_loop
     assert "*" in invalidated_keys
     assert "key1" in invalidated_keys
     assert "key2" in invalidated_keys
-    
+
     pubsub.subscribe.assert_called_with(CHANNEL)

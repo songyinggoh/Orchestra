@@ -8,7 +8,6 @@ dynamic WorkflowState generation and ``state_ref:`` for Python escape hatches.
 
 from __future__ import annotations
 
-import importlib
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -19,19 +18,19 @@ from orchestra.core.agent import BaseAgent
 from orchestra.core.compiled import CompiledGraph
 from orchestra.core.dynamic import SubgraphBuilder
 from orchestra.core.graph import WorkflowGraph
-from orchestra.core.types import END
 from orchestra.core.state import (
     WorkflowState,
-    merge_list,
-    merge_dict,
-    sum_numbers,
-    last_write_wins,
-    merge_set,
     concat_str,
     keep_first,
+    last_write_wins,
     max_value,
+    merge_dict,
+    merge_list,
+    merge_set,
     min_value,
+    sum_numbers,
 )
+from orchestra.core.types import END
 from orchestra.discovery.errors import WorkflowLoadError
 
 logger = structlog.get_logger(__name__)
@@ -187,9 +186,7 @@ def load_workflow(
 
     try:
         yaml = YAML(typ="safe")
-        data: dict[str, Any] | None = yaml.load(
-            yaml_path.read_text(encoding="utf-8")
-        )
+        data: dict[str, Any] | None = yaml.load(yaml_path.read_text(encoding="utf-8"))
     except Exception as exc:
         raise WorkflowLoadError(f"Cannot parse {yaml_path}: {exc}") from exc
 
@@ -218,13 +215,13 @@ def load_workflow(
                 _check_lib_ref(ref)
                 try:
                     agent = builder.resolve_ref(ref)
-                except ImportError:
+                except ImportError as err:
                     available = sorted(agent_registry.keys())
                     raise WorkflowLoadError(
                         f"Node '{node_id}' references agent '{ref}' which was not "
                         f"found in the agent registry or as a dotted path. "
                         f"Available agents: {available}"
-                    )
+                    ) from err
             graph.add_node(node_id, agent, output_key=output_key)
         elif node_type == "function":
             _check_lib_ref(ref)
@@ -237,8 +234,7 @@ def load_workflow(
             graph.add_node(node_id, func, output_key=output_key)
         else:
             raise WorkflowLoadError(
-                f"Unknown node type '{node_type}' for node '{node_id}'. "
-                f"Supported: agent, function"
+                f"Unknown node type '{node_type}' for node '{node_id}'. Supported: agent, function"
             )
 
     # Add edges
@@ -254,9 +250,7 @@ def load_workflow(
         elif edge_data.get("type") == "conditional":
             condition_ref = edge_data.get("condition_ref")
             if not condition_ref:
-                raise WorkflowLoadError(
-                    f"Conditional edge from '{source}' missing 'condition_ref'"
-                )
+                raise WorkflowLoadError(f"Conditional edge from '{source}' missing 'condition_ref'")
             _check_lib_ref(condition_ref)
             try:
                 condition_fn = builder.resolve_ref(condition_ref)

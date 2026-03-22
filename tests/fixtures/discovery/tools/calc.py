@@ -1,4 +1,5 @@
 """Fixture tool file: calculator tool."""
+
 from orchestra.tools.base import tool
 
 

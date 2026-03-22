@@ -1,19 +1,18 @@
 """EventBus, EventStore protocol, and in-memory implementation."""
+
 from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 from orchestra.storage.events import (
-    AnyEvent,
     CheckpointCreated,
     EventType,
     ExecutionCompleted,
     ExecutionStarted,
     NodeCompleted,
-    NodeStarted,
     StateUpdated,
     WorkflowEvent,
 )
@@ -177,9 +176,7 @@ class InMemoryEventStore:
         """Persist a checkpoint object."""
         self._checkpoints.setdefault(checkpoint.run_id, []).append(checkpoint)
 
-    async def list_runs(
-        self, *, limit: int = 50, status: str | None = None
-    ) -> list[RunSummary]:
+    async def list_runs(self, *, limit: int = 50, status: str | None = None) -> list[RunSummary]:
         """List workflow runs with optional status filter."""
         summaries = []
         for run_id, meta in self._run_meta.items():

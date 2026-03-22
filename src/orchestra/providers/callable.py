@@ -39,7 +39,6 @@ from orchestra.core.types import (
     Message,
     ModelCost,
     StreamChunk,
-    TokenUsage,
 )
 
 
@@ -88,15 +87,11 @@ class CallableProvider:
                 origin = getattr(hint, "__origin__", None)
                 if origin is list:
                     args = getattr(hint, "__args__", ())
-                    if args and args[0] is Message:
-                        self._accepts_messages = True
-                    elif not args:
+                    if (args and args[0] is Message) or not args:
                         self._accepts_messages = True
 
             # Check for **kwargs or extra parameters
-            if len(params) > 1 or any(
-                p.kind == inspect.Parameter.VAR_KEYWORD for p in params
-            ):
+            if len(params) > 1 or any(p.kind == inspect.Parameter.VAR_KEYWORD for p in params):
                 self._accepts_kwargs = True
 
     @property
@@ -139,7 +134,10 @@ class CallableProvider:
     ) -> AsyncIterator[StreamChunk]:
         """Stream by calling complete() and yielding the result as chunks."""
         response = await self.complete(
-            messages, model=model, tools=tools, temperature=temperature,
+            messages,
+            model=model,
+            tools=tools,
+            temperature=temperature,
         )
         if response.content:
             # Yield word by word to simulate streaming

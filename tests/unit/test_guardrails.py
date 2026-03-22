@@ -17,11 +17,11 @@ from pydantic import BaseModel
 from orchestra.core.types import Message, MessageRole
 from orchestra.security.guardrails import (
     ContentFilter,
+    GuardedAgent,
     GuardrailChain,
     GuardrailError,
     GuardrailResult,
     GuardrailViolation,
-    GuardedAgent,
     OnFail,
     PIIDetector,
     SchemaValidator,
@@ -225,9 +225,7 @@ class TestGuardrailChain:
 
     @pytest.mark.asyncio
     async def test_chain_exception_raises(self):
-        chain = GuardrailChain([
-            ContentFilter(banned_words=["danger"], on_fail=OnFail.EXCEPTION)
-        ])
+        chain = GuardrailChain([ContentFilter(banned_words=["danger"], on_fail=OnFail.EXCEPTION)])
         with pytest.raises(GuardrailError, match="danger"):
             await chain.run("This is danger")
 
@@ -241,37 +239,37 @@ class TestGuardrailChain:
 
     @pytest.mark.asyncio
     async def test_chain_retry_returns_failure(self):
-        chain = GuardrailChain([
-            ContentFilter(banned_words=["retry_me"], on_fail=OnFail.RETRY)
-        ])
+        chain = GuardrailChain([ContentFilter(banned_words=["retry_me"], on_fail=OnFail.RETRY)])
         result = await chain.run("retry_me please")
         assert result.passed is False
 
     @pytest.mark.asyncio
     async def test_chain_add_builder(self):
         chain = GuardrailChain()
-        chain.add(ContentFilter(banned_words=["bad"])).add(
-            MaxLengthGuardrail(max_length=100)
-        )
+        chain.add(ContentFilter(banned_words=["bad"])).add(MaxLengthGuardrail(max_length=100))
         assert len(chain) == 2
 
     @pytest.mark.asyncio
     async def test_chain_multiple_validators_all_pass(self):
-        chain = GuardrailChain([
-            ContentFilter(banned_words=["bomb"]),
-            MaxLengthGuardrail(max_length=100),
-            RegexGuardrail(r"\d{3}-\d{2}-\d{4}", must_match=False),
-        ])
+        chain = GuardrailChain(
+            [
+                ContentFilter(banned_words=["bomb"]),
+                MaxLengthGuardrail(max_length=100),
+                RegexGuardrail(r"\d{3}-\d{2}-\d{4}", must_match=False),
+            ]
+        )
         result = await chain.run("Hello, this is safe text")
         assert result.passed is True
 
     @pytest.mark.asyncio
     async def test_chain_fix_then_validate(self):
         """FIX guardrail truncates, then next guardrail validates the fixed output."""
-        chain = GuardrailChain([
-            MaxLengthGuardrail(max_length=10, on_fail=OnFail.FIX),
-            ContentFilter(banned_words=["bomb"]),
-        ])
+        chain = GuardrailChain(
+            [
+                MaxLengthGuardrail(max_length=10, on_fail=OnFail.FIX),
+                ContentFilter(banned_words=["bomb"]),
+            ]
+        )
         # "bomb" is at position 15+, after truncation it won't be in the text
         result = await chain.run("Safe text bomb is here")
         assert result.passed is True
@@ -288,9 +286,7 @@ class TestGuardedAgent:
     async def test_input_guardrail_blocks(self):
         agent = GuardedAgent(
             name="test_agent",
-            input_guardrails=GuardrailChain([
-                ContentFilter(banned_words=["forbidden"])
-            ]),
+            input_guardrails=GuardrailChain([ContentFilter(banned_words=["forbidden"])]),
         )
         from orchestra.core.context import ExecutionContext
         from orchestra.testing import ScriptedLLM
@@ -309,9 +305,7 @@ class TestGuardedAgent:
 
         agent = GuardedAgent(
             name="test_agent",
-            output_guardrails=GuardrailChain([
-                ContentFilter(banned_words=["secret"])
-            ]),
+            output_guardrails=GuardrailChain([ContentFilter(banned_words=["secret"])]),
         )
         ctx = ExecutionContext(
             run_id="test",
@@ -327,9 +321,7 @@ class TestGuardedAgent:
 
         agent = GuardedAgent(
             name="test_agent",
-            output_guardrails=GuardrailChain([
-                ContentFilter(banned_words=["bomb"])
-            ]),
+            output_guardrails=GuardrailChain([ContentFilter(banned_words=["bomb"])]),
         )
         ctx = ExecutionContext(
             run_id="test",
@@ -360,9 +352,9 @@ class TestGuardedAgent:
         agent = GuardedAgent(
             name="retry_agent",
             max_retries=2,
-            output_guardrails=GuardrailChain([
-                ContentFilter(banned_words=["bad"], on_fail=OnFail.RETRY)
-            ]),
+            output_guardrails=GuardrailChain(
+                [ContentFilter(banned_words=["bad"], on_fail=OnFail.RETRY)]
+            ),
         )
         # First response fails, second response succeeds
         ctx = ExecutionContext(
@@ -381,9 +373,9 @@ class TestGuardedAgent:
         agent = GuardedAgent(
             name="retry_agent",
             max_retries=1,
-            output_guardrails=GuardrailChain([
-                ContentFilter(banned_words=["bad"], on_fail=OnFail.RETRY)
-            ]),
+            output_guardrails=GuardrailChain(
+                [ContentFilter(banned_words=["bad"], on_fail=OnFail.RETRY)]
+            ),
         )
         ctx = ExecutionContext(
             run_id="test",
@@ -400,9 +392,9 @@ class TestGuardedAgent:
 
         agent = GuardedAgent(
             name="exception_agent",
-            input_guardrails=GuardrailChain([
-                ContentFilter(banned_words=["error"], on_fail=OnFail.EXCEPTION)
-            ]),
+            input_guardrails=GuardrailChain(
+                [ContentFilter(banned_words=["error"], on_fail=OnFail.EXCEPTION)]
+            ),
         )
         ctx = ExecutionContext(
             run_id="test",
@@ -419,9 +411,9 @@ class TestGuardedAgent:
 
         agent = GuardedAgent(
             name="fix_agent",
-            output_guardrails=GuardrailChain([
-                MaxLengthGuardrail(max_length=5, on_fail=OnFail.FIX)
-            ]),
+            output_guardrails=GuardrailChain(
+                [MaxLengthGuardrail(max_length=5, on_fail=OnFail.FIX)]
+            ),
         )
         ctx = ExecutionContext(
             run_id="test",
@@ -442,9 +434,7 @@ class TestGuardedAgent:
 
         agent = GuardedAgent(
             name="msg_agent",
-            input_guardrails=GuardrailChain([
-                ContentFilter(banned_words=["blocked"])
-            ]),
+            input_guardrails=GuardrailChain([ContentFilter(banned_words=["blocked"])]),
         )
         ctx = ExecutionContext(
             run_id="test",
