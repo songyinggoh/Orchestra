@@ -32,7 +32,7 @@ def get_event_store(request: Request) -> EventStore:
 
 async def require_api_key(
     request: Request,
-    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),  # noqa: B008
 ) -> None:
     """Verify the Bearer token matches ORCHESTRA_API_KEY.
 

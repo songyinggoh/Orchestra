@@ -9,7 +9,7 @@ Provides reusable validators that conform to the Guardrail protocol:
 from __future__ import annotations
 
 import re
-from typing import Any
+from typing import Any, ClassVar
 
 from orchestra.security.guardrails import (
     GuardrailResult,
@@ -131,14 +131,14 @@ class PIIRedactionGuardrail:
     """
 
     # Fallback regex patterns when Presidio is not available
-    _FALLBACK_PATTERNS: dict[str, re.Pattern[str]] = {
+    _FALLBACK_PATTERNS: ClassVar[dict[str, re.Pattern[str]]] = {
         "email": re.compile(r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+"),
         "phone": re.compile(r"\b(?:\+?(\d{1,3}))?[-. (]*(\d{3})[-. )]*(\d{3})[-. ]*(\d{4})\b"),
         "ssn": re.compile(r"\b\d{3}-\d{2}-\d{4}\b"),
         "credit_card": re.compile(r"\b(?:\d[ -]*?){13,16}\b"),
     }
 
-    _REPLACEMENT_MAP: dict[str, str] = {
+    _REPLACEMENT_MAP: ClassVar[dict[str, str]] = {
         "email": "[EMAIL_REDACTED]",
         "phone": "[PHONE_REDACTED]",
         "ssn": "[SSN_REDACTED]",

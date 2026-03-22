@@ -445,9 +445,8 @@ class SnapshotManager:
         count = self._counters.get(run_id, 0) + 1
         self._counters[run_id] = count
 
-        if count % self._interval == 0:
+        if count % self._interval == 0 and isinstance(event, CheckpointCreated):
             # Only CheckpointCreated events carry state_snapshot, so we only
             # snapshot when we receive one (full state available). For a generic
             # event we create a minimal checkpoint marker.
-            if isinstance(event, CheckpointCreated):
-                asyncio.ensure_future(self._store.save_checkpoint(event))
+            _task = asyncio.ensure_future(self._store.save_checkpoint(event))

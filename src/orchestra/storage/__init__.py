@@ -52,47 +52,35 @@ except ImportError:
     _postgres_available = False
 
 __all__ = [
-    # Event base and types
-    "WorkflowEvent",
-    "EventType",
     "AnyEvent",
-    "create_event",
-    # Lifecycle events
-    "ExecutionStarted",
-    "ExecutionCompleted",
-    # Node events
-    "NodeStarted",
-    "NodeCompleted",
-    "StateUpdated",
-    "ErrorOccurred",
-    # Agent events
-    "LLMCalled",
-    "ToolCalled",
-    # Graph events
-    "EdgeTraversed",
-    "ParallelStarted",
-    "ParallelCompleted",
-    # HITL events
-    "InterruptRequested",
-    "InterruptResumed",
+    "BoundaryContract",
     "CheckpointCreated",
-    # Contract events
-    "OutputRejected",
-    # Handoff events
-    "HandoffInitiated",
-    "HandoffCompleted",
-    # Infrastructure
+    "ContractRegistry",
+    "EdgeTraversed",
+    "ErrorOccurred",
     "EventBus",
     "EventStore",
+    "EventType",
+    "ExecutionCompleted",
+    "ExecutionStarted",
+    "HandoffCompleted",
+    "HandoffInitiated",
     "InMemoryEventStore",
-    "RunSummary",
-    "project_state",
-    # Contracts
-    "BoundaryContract",
-    "ContractRegistry",
-    # SQLite backend (optional — requires aiosqlite)
-    "SQLiteEventStore",
-    "SnapshotManager",
-    # PostgreSQL backend (optional — requires asyncpg)
+    "InterruptRequested",
+    "InterruptResumed",
+    "LLMCalled",
+    "NodeCompleted",
+    "NodeStarted",
+    "OutputRejected",
+    "ParallelCompleted",
+    "ParallelStarted",
     "PostgresEventStore",
+    "RunSummary",
+    "SnapshotManager",
+    "SQLiteEventStore",
+    "StateUpdated",
+    "ToolCalled",
+    "WorkflowEvent",
+    "create_event",
+    "project_state",
 ]
