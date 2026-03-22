@@ -37,7 +37,6 @@ from orchestra.core.state import WorkflowState, merge_dict, merge_list
 from orchestra.core.types import END, LLMResponse, Message, MessageRole, StreamChunk
 from orchestra.tools.base import tool
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -509,7 +508,9 @@ class TestMultiAgentRouting:
         assert state["answer"]
 
     @pytest.mark.asyncio
-    async def test_anthropic_answer_non_empty_after_routing(self, anthropic_provider, anthropic_model):
+    async def test_anthropic_answer_non_empty_after_routing(
+        self, anthropic_provider, anthropic_model
+    ):
         state = await self._run_routing(
             anthropic_provider,
             anthropic_model,
@@ -652,7 +653,9 @@ class TestParallelFanOut:
         )
 
     @pytest.mark.asyncio
-    async def test_anthropic_all_three_findings_populated(self, anthropic_provider, anthropic_model):
+    async def test_anthropic_all_three_findings_populated(
+        self, anthropic_provider, anthropic_model
+    ):
         result = await self._run_parallel(anthropic_provider, anthropic_model)
         findings = result.state["findings"]
         assert "technical" in findings
