@@ -528,6 +528,16 @@ class TestMultiAgentRouting:
         assert state["answer"]
 
     @pytest.mark.asyncio
+    async def test_ollama_routing_produces_answer(self, ollama_provider, ollama_model):
+        state = await self._run_routing(
+            ollama_provider,
+            ollama_model,
+            "How do Python generators work?",
+        )
+        assert state["category"]
+        assert state["answer"]
+
+    @pytest.mark.asyncio
     async def test_any_provider_routing_executes_two_nodes(self, any_provider_and_model):
         provider, model = any_provider_and_model
         classifier = BaseAgent(
@@ -676,6 +686,13 @@ class TestParallelFanOut:
     @pytest.mark.asyncio
     async def test_openai_parallel_fan_out(self, openai_provider, openai_model):
         result = await self._run_parallel(openai_provider, openai_model)
+        findings = result.state["findings"]
+        assert len(findings) == 3
+        assert result.state["synthesis"]
+
+    @pytest.mark.asyncio
+    async def test_ollama_parallel_fan_out(self, ollama_provider, ollama_model):
+        result = await self._run_parallel(ollama_provider, ollama_model)
         findings = result.state["findings"]
         assert len(findings) == 3
         assert result.state["synthesis"]

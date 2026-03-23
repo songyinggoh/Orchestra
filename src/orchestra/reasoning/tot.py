@@ -168,7 +168,7 @@ class TreeOfThoughtsAgent(BaseAgent):
     tot_temperature: float = 0.7
     eval_temperature: float = 0.0
 
-    model_config = {"arbitrary_types_allowed": True}
+    model_config: dict = {"arbitrary_types_allowed": True}  # noqa: RUF012
 
     async def run(
         self,
@@ -249,7 +249,7 @@ class TreeOfThoughtsAgent(BaseAgent):
             gen_results = await asyncio.gather(*gen_tasks, return_exceptions=True)
 
             candidates: list[ThoughtNode] = []
-            for node, result in zip(frontier, gen_results):
+            for node, result in zip(frontier, gen_results, strict=False):
                 if isinstance(result, Exception):
                     logger.warning("tot_generate_error", error=str(result))
                     continue
@@ -268,7 +268,7 @@ class TreeOfThoughtsAgent(BaseAgent):
             eval_results = await asyncio.gather(*eval_tasks, return_exceptions=True)
 
             scored: list[ThoughtNode] = []
-            for node, result in zip(candidates, eval_results):
+            for node, result in zip(candidates, eval_results, strict=False):
                 if isinstance(result, Exception):
                     logger.warning("tot_evaluate_error", error=str(result))
                     node.value = 0.5
@@ -357,7 +357,7 @@ class TreeOfThoughtsAgent(BaseAgent):
             eval_results = await asyncio.gather(*eval_tasks, return_exceptions=True)
 
             viable: list[ThoughtNode] = []
-            for child, result in zip(children, eval_results):
+            for child, result in zip(children, eval_results, strict=False):
                 if isinstance(result, Exception):
                     child.value = 0.5
                     viable.append(child)

@@ -283,10 +283,10 @@ class PromptInjectionAgent(BaseAgent):
     blocked_message: str = _DEFAULT_BLOCKED
     canary_leak_message: str = _DEFAULT_CANARY_LEAK
 
-    model_config = {"arbitrary_types_allowed": True}
+    model_config: dict = {"arbitrary_types_allowed": True}  # noqa: RUF012
 
     # Lazily initialised so __init__ doesn't require rebuff when just importing
-    _checker: RebuffChecker | None = None  # noqa: RUF012
+    _checker: RebuffChecker | None = None
 
     def _get_checker(self) -> RebuffChecker:
         if self._checker is None:
@@ -436,9 +436,9 @@ class InjectionAuditorAgent(BaseAgent):
     rebuff_openai_model: str = "gpt-3.5-turbo"
     input_key: str = "user_input"
 
-    model_config = {"arbitrary_types_allowed": True}
+    model_config: dict = {"arbitrary_types_allowed": True}  # noqa: RUF012
 
-    _checker: RebuffChecker | None = None  # noqa: RUF012
+    _checker: RebuffChecker | None = None
 
     def _get_checker(self) -> RebuffChecker:
         if self._checker is None:

@@ -113,7 +113,7 @@ class SelfCheckAgent(BaseAgent):
     selfcheck_device: str = "cpu"
     retry_on_high_risk: bool = False  # retry once if risk is "high"
 
-    model_config = {"arbitrary_types_allowed": True}
+    model_config: dict = {"arbitrary_types_allowed": True}  # noqa: RUF012
 
     async def run(
         self,
@@ -241,7 +241,7 @@ class SessionAuditorAgent(BaseAgent):
     audited_agent_key: str = "output"  # state key → response to audit
     messages_key: str = "messages"  # state key → original messages
 
-    model_config = {"arbitrary_types_allowed": True}
+    model_config: dict = {"arbitrary_types_allowed": True}  # noqa: RUF012
 
     async def run(
         self,
@@ -306,7 +306,7 @@ class SessionAuditorAgent(BaseAgent):
         summary_prompt = (
             f"Here is a selfcheck hallucination audit result:\n\n"
             f"{report.to_text()}\n\n"
-            "Write a concise 2–3 sentence summary of the findings for a human reviewer."
+            "Write a concise 2-3 sentence summary of the findings for a human reviewer."
         )
         summary_result = await super().run(summary_prompt, context)
 

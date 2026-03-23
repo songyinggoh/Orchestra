@@ -58,7 +58,7 @@ def setup_logging(
     if json_output:
         renderer: structlog.types.Processor = structlog.processors.JSONRenderer()
     else:
-        renderer = structlog.dev.ConsoleRenderer(colors=True, pad_event=40)
+        renderer = structlog.dev.ConsoleRenderer(colors=True, pad_event_to=40)
 
     structlog.configure(
         processors=[

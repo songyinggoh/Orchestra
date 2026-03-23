@@ -32,21 +32,18 @@ from orchestra.reliability.selfcheck import (
 from orchestra.reliability.tools import factscore_tool, selfcheck_tool
 
 __all__ = [
-    # SelfCheckGPT
-    "SelfChecker",
-    "SelfCheckMethod",
-    "SelfCheckResult",
-    "SentenceScore",
-    "SelfCheckAgent",
-    "SessionAuditorAgent",
     "AuditReport",
-    "make_selfcheck_node",
-    # FActScore
     "FactScoreChecker",
     "FactScoreResult",
     "FactScorerAgent",
-    "make_factscore_node",
-    # Tools (attach to any agent's tools list)
-    "selfcheck_tool",
+    "SelfCheckAgent",
+    "SelfCheckMethod",
+    "SelfCheckResult",
+    "SelfChecker",
+    "SentenceScore",
+    "SessionAuditorAgent",
     "factscore_tool",
+    "make_factscore_node",
+    "make_selfcheck_node",
+    "selfcheck_tool",
 ]

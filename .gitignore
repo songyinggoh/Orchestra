@@ -45,6 +45,16 @@ Thumbs.db
 .hypothesis/
 .claude/worktrees/
 .claude/agent-memory/
+.claude/agents/
+.claude/skills/
+.claude/settings.local.json
+.cursor/
 .orchestra/
 .factory/
 pytest_results.txt
+
+# Internal planning / research artifacts
+.planning/
+research/
+AGENTS.md
+GEMINI.md

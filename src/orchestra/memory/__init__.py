@@ -32,10 +32,10 @@ except ImportError:
     HAS_QDRANT = False
 
 __all__ = [
-    "ColdTierBackend",
-    "EmbeddingProvider",
     "HAS_QDRANT",
     "HAS_VECTORDB",
+    "ColdTierBackend",
+    "EmbeddingProvider",
     "InMemoryMemoryBackend",
     "InMemoryMemoryManager",
     "MemoryBackend",
@@ -46,8 +46,8 @@ __all__ = [
     "SemanticDeduplicator",
     "StateCompressor",
     "Tier",
-    "TieredMemoryManager",
     "TierStats",
+    "TieredMemoryManager",
     "VectorStore",
     "create_tiered_memory",
     "rag_tool",
