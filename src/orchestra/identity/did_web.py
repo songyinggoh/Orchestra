@@ -5,7 +5,6 @@ from __future__ import annotations
 import base64
 from typing import Any
 
-import aiohttp
 import structlog
 
 logger = structlog.get_logger(__name__)
@@ -96,6 +95,8 @@ async def resolve_did_web(did: str) -> dict[str, Any]:
         url = f"https://{domain}/{path}/did.json"
 
     logger.debug("resolving_did_web", did=did, url=url)
+
+    import aiohttp
 
     async with aiohttp.ClientSession() as session, session.get(url) as response:
         if response.status != 200:
