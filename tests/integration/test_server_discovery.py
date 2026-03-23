@@ -397,16 +397,16 @@ class TestServerGraphsEndpoint:
 
 
 class TestUpCommandWiringGap:
-    """Document the MERGE BLOCKER: the `orchestra up` command stores discovered
-    workflows into app.state._discovery_registry, but the lifespan creates a
-    separate app.state.graph_registry that the /api/v1/graphs route reads.
-    The two registries are never connected, so discovered workflows are invisible
-    to the HTTP API after `orchestra up`.
+    """Regression suite for the Gap 8 wiring bug (fixed in Phase 5).
+
+    The `orchestra up` command previously stored discovered workflows in
+    app.state._discovery_registry, while the lifespan created a separate
+    app.state.graph_registry — causing discovered workflows to be invisible
+    to the HTTP API.
 
     This class contains:
-      - test_up_wiring_gap_documented: asserts the gap EXISTS (will pass until fixed)
-      - test_up_wiring_gap_fixed: documents what correct behaviour looks like
-        (currently fails — remove xfail marker once the CLI is patched)
+      - test_up_wiring_gap_documented: documents the pre-lifespan state (still valid)
+      - test_up_wiring_gap_fixed: verifies the end-to-end fix works correctly
     """
 
     def _simulate_up_command_pre_uvicorn(self, root: Path) -> Any:
@@ -459,25 +459,11 @@ class TestUpCommandWiringGap:
         )
 
     @pytest.mark.asyncio
-    @pytest.mark.xfail(
-        reason=(
-            "MERGE BLOCKER (Gap 8): cli/main.py `up` command stores discovered "
-            "workflows in app.state._discovery_registry, but server/app.py lifespan "
-            "unconditionally creates a fresh empty app.state.graph_registry. "
-            "The routes read graph_registry, not _discovery_registry. "
-            "Fix: lifespan must check for state._discovery_registry and copy "
-            "its contents into state.graph_registry on startup."
-        ),
-        strict=True,
-    )
     async def test_up_wiring_gap_fixed(self, tmp_path: Path) -> None:
-        """This test describes the CORRECT end-to-end behaviour that should work
-        once the wiring bug is fixed.
+        """Verifies end-to-end behaviour after the Gap 8 wiring fix (Phase 5).
 
         After the lifespan starts, workflows registered by `up` into
-        _discovery_registry must be visible via GET /api/v1/graphs.
-
-        Remove the xfail marker once cli/main.py or server/app.py is patched.
+        _discovery_registry are visible via GET /api/v1/graphs.
         """
         from httpx import ASGITransport, AsyncClient
 

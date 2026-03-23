@@ -94,7 +94,7 @@ class RichTraceRenderer:
     # EventBus subscriber
     # ------------------------------------------------------------------
 
-    def on_event(self, event: AnyEvent) -> None:  # type: ignore[override]
+    def on_event(self, event: AnyEvent) -> None:
         """Sync EventBus subscriber. Updates tree based on event type."""
         try:
             self._dispatch(event)

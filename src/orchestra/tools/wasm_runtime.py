@@ -69,7 +69,13 @@ class WasmToolSandbox:
         # Safety net: call shutdown() at process exit even if the caller forgot.
         # weakref avoids keeping this object alive solely due to the atexit entry.
         _ref = weakref.ref(self)
-        atexit.register(lambda: _ref() and _ref().shutdown())
+
+        def _atexit_shutdown() -> None:
+            obj = _ref()
+            if obj is not None:
+                obj.shutdown()
+
+        atexit.register(_atexit_shutdown)
 
     # ------------------------------------------------------------------
     # Public API

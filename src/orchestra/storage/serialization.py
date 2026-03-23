@@ -6,14 +6,14 @@ Pydantic's discriminated union via TypeAdapter.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from pydantic import TypeAdapter
 
 from orchestra.storage.events import AnyEvent, WorkflowEvent
 
 # TypeAdapter for the discriminated union -- handles polymorphic deserialization
-_event_adapter = TypeAdapter(AnyEvent)
+_event_adapter: TypeAdapter[AnyEvent] = TypeAdapter(AnyEvent)
 
 
 def event_to_dict(event: WorkflowEvent) -> dict[str, Any]:
@@ -27,7 +27,7 @@ def dict_to_event(data: dict[str, Any]) -> WorkflowEvent:
     Uses Pydantic's discriminated union on event_type.
     Unknown event types raise ValidationError.
     """
-    return _event_adapter.validate_python(data)
+    return cast(WorkflowEvent, _event_adapter.validate_python(data))
 
 
 def event_to_json(event: WorkflowEvent) -> str:
@@ -37,7 +37,7 @@ def event_to_json(event: WorkflowEvent) -> str:
 
 def json_to_event(json_str: str) -> WorkflowEvent:
     """Deserialize a JSON string to the correct event subtype."""
-    return _event_adapter.validate_json(json_str)
+    return cast(WorkflowEvent, _event_adapter.validate_json(json_str))
 
 
 def events_to_jsonl(events: list[WorkflowEvent]) -> str:

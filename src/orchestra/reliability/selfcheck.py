@@ -200,7 +200,7 @@ class SelfChecker:
 
         passages: list[str] = []
         for r in responses:
-            if isinstance(r, Exception):
+            if isinstance(r, BaseException):
                 logger.warning("selfcheck_sample_error", error=str(r))
                 continue
             if r.content:
@@ -329,7 +329,7 @@ class SelfChecker:
 
             votes: list[float] = []
             for r in responses:
-                if isinstance(r, Exception):
+                if isinstance(r, BaseException):
                     continue
                 text = (r.content or "").strip().lower()
                 if text.startswith("yes"):

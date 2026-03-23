@@ -160,6 +160,10 @@ warn_return_any = true
 warn_unused_configs = true
 plugins = ["pydantic.mypy"]
 
+[[tool.mypy.overrides]]
+module = "orchestra.messaging.peer_did"
+warn_unused_ignores = false
+
 [tool.coverage.run]
 source = ["orchestra"]
 omit = ["tests/*"]

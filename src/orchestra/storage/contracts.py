@@ -34,8 +34,8 @@ class BoundaryContract:
         Uses jsonschema if available, falls back to no-op (pass-through).
         """
         try:
-            from jsonschema import ValidationError
-            from jsonschema import validate as js_validate
+            from jsonschema import ValidationError  # type: ignore[import-untyped]
+            from jsonschema import validate as js_validate  # type: ignore[import-untyped]
 
             try:
                 js_validate(instance=data, schema=self._schema)

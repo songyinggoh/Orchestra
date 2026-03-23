@@ -38,7 +38,7 @@ class InMemoryCacheBackend:
 
     def __init__(self, maxsize: int = 1024, default_ttl: int = 3600) -> None:
         try:
-            from cachetools import TTLCache
+            from cachetools import TTLCache  # type: ignore[import-untyped]
         except ImportError as err:
             raise ImportError(
                 "cachetools is required for InMemoryCacheBackend. "

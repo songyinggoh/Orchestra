@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from typing import Any
 
 
 class InMemorySecretProvider:
@@ -36,9 +37,9 @@ class VaultSecretProvider:
         self.mount_point = mount_point
         self._client = None  # lazy load
 
-    def _get_client(self):
+    def _get_client(self) -> Any:
         if self._client is None:
-            import hvac
+            import hvac  # type: ignore[import-untyped]
 
             self._client = hvac.Client(url=self.url, token=self.token)
         return self._client

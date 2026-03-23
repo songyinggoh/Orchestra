@@ -28,7 +28,7 @@ import json
 import time
 import uuid
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 import structlog
 
@@ -62,13 +62,13 @@ class AgentKeyMaterial:
     created_at: float = field(default_factory=time.time)  # wall-clock creation time
     version: int = 1  # incremented on each rotation
     rotated_at: float | None = None  # wall-clock time of last rotation
-    _public_jwk: dict = field(default_factory=dict, init=False, repr=False)
+    _public_jwk: dict[str, Any] = field(default_factory=dict, init=False, repr=False)
 
     def __post_init__(self) -> None:
         self._public_jwk = self.keypair.as_dict(private=False)
 
     @property
-    def public_jwk(self) -> dict:
+    def public_jwk(self) -> dict[str, Any]:
         return self._public_jwk
 
     def needs_rotation(self, max_age_seconds: float) -> bool:
@@ -180,10 +180,10 @@ class SecureNatsProvider:
     def _generate_key_material(
         *,
         nats_url: str,
-        X25519PrivateKey,
-        Ed25519PrivateKey,
-        OKPKey,
-        create_peer_did_numalgo_2,
+        X25519PrivateKey: Any,
+        Ed25519PrivateKey: Any,
+        OKPKey: Any,
+        create_peer_did_numalgo_2: Any,
     ) -> AgentKeyMaterial:
         """Generate a fresh X25519 keypair and a matching did:peer:2 DID.
 
@@ -219,7 +219,7 @@ class SecureNatsProvider:
     # Encryption / decryption
     # ------------------------------------------------------------------
 
-    def encrypt_for(self, body: dict, recipient_did: str) -> str:
+    def encrypt_for(self, body: dict[str, Any], recipient_did: str) -> str:
         """Encrypt a task body dict for a recipient DID.
 
         Returns a JWE compact serialisation token — an opaque string safe to
@@ -260,7 +260,7 @@ class SecureNatsProvider:
         )
         return token
 
-    def decrypt(self, jwe_token: str) -> dict:
+    def decrypt(self, jwe_token: str) -> dict[str, Any]:
         """Decrypt a JWE compact token fetched from NATS.
 
         Returns the full DIDComm JWM dict; the task payload is in ['body'].
@@ -274,7 +274,7 @@ class SecureNatsProvider:
 
         registry = JWERegistry(algorithms=_ALLOWED_ALGORITHMS)
         result = jwe_mod.decrypt_compact(jwe_token, self._own_keys.keypair, registry=registry)
-        return json.loads(result.plaintext)
+        return cast(dict[str, Any], json.loads(result.plaintext))
 
     # ------------------------------------------------------------------
     # Properties
@@ -285,7 +285,7 @@ class SecureNatsProvider:
         return self._own_keys.did
 
     @property
-    def own_public_jwk(self) -> dict:
+    def own_public_jwk(self) -> dict[str, Any]:
         return self._own_keys.public_jwk
 
     @property

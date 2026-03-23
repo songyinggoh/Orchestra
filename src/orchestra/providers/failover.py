@@ -9,7 +9,7 @@ from __future__ import annotations
 import enum
 import time
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, cast
 
 import structlog
 
@@ -133,7 +133,7 @@ class ProviderFailover:
                     provider=getattr(provider, "provider_name", i),
                     latency_ms=round(latency_ms),
                 )
-                return result
+                return cast(LLMResponse, result)
             except Exception as exc:
                 breaker.record_failure()
                 category = classify_error(exc)
@@ -174,7 +174,7 @@ class ProviderFailover:
         async with self._latency_lock:
             history = list(self._latency_tracker[index])  # Snapshot to avoid races
 
-        health = {
+        health: dict[str, Any] = {
             "name": breaker.name,
             "state": breaker.state.value,
             "failure_count": breaker.failure_count,
@@ -185,13 +185,12 @@ class ProviderFailover:
         if history:
             import numpy as np
 
-            health.update(
-                {
-                    "p50_latency_ms": float(np.percentile(history, 50)),
-                    "p95_latency_ms": float(np.percentile(history, 95)),
-                    "avg_latency_ms": float(np.mean(history)),
-                }
-            )
+            latency_stats: dict[str, Any] = {
+                "p50_latency_ms": float(np.percentile(history, 50)),
+                "p95_latency_ms": float(np.percentile(history, 95)),
+                "avg_latency_ms": float(np.mean(history)),
+            }
+            health.update(latency_stats)
 
         return health
 

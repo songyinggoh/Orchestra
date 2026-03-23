@@ -23,7 +23,7 @@ jobs:
         with:
           python-version: "3.13"
       - name: Install dependencies
-        run: pip install -e ".[dev,server,storage,security,messaging,memory,routing,telemetry,cache]"
+        run: pip install -e ".[dev,server,storage,security,messaging,memory,routing,telemetry,cache,qdrant]"
       - name: Run unit tests with coverage
         run: |
           python -m pytest tests/unit/ tests/integration/ tests/security/ \
@@ -42,7 +42,7 @@ jobs:
         with:
           python-version: "3.13"
       - name: Install dependencies
-        run: pip install -e ".[dev,server,storage,security,messaging,memory,routing,telemetry,cache]"
+        run: pip install -e ".[dev,server,storage,security,messaging,memory,routing,telemetry,cache,qdrant]"
       - name: Run chaos tests
         run: python -m pytest tests/chaos/ -v
 
