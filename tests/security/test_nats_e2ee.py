@@ -3,6 +3,7 @@ import pytest
 # Try to import nats, but don't fail if not installed during initial research
 try:
     import nats as _nats_mod
+
     HAS_NATS = bool(_nats_mod)
 except ImportError:
     HAS_NATS = False

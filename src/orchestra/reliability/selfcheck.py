@@ -150,8 +150,7 @@ class SelfChecker:
         scores = await self._score(sentences, samples, provider=provider, model=model)
 
         sentence_scores = [
-            SentenceScore(sentence=s, score=sc)
-            for s, sc in zip(sentences, scores, strict=False)
+            SentenceScore(sentence=s, score=sc) for s, sc in zip(sentences, scores, strict=False)
         ]
         consistency_score = 1.0 - (sum(scores) / len(scores))
 

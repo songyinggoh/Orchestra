@@ -86,7 +86,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install -e ".[dev,server,telemetry,cache,storage,postgres,nats,security]"
+          pip install -e ".[dev,server,telemetry,cache,storage,postgres,nats,security,memory,routing]"
 
       - name: Run unit tests
         run: |
@@ -145,7 +145,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install -e ".[dev,server,telemetry,cache,storage,postgres,nats,security,memory,redis,messaging]"
+          pip install -e ".[dev,server,telemetry,cache,storage,postgres,nats,security,memory,routing,redis,messaging]"
 
       - name: Run integration & security tests
         env:

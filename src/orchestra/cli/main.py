@@ -41,7 +41,7 @@ def init(
     """
     from pathlib import Path
 
-    if not re.match(r'^[a-zA-Z0-9][a-zA-Z0-9_-]*$', project_name):
+    if not re.match(r"^[a-zA-Z0-9][a-zA-Z0-9_-]*$", project_name):
         raise typer.BadParameter(
             f"Invalid project name '{project_name}'. "
             "Use only letters, numbers, hyphens, and underscores.",
@@ -157,8 +157,7 @@ def run(
     cwd = Path.cwd().resolve()
     if not str(resolved).startswith(str(cwd) + "/") and resolved != cwd:
         raise typer.BadParameter(
-            f"Path '{workflow_file}' is outside the project directory. "
-            f"Use a path within {cwd}.",
+            f"Path '{workflow_file}' is outside the project directory. Use a path within {cwd}.",
             param_hint="workflow_file",
         )
     if resolved.suffix != ".py":
