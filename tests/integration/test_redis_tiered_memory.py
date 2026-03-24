@@ -2,6 +2,10 @@ import asyncio
 
 import pytest
 
+# Guard: skip collection entirely when optional deps are missing
+pytest.importorskip("msgpack")
+pytest.importorskip("redis")
+
 from orchestra.memory.backends import RedisMemoryBackend
 from orchestra.memory.invalidation import InvalidationSubscriber, publish_invalidation
 from orchestra.memory.tiers import TieredMemoryManager
