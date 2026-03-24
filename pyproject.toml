@@ -62,6 +62,7 @@ routing = ["numpy>=1.26"]
 security = [
     "wasmtime>=23.0",
     "joserfc>=1.6",
+    "base58>=2.1",
 ]
 redis = ["redis[hiredis]>=7.0", "msgpack>=1.0"]
 memory = [
@@ -163,6 +164,27 @@ plugins = ["pydantic.mypy"]
 [[tool.mypy.overrides]]
 module = "orchestra.messaging.peer_did"
 warn_unused_ignores = false
+
+[[tool.mypy.overrides]]
+module = [
+    "asyncpg",
+    "asyncpg.pool",
+    "blst",
+    "diskcache",
+    "factscore.factscorer",
+    "model2vec",
+    "msgpack",
+    "nltk",
+    "nltk.tokenize",
+    "optimum.onnxruntime",
+    "pgvector.asyncpg",
+    "presidio_analyzer",
+    "presidio_anonymizer",
+    "py_ecc",
+    "pyzstd",
+    "selfcheckgpt.modeling_selfcheck",
+]
+ignore_missing_imports = true
 
 [tool.coverage.run]
 source = ["orchestra"]

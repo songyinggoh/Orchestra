@@ -22,6 +22,17 @@ PREFIX_ED25519_PUB = b"\xed\x01"
 PREFIX_X25519_PUB = b"\xec\x01"
 
 
+def _require_base58() -> Any:
+    """Return the base58 module or raise a clear ImportError."""
+    if base58 is None:
+        raise ImportError(
+            "The 'base58' package is required for DID peer operations. "
+            "Install it with: pip install 'orchestra-agents[security]' "
+            "or pip install base58"
+        )
+    return base58
+
+
 def create_peer_did_numalgo_2(
     encryption_keys: list[bytes],
     signing_keys: list[bytes],
@@ -37,6 +48,7 @@ def create_peer_did_numalgo_2(
     Returns:
         A did:peer:2 string.
     """
+    _b58 = _require_base58()
     # .V -> Encryption key (X25519)
     # .V -> Signing key (Ed25519) -- wait, Ed25519 is .V too?
     # Actually did:peer:2 uses:
@@ -49,13 +61,13 @@ def create_peer_did_numalgo_2(
     # Add encryption keys
     for key in encryption_keys:
         mc = PREFIX_X25519_PUB + key
-        mb = "z" + base58.b58encode(mc).decode()
+        mb = "z" + _b58.b58encode(mc).decode()
         parts.append(f".V{mb}")
 
     # Add signing keys
     for key in signing_keys:
         mc = PREFIX_ED25519_PUB + key
-        mb = "z" + base58.b58encode(mc).decode()
+        mb = "z" + _b58.b58encode(mc).decode()
         parts.append(f".V{mb}")
 
     # Add service if provided
@@ -76,6 +88,8 @@ def resolve_peer_did(did: str) -> dict[str, Any]:
     """
     if not did.startswith("did:peer:2"):
         raise ValueError(f"Unsupported DID method: {did}")
+
+    _b58 = _require_base58()
 
     doc: dict[str, Any] = {
         "@context": "https://www.w3.org/ns/did/v1",
@@ -102,12 +116,12 @@ def resolve_peer_did(did: str) -> dict[str, Any]:
             if not value.startswith("z"):
                 raise ValueError("Only base58btc (z) multibase supported")
 
-            mc = base58.b58decode(value[1:])
+            mc = _b58.b58decode(value[1:])
             kid = f"{did}#key-{key_count}"
 
             if mc.startswith(PREFIX_X25519_PUB):
                 raw_key = mc[len(PREFIX_X25519_PUB) :]
-                mb = "z" + base58.b58encode(raw_key).decode()
+                mb = "z" + _b58.b58encode(raw_key).decode()
                 vm = {
                     "id": kid,
                     "type": "X25519KeyAgreementKey2020",
@@ -118,7 +132,7 @@ def resolve_peer_did(did: str) -> dict[str, Any]:
                 doc["keyAgreement"].append(kid)
             elif mc.startswith(PREFIX_ED25519_PUB):
                 raw_key = mc[len(PREFIX_ED25519_PUB) :]
-                mb = "z" + base58.b58encode(raw_key).decode()
+                mb = "z" + _b58.b58encode(raw_key).decode()
                 vm = {
                     "id": kid,
                     "type": "Ed25519VerificationKey2020",
