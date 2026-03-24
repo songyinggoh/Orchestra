@@ -7,20 +7,13 @@ from __future__ import annotations
 
 import asyncio
 import json
-from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from orchestra.core.errors import ProviderError, ProviderUnavailableError
 from orchestra.core.types import Message, MessageRole
-from orchestra.providers._cli_common import (
-    format_tools_prompt,
-    messages_to_prompt,
-    parse_tool_calls,
-)
 from orchestra.providers.gemini_cli import GeminiCliProvider
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -85,7 +78,9 @@ class TestCompleteText:
 
     @pytest.mark.asyncio
     async def test_tool_call_parsed_from_text(self) -> None:
-        tool_text = '<tool_calls>\n[{"name": "search", "arguments": {"query": "test"}}]\n</tool_calls>'
+        tool_text = (
+            '<tool_calls>\n[{"name": "search", "arguments": {"query": "test"}}]\n</tool_calls>'
+        )
         proc = _mock_process(tool_text.encode())
 
         provider = GeminiCliProvider()
@@ -145,29 +140,35 @@ class TestErrors:
         proc = _mock_process(b"", stderr=b"auth failed", returncode=1)
 
         provider = GeminiCliProvider()
-        with patch("asyncio.create_subprocess_exec", return_value=proc):
-            with pytest.raises(ProviderError, match="exited with code 1"):
-                await provider.complete([_user("hi")])
+        with (
+            patch("asyncio.create_subprocess_exec", return_value=proc),
+            pytest.raises(ProviderError, match="exited with code 1"),
+        ):
+            await provider.complete([_user("hi")])
 
     @pytest.mark.asyncio
     async def test_cli_not_found_raises(self) -> None:
         provider = GeminiCliProvider()
-        with patch(
-            "asyncio.create_subprocess_exec",
-            side_effect=FileNotFoundError,
+        with (
+            patch(
+                "asyncio.create_subprocess_exec",
+                side_effect=FileNotFoundError,
+            ),
+            pytest.raises(ProviderUnavailableError, match="not found"),
         ):
-            with pytest.raises(ProviderUnavailableError, match="not found"):
-                await provider.complete([_user("hi")])
+            await provider.complete([_user("hi")])
 
     @pytest.mark.asyncio
     async def test_timeout_raises(self) -> None:
         provider = GeminiCliProvider(timeout=0.1)
-        with patch(
-            "asyncio.create_subprocess_exec",
-            side_effect=asyncio.TimeoutError,
+        with (
+            patch(
+                "asyncio.create_subprocess_exec",
+                side_effect=asyncio.TimeoutError,
+            ),
+            pytest.raises(ProviderError, match="timed out"),
         ):
-            with pytest.raises(ProviderError, match="timed out"):
-                await provider.complete([_user("hi")])
+            await provider.complete([_user("hi")])
 
 
 # ---------------------------------------------------------------------------

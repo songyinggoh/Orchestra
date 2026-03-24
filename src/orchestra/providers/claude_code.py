@@ -86,11 +86,14 @@ class ClaudeCodeProvider:
         cmd: list[str] = [
             self._claude_path,
             "-p",
-            "--output-format", "json",
-            "--model", use_model,
+            "--output-format",
+            "json",
+            "--model",
+            use_model,
             "--no-session-persistence",
             "--bare",
-            '--tools', '',
+            "--tools",
+            "",
         ]
         if system:
             cmd.extend(["--system-prompt", system])
@@ -131,9 +134,7 @@ class ClaudeCodeProvider:
             raise ProviderError(f"Failed to parse claude CLI JSON output:\n  {raw}") from None
 
         if data.get("is_error"):
-            raise ProviderError(
-                f"claude CLI returned an error: {data.get('result', 'unknown')}"
-            )
+            raise ProviderError(f"claude CLI returned an error: {data.get('result', 'unknown')}")
 
         return self._parse_response(data, use_model, tools)
 
@@ -156,11 +157,14 @@ class ClaudeCodeProvider:
         cmd: list[str] = [
             self._claude_path,
             "-p",
-            "--output-format", "stream-json",
-            "--model", use_model,
+            "--output-format",
+            "stream-json",
+            "--model",
+            use_model,
             "--no-session-persistence",
             "--bare",
-            '--tools', '',
+            "--tools",
+            "",
         ]
         if system:
             cmd.extend(["--system-prompt", system])
@@ -174,8 +178,7 @@ class ClaudeCodeProvider:
             )
         except FileNotFoundError:
             raise ProviderUnavailableError(
-                "The 'claude' CLI was not found on PATH.\n"
-                "  Fix: Install Claude Code."
+                "The 'claude' CLI was not found on PATH.\n  Fix: Install Claude Code."
             ) from None
 
         assert proc.stdin is not None
@@ -197,9 +200,7 @@ class ClaudeCodeProvider:
             if etype == "assistant":
                 content = event.get("message", {}).get("content", "")
                 if isinstance(content, list):
-                    text = "".join(
-                        b.get("text", "") for b in content if b.get("type") == "text"
-                    )
+                    text = "".join(b.get("text", "") for b in content if b.get("type") == "text")
                 else:
                     text = str(content)
                 if text:

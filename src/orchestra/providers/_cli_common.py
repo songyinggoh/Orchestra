@@ -134,9 +134,7 @@ def strip_tool_calls(text: str) -> str | None:
     return text
 
 
-def inject_tools_into_system(
-    system: str | None, tools: list[dict[str, Any]]
-) -> str:
+def inject_tools_into_system(system: str | None, tools: list[dict[str, Any]]) -> str:
     """Append tool descriptions to the system prompt."""
     tool_block = TOOL_PREAMBLE + format_tools_prompt(tools)
     return f"{system}\n\n{tool_block}" if system else tool_block

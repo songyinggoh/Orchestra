@@ -95,8 +95,10 @@ class CodexCliProvider:
         cmd: list[str] = [
             self._codex_path,
             "--quiet",
-            "--model", use_model,
-            "--approval-mode", "full-auto",
+            "--model",
+            use_model,
+            "--approval-mode",
+            "full-auto",
             full_prompt,
         ]
 
@@ -167,8 +169,10 @@ class CodexCliProvider:
         cmd: list[str] = [
             self._codex_path,
             "--quiet",
-            "--model", use_model,
-            "--approval-mode", "full-auto",
+            "--model",
+            use_model,
+            "--approval-mode",
+            "full-auto",
             full_prompt,
         ]
 
@@ -181,8 +185,7 @@ class CodexCliProvider:
             )
         except FileNotFoundError:
             raise ProviderUnavailableError(
-                "The 'codex' CLI was not found on PATH.\n"
-                "  Fix: Install the OpenAI Codex CLI."
+                "The 'codex' CLI was not found on PATH.\n  Fix: Install the OpenAI Codex CLI."
             ) from None
 
         assert proc.stdout is not None

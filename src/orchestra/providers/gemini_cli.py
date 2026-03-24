@@ -88,7 +88,8 @@ class GeminiCliProvider:
 
         cmd: list[str] = [
             self._gemini_path,
-            "--model", use_model,
+            "--model",
+            use_model,
         ]
         if system:
             cmd.extend(["--system-prompt", system])
@@ -155,7 +156,8 @@ class GeminiCliProvider:
 
         cmd: list[str] = [
             self._gemini_path,
-            "--model", use_model,
+            "--model",
+            use_model,
         ]
         if system:
             cmd.extend(["--system-prompt", system])
@@ -169,8 +171,7 @@ class GeminiCliProvider:
             )
         except FileNotFoundError:
             raise ProviderUnavailableError(
-                "The 'gemini' CLI was not found on PATH.\n"
-                "  Fix: Install the Gemini CLI."
+                "The 'gemini' CLI was not found on PATH.\n  Fix: Install the Gemini CLI."
             ) from None
 
         assert proc.stdin is not None

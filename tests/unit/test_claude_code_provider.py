@@ -14,13 +14,10 @@ import pytest
 
 from orchestra.core.errors import ProviderError, ProviderUnavailableError
 from orchestra.core.types import Message, MessageRole
-from orchestra.providers._cli_common import (
-    format_tools_prompt as _format_tools_prompt,
-    messages_to_prompt as _messages_to_prompt,
-    parse_tool_calls as _parse_tool_calls,
-)
+from orchestra.providers._cli_common import format_tools_prompt as _format_tools_prompt
+from orchestra.providers._cli_common import messages_to_prompt as _messages_to_prompt
+from orchestra.providers._cli_common import parse_tool_calls as _parse_tool_calls
 from orchestra.providers.claude_code import ClaudeCodeProvider
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -115,7 +112,7 @@ class TestMessagesToPrompt:
 
     def test_multi_turn_flattened(self) -> None:
         msgs = [_user("q1"), _assistant("a1"), _user("q2")]
-        system, prompt = _messages_to_prompt(msgs)
+        _system_out, prompt = _messages_to_prompt(msgs)
         assert "[assistant]" in prompt
         assert "q1" in prompt
         assert "a1" in prompt
@@ -199,7 +196,9 @@ class TestComplete:
 
     @pytest.mark.asyncio
     async def test_tool_call_parsed(self) -> None:
-        tool_text = '<tool_calls>\n[{"name": "search", "arguments": {"query": "test"}}]\n</tool_calls>'
+        tool_text = (
+            '<tool_calls>\n[{"name": "search", "arguments": {"query": "test"}}]\n</tool_calls>'
+        )
         cli_resp = _make_cli_response(result=tool_text)
         proc = _mock_process(json.dumps(cli_resp).encode())
 
@@ -217,29 +216,35 @@ class TestComplete:
         proc = _mock_process(b"", stderr=b"auth failed", returncode=1)
 
         provider = ClaudeCodeProvider()
-        with patch("asyncio.create_subprocess_exec", return_value=proc):
-            with pytest.raises(ProviderError, match="exited with code 1"):
-                await provider.complete([_user("hi")])
+        with (
+            patch("asyncio.create_subprocess_exec", return_value=proc),
+            pytest.raises(ProviderError, match="exited with code 1"),
+        ):
+            await provider.complete([_user("hi")])
 
     @pytest.mark.asyncio
     async def test_cli_not_found_raises(self) -> None:
         provider = ClaudeCodeProvider()
-        with patch(
-            "asyncio.create_subprocess_exec",
-            side_effect=FileNotFoundError,
+        with (
+            patch(
+                "asyncio.create_subprocess_exec",
+                side_effect=FileNotFoundError,
+            ),
+            pytest.raises(ProviderUnavailableError, match="not found"),
         ):
-            with pytest.raises(ProviderUnavailableError, match="not found"):
-                await provider.complete([_user("hi")])
+            await provider.complete([_user("hi")])
 
     @pytest.mark.asyncio
     async def test_timeout_raises(self) -> None:
         provider = ClaudeCodeProvider(timeout=0.1)
-        with patch(
-            "asyncio.create_subprocess_exec",
-            side_effect=asyncio.TimeoutError,
+        with (
+            patch(
+                "asyncio.create_subprocess_exec",
+                side_effect=asyncio.TimeoutError,
+            ),
+            pytest.raises(ProviderError, match="timed out"),
         ):
-            with pytest.raises(ProviderError, match="timed out"):
-                await provider.complete([_user("hi")])
+            await provider.complete([_user("hi")])
 
     @pytest.mark.asyncio
     async def test_is_error_flag_raises(self) -> None:
@@ -247,18 +252,22 @@ class TestComplete:
         proc = _mock_process(json.dumps(cli_resp).encode())
 
         provider = ClaudeCodeProvider()
-        with patch("asyncio.create_subprocess_exec", return_value=proc):
-            with pytest.raises(ProviderError, match="returned an error"):
-                await provider.complete([_user("hi")])
+        with (
+            patch("asyncio.create_subprocess_exec", return_value=proc),
+            pytest.raises(ProviderError, match="returned an error"),
+        ):
+            await provider.complete([_user("hi")])
 
     @pytest.mark.asyncio
     async def test_bad_json_raises(self) -> None:
         proc = _mock_process(b"not json at all")
 
         provider = ClaudeCodeProvider()
-        with patch("asyncio.create_subprocess_exec", return_value=proc):
-            with pytest.raises(ProviderError, match="Failed to parse"):
-                await provider.complete([_user("hi")])
+        with (
+            patch("asyncio.create_subprocess_exec", return_value=proc),
+            pytest.raises(ProviderError, match="Failed to parse"),
+        ):
+            await provider.complete([_user("hi")])
 
     @pytest.mark.asyncio
     async def test_system_prompt_forwarded(self) -> None:
