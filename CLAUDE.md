@@ -1,23 +1,43 @@
 # Orchestra — Claude Code Guide
 
-Orchestra is a Python multi-agent orchestration framework installed in this project.
-`ANTHROPIC_API_KEY` is already in your environment, so you can use Orchestra immediately
-with no extra configuration.
+Orchestra is a Python multi-agent orchestration framework. If you already
+use a cloud agentic provider — Claude Code, Gemini CLI, or OpenAI Codex
+CLI — Orchestra works out of the box. No API keys, no env vars, no
+separate billing.
 
-## Zero-config start
+## Quick start
 
 ```python
 from orchestra.providers import auto_provider
 from orchestra.core.agent import BaseAgent
 from orchestra.core.context import ExecutionContext
 
-provider = auto_provider()  # picks up ANTHROPIC_API_KEY automatically
+provider = auto_provider()  # detects your CLI automatically
 
 agent = BaseAgent(name="assistant", system_prompt="You are helpful.")
 ctx = ExecutionContext(provider=provider)
 result = await agent.run("your task here", ctx)
 print(result.output)
 ```
+
+## How `auto_provider()` picks a backend
+
+It checks these in order and returns the first one found:
+
+| # | What it looks for | Provider | Setup needed |
+|---|---|---|---|
+| 1 | `ORCHESTRA_BASE_URL` env var | `HttpProvider` | Custom endpoint |
+| 2 | `claude` CLI on PATH | `ClaudeCodeProvider` | **None** (uses subscription) |
+| 3 | `gemini` CLI on PATH | `GeminiCliProvider` | **None** (uses subscription) |
+| 4 | `codex` CLI on PATH | `CodexCliProvider` | **None** (uses subscription) |
+| 5 | `ANTHROPIC_API_KEY` env var | `AnthropicProvider` | API key |
+| 6 | `OPENAI_API_KEY` env var | `HttpProvider` | API key |
+| 7 | `GOOGLE_API_KEY` env var | `GoogleProvider` | API key |
+| 8 | Ollama on localhost:11434 | `OllamaProvider` | Install + run Ollama |
+
+Options 2–4 use your existing cloud subscription — no separate billing.
+If you already use Claude Code, Gemini CLI, or Codex CLI, just install
+Orchestra and go.
 
 ## Build a multi-agent graph
 
@@ -91,27 +111,34 @@ agent = BaseAgent(
 )
 ```
 
-## Switch backends
+## Pick a specific provider
 
-`auto_provider()` checks env vars in this order — set whichever applies:
+Usually `auto_provider()` is all you need. To use a specific one:
 
-```bash
-# Any OpenAI-compatible API (Groq, Together, Mistral, vLLM, LiteLLM, Azure, ...)
-export ORCHESTRA_BASE_URL=https://api.groq.com/openai/v1
-export ORCHESTRA_API_KEY=gsk_...
-export ORCHESTRA_MODEL=llama-3.3-70b-versatile
+```python
+# Cloud agentic providers — use your existing subscription, no API key:
+from orchestra.providers.claude_code import ClaudeCodeProvider
+provider = ClaudeCodeProvider(model="opus")
 
-# Anthropic (default when ANTHROPIC_API_KEY is set — already the case in Claude Code)
-export ANTHROPIC_API_KEY=sk-ant-...
+from orchestra.providers.gemini_cli import GeminiCliProvider
+provider = GeminiCliProvider(model="gemini-2.5-pro")
 
-# OpenAI
-export OPENAI_API_KEY=sk-...
+from orchestra.providers.codex_cli import CodexCliProvider
+provider = CodexCliProvider(model="o4-mini")
 
-# Google
-export GOOGLE_API_KEY=AIza...
+# Local (free):
+from orchestra.providers.ollama import OllamaProvider
+provider = OllamaProvider(default_model="llama3.1")
 
-# Local — no key needed
-ollama serve && ollama pull llama3.1
+# Direct API access (requires API key):
+from orchestra.providers.anthropic import AnthropicProvider
+provider = AnthropicProvider()  # needs ANTHROPIC_API_KEY
+
+from orchestra.providers.google import GoogleProvider
+provider = GoogleProvider()  # needs GOOGLE_API_KEY
+
+from orchestra.providers.http import HttpProvider
+provider = HttpProvider()  # needs OPENAI_API_KEY or ORCHESTRA_API_KEY
 ```
 
 ## Source layout
@@ -119,7 +146,7 @@ ollama serve && ollama pull llama3.1
 ```
 src/orchestra/
   core/          — agent, graph, runner, state, types, context
-  providers/     — AnthropicProvider, HttpProvider, GoogleProvider, OllamaProvider, CallableProvider
+  providers/     — ClaudeCodeProvider, GeminiCliProvider, CodexCliProvider, AnthropicProvider, HttpProvider, GoogleProvider, OllamaProvider, CallableProvider
   tools/         — @tool decorator, built-in tools
   observability/ — OpenTelemetry tracing and metrics
   reliability/   — circuit breaker, rate limiter, failover

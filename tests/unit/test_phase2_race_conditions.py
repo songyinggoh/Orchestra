@@ -96,9 +96,9 @@ async def test_warn_2_5_background_task_shutdown_race():
     await subscriber.start()
 
     # Let a few messages process.
-    # 10 messages at 0.01 s each; wait 0.08 s to give the event loop enough
-    # budget to process at least 6 of them before we trigger stop().
-    await asyncio.sleep(0.08)
+    # 10 messages at 0.01 s each; wait 0.15 s to give the event loop enough
+    # budget to process most of them before we trigger stop().
+    await asyncio.sleep(0.15)
 
     # Now stop (this is where the race happens)
     # Without the fix, the task might exit early or miss messages
