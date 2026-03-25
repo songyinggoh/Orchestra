@@ -289,7 +289,7 @@ class SecureNatsProvider:
                 if result.plaintext is None:
                     raise ValueError("JWE decryption returned empty plaintext")
                 return cast(dict[str, Any], json.loads(result.plaintext))
-            except (ValueError, Exception) as exc:  # noqa: BLE001
+            except Exception as exc:
                 last_exc = exc
                 continue
         raise ValueError("Failed to decrypt JWE token with any known key") from last_exc

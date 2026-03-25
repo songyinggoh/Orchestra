@@ -246,7 +246,7 @@ class ClaudeCodeProvider:
             parsed = parse_tool_calls(result_text)
             if parsed:
                 tool_calls = parsed
-                content = strip_tool_calls(result_text) or ""
+                content = strip_tool_calls(result_text) or None
 
         # Map stop reason.
         raw_stop = data.get("stop_reason", "end_turn")
