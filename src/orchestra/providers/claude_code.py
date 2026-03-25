@@ -95,8 +95,11 @@ class ClaudeCodeProvider:
             "--tools",
             "",
         ]
+        # Pass system prompt via stdin to prevent argument injection
+        # via crafted system prompt content.
+        stdin_payload = prompt
         if system:
-            cmd.extend(["--system-prompt", system])
+            stdin_payload = f"[system]\n{system}\n\n[user]\n{prompt}"
 
         try:
             proc = await asyncio.create_subprocess_exec(
@@ -106,7 +109,7 @@ class ClaudeCodeProvider:
                 stderr=asyncio.subprocess.PIPE,
             )
             stdout, stderr = await asyncio.wait_for(
-                proc.communicate(prompt.encode()),
+                proc.communicate(stdin_payload.encode()),
                 timeout=self._timeout,
             )
         except FileNotFoundError:
@@ -166,8 +169,10 @@ class ClaudeCodeProvider:
             "--tools",
             "",
         ]
+        # Pass system prompt via stdin to prevent argument injection.
+        stdin_payload = prompt
         if system:
-            cmd.extend(["--system-prompt", system])
+            stdin_payload = f"[system]\n{system}\n\n[user]\n{prompt}"
 
         try:
             proc = await asyncio.create_subprocess_exec(
@@ -184,7 +189,7 @@ class ClaudeCodeProvider:
         assert proc.stdin is not None
         assert proc.stdout is not None
 
-        proc.stdin.write(prompt.encode())
+        proc.stdin.write(stdin_payload.encode())
         proc.stdin.close()
 
         async for raw_line in proc.stdout:
@@ -241,7 +246,7 @@ class ClaudeCodeProvider:
             parsed = parse_tool_calls(result_text)
             if parsed:
                 tool_calls = parsed
-                content = strip_tool_calls(result_text)
+                content = strip_tool_calls(result_text) or ""
 
         # Map stop reason.
         raw_stop = data.get("stop_reason", "end_turn")

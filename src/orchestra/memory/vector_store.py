@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+import re
+from typing import Any, cast
 
 import structlog
 
@@ -11,6 +12,8 @@ from orchestra.memory.compression import StateCompressor
 from orchestra.memory.dedup import SemanticDeduplicator
 
 logger = structlog.get_logger(__name__)
+
+_VALID_SQL_IDENTIFIER = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]{0,62}$")
 
 
 class VectorStore:
@@ -35,6 +38,11 @@ class VectorStore:
             compressor: Optional StateCompressor for efficient storage.
             deduplicator: Optional SemanticDeduplicator to skip redundant writes.
         """
+        if not _VALID_SQL_IDENTIFIER.match(table_name):
+            raise ValueError(
+                f"Invalid table_name {table_name!r}: must match "
+                f"[a-zA-Z_][a-zA-Z0-9_]{{0,62}}"
+            )
         self.pool = pool
         self.table_name = table_name
         self.agent_id = agent_id
@@ -157,7 +165,7 @@ class VectorStore:
         embedding: list[float],
         limit: int = 10,
         *,
-        filter_metadata: dict | None = None,
+        filter_metadata: dict[str, Any] | None = None,
         agent_id: str | None = None,
     ) -> list[tuple[str, float]]:
         """Semantic search. Satisfies ColdTierBackend.
@@ -284,7 +292,7 @@ class VectorStore:
     async def count(self, agent_id: str | None = None) -> int:
         async with await self.pool.acquire() as conn:
             if agent_id:
-                return await conn.fetchval(
+                return cast(int, await conn.fetchval(
                     f"SELECT COUNT(*) FROM {self.table_name} WHERE agent_id = $1", agent_id
-                )
-            return await conn.fetchval(f"SELECT COUNT(*) FROM {self.table_name}")
+                ))
+            return cast(int, await conn.fetchval(f"SELECT COUNT(*) FROM {self.table_name}"))

@@ -115,6 +115,17 @@ class ToolWrapper:
         """Execute the wrapped function with given arguments."""
         try:
             sig = inspect.signature(self._func)
+            # Filter arguments to only known parameter names to prevent
+            # injection of unexpected keyword arguments from LLM output.
+            known_params = set(sig.parameters.keys()) - {"self"}
+            has_var_keyword = any(
+                p.kind == inspect.Parameter.VAR_KEYWORD
+                for p in sig.parameters.values()
+            )
+            if not has_var_keyword:
+                arguments = {
+                    k: v for k, v in arguments.items() if k in known_params
+                }
             if "context" in sig.parameters:
                 arguments = {**arguments, "context": context}
 

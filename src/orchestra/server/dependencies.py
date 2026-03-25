@@ -40,8 +40,13 @@ async def require_api_key(
     Set the ORCHESTRA_API_KEY environment variable to enable enforcement.
     """
     expected: str | None = getattr(request.app.state, "api_key", None)
-    if not expected:
+    if expected is None:
         return  # Auth not configured — dev/test mode, allow all.
+    if not expected.strip():
+        raise HTTPException(
+            status_code=500,
+            detail="ORCHESTRA_API_KEY is set but empty — server misconfigured",
+        )
 
     if credentials is None or not secrets.compare_digest(
         credentials.credentials.encode(), expected.encode()

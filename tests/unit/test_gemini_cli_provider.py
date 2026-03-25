@@ -215,7 +215,9 @@ class TestProviderProperties:
         with patch("asyncio.create_subprocess_exec", return_value=proc) as mock_exec:
             await provider.complete([_system("be helpful"), _user("hi")])
 
+        # System prompt is now passed via stdin (not --system-prompt flag)
+        # to prevent argument injection via crafted system prompt content.
         cmd_parts = list(mock_exec.call_args[0])
-        assert "--system-prompt" in cmd_parts
-        idx = cmd_parts.index("--system-prompt")
-        assert "be helpful" in cmd_parts[idx + 1]
+        assert "--system-prompt" not in cmd_parts
+        stdin_data = proc.communicate.call_args[0][0].decode()
+        assert "be helpful" in stdin_data
