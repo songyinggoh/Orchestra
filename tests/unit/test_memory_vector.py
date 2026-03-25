@@ -949,10 +949,20 @@ class TestVectorStoreInitialize:
 # ===========================================================================
 # QdrantColdBackend — additional behaviour
 # ===========================================================================
+try:
+    from orchestra.memory.qdrant_backend import HAS_QDRANT
+except ImportError:
+    HAS_QDRANT = False
+
+_requires_qdrant = pytest.mark.skipif(
+    not HAS_QDRANT, reason="qdrant-client not fully installed"
+)
 
 
 @pytest.fixture
 def qdrant_backend():
+    if not HAS_QDRANT:
+        pytest.skip("qdrant-client not fully installed")
     from orchestra.memory.qdrant_backend import QdrantColdBackend
 
     b = QdrantColdBackend(
@@ -968,6 +978,7 @@ def qdrant_backend():
     return b, mock_client
 
 
+@_requires_qdrant
 class TestQdrantEnsureInitialized:
     @pytest.mark.asyncio
     async def test_lazy_init_creates_collection_when_missing(self):
@@ -1022,6 +1033,7 @@ class TestQdrantEnsureInitialized:
         mock_client.get_collections.assert_not_called()
 
 
+@_requires_qdrant
 class TestQdrantStoreNoEmbeddingModel:
     @pytest.mark.asyncio
     async def test_store_without_embedding_model_omits_model_key(self, qdrant_backend):
@@ -1035,6 +1047,7 @@ class TestQdrantStoreNoEmbeddingModel:
         assert "_embedding_model" not in point.payload
 
 
+@_requires_qdrant
 class TestQdrantRetrieveNoDriftWarning:
     @pytest.mark.asyncio
     async def test_retrieve_no_stored_model_no_drift_warning(self, caplog, qdrant_backend):
@@ -1076,6 +1089,7 @@ class TestQdrantRetrieveNoDriftWarning:
         # so we only assert no exception was raised.
 
 
+@_requires_qdrant
 class TestQdrantProtocolConformance:
     def test_qdrant_satisfies_cold_tier_backend_protocol(self, qdrant_backend):
         """QdrantColdBackend must satisfy the ColdTierBackend runtime protocol."""

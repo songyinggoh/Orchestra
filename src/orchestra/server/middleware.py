@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import uuid
-from typing import TYPE_CHECKING
+from collections.abc import MutableMapping
+from typing import TYPE_CHECKING, Any
 
 from starlette.types import ASGIApp, Receive, Scope, Send
 
@@ -61,6 +63,10 @@ def add_request_id_middleware(app: FastAPI) -> None:
     app.add_middleware(RequestIDMiddleware)
 
 
+class _BodyTooLarge(Exception):
+    """Sentinel raised inside limited_receive when the body size limit is exceeded."""
+
+
 class BodySizeLimitMiddleware:
     """Pure ASGI middleware that rejects requests exceeding max_bytes (HTTP 413).
 
@@ -90,17 +96,28 @@ class BodySizeLimitMiddleware:
                 pass  # malformed Content-Length — let the app handle it
 
         received_bytes = 0
+        response_started = False
 
-        async def limited_receive() -> dict:
+        async def limited_receive() -> MutableMapping[str, Any]:
             nonlocal received_bytes
             message = await receive()
             if message["type"] == "http.request":
                 received_bytes += len(message.get("body", b""))
                 if received_bytes > self.max_bytes:
-                    raise ValueError(f"Request body exceeds {self.max_bytes} bytes")
+                    raise _BodyTooLarge()
             return message
 
-        await self.app(scope, limited_receive, send)
+        async def tracked_send(message: MutableMapping[str, Any]) -> None:
+            nonlocal response_started
+            if message["type"] == "http.response.start":
+                response_started = True
+            await send(message)
+
+        try:
+            await self.app(scope, limited_receive, tracked_send)
+        except _BodyTooLarge:
+            if not response_started:
+                await self._reject(send)
 
     async def _reject(self, send: Send) -> None:
         body = json.dumps(
@@ -159,7 +176,11 @@ class RateLimitMiddleware:
         auth = headers.get("authorization", "")
         client = scope.get("client")
         ip = client[0] if client else "unknown"
-        identity = f"token:{auth}" if auth else f"ip:{ip}"
+        if auth:
+            token_hash = hashlib.sha256(auth.encode()).hexdigest()[:16]
+            identity = f"token:{token_hash}"
+        else:
+            identity = f"ip:{ip}"
 
         async with self._lock:
             allowed = self._bucket.allow(identity)
@@ -192,7 +213,7 @@ class RateLimitMiddleware:
         limit_bytes = str(self._bucket.max_tokens).encode()
         headers_injected = False
 
-        async def send_with_headers(message: dict) -> None:
+        async def send_with_headers(message: MutableMapping[str, Any]) -> None:
             nonlocal headers_injected
             if message["type"] == "http.response.start" and not headers_injected:
                 headers_injected = True

@@ -46,6 +46,8 @@ _BASE_PROTECTED_HEADER: dict[str, str] = {
     "typ": "application/didcomm-encrypted+json",
 }
 _ALLOWED_ALGORITHMS = ["ECDH-ES+A256KW", "A256GCM"]
+# Maximum number of superseded keys retained for decrypting in-flight messages.
+_MAX_KEY_HISTORY = 3
 
 # Back-compat alias — external code that imported _PROTECTED_HEADER directly
 # still works; it just won't have the kid field (acceptable for old callers).
@@ -126,6 +128,7 @@ class SecureNatsProvider:
         # Key history: archived (superseded) AgentKeyMaterial instances kept so
         # that out-of-order or delayed messages can still be decrypted.
         # The list is ordered oldest → newest; the active key is in _own_keys.
+        # Bounded to _MAX_KEY_HISTORY entries to prevent unbounded private-key accumulation.
         self._key_history: list[AgentKeyMaterial] = []
 
     # ------------------------------------------------------------------
@@ -265,6 +268,10 @@ class SecureNatsProvider:
 
         Returns the full DIDComm JWM dict; the task payload is in ['body'].
         Raises on wrong key, tampered ciphertext, or disallowed algorithm.
+
+        Tries the current key first, then historical keys newest-to-oldest so
+        that in-flight messages encrypted before a rotation can still be
+        decrypted.
         """
         try:
             from joserfc import jwe as jwe_mod
@@ -273,8 +280,19 @@ class SecureNatsProvider:
             raise ImportError("joserfc is required. pip install joserfc>=1.6") from exc
 
         registry = JWERegistry(algorithms=_ALLOWED_ALGORITHMS)
-        result = jwe_mod.decrypt_compact(jwe_token, self._own_keys.keypair, registry=registry)
-        return cast(dict[str, Any], json.loads(result.plaintext))
+        # Try current key first, then historical keys from newest to oldest.
+        keys_to_try = [self._own_keys, *reversed(self._key_history)]
+        last_exc: BaseException = ValueError("No keys available")
+        for key_material in keys_to_try:
+            try:
+                result = jwe_mod.decrypt_compact(jwe_token, key_material.keypair, registry=registry)
+                if result.plaintext is None:
+                    raise ValueError("JWE decryption returned empty plaintext")
+                return cast(dict[str, Any], json.loads(result.plaintext))
+            except (ValueError, Exception) as exc:  # noqa: BLE001
+                last_exc = exc
+                continue
+        raise ValueError("Failed to decrypt JWE token with any known key") from last_exc
 
     # ------------------------------------------------------------------
     # Properties
@@ -351,8 +369,10 @@ class SecureNatsProvider:
         new_keys.version = old_keys.version + 1
         new_keys.rotated_at = time.time()
 
-        # Archive old key material before replacing it
+        # Archive old key material before replacing it; evict oldest beyond the cap.
         self._key_history.append(old_keys)
+        if len(self._key_history) > _MAX_KEY_HISTORY:
+            self._key_history = self._key_history[-_MAX_KEY_HISTORY:]
 
         self._own_keys = new_keys
         self._key_created_at = time.monotonic()
@@ -413,8 +433,10 @@ class SecureNatsProvider:
         new_keys.rotated_at = time.time()
 
         # Archive old key material so that in-flight messages encrypted with
-        # the previous key can still be decrypted.
+        # the previous key can still be decrypted; evict oldest beyond the cap.
         self._key_history.append(old_keys)
+        if len(self._key_history) > _MAX_KEY_HISTORY:
+            self._key_history = self._key_history[-_MAX_KEY_HISTORY:]
 
         self._own_keys = new_keys
         self._key_created_at = time.monotonic()
