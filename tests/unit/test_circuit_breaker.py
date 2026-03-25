@@ -18,92 +18,100 @@ class TestAsyncCircuitBreaker:
         breaker = AsyncCircuitBreaker()
         assert breaker.state == CircuitState.CLOSED
 
-    def test_allow_request_when_closed(self):
+    @pytest.mark.asyncio
+    async def test_allow_request_when_closed(self):
         breaker = AsyncCircuitBreaker()
-        assert breaker.allow_request() is True
+        assert await breaker.allow_request() is True
 
-    def test_opens_after_threshold_failures(self):
+    @pytest.mark.asyncio
+    async def test_opens_after_threshold_failures(self):
         """Circuit opens after N consecutive failures."""
         breaker = AsyncCircuitBreaker(failure_threshold=3)
-        breaker.record_failure()
+        await breaker.record_failure()
         assert breaker.state == CircuitState.CLOSED
-        breaker.record_failure()
+        await breaker.record_failure()
         assert breaker.state == CircuitState.CLOSED
-        breaker.record_failure()
+        await breaker.record_failure()
         assert breaker.state == CircuitState.OPEN
 
-    def test_open_rejects_requests(self):
+    @pytest.mark.asyncio
+    async def test_open_rejects_requests(self):
         """When OPEN, requests are not allowed."""
         breaker = AsyncCircuitBreaker(failure_threshold=2, reset_timeout=30.0)
-        breaker.record_failure()
-        breaker.record_failure()
+        await breaker.record_failure()
+        await breaker.record_failure()
         assert breaker.state == CircuitState.OPEN
-        assert breaker.allow_request() is False
+        assert await breaker.allow_request() is False
 
-    def test_half_open_after_timeout(self):
+    @pytest.mark.asyncio
+    async def test_half_open_after_timeout(self):
         """After reset_timeout, allow_request transitions to HALF_OPEN."""
         breaker = AsyncCircuitBreaker(failure_threshold=2, reset_timeout=10.0)
 
         t0 = 1000.0  # Use high value to avoid monotonic clock interference
-        breaker.record_failure(now=t0)
-        breaker.record_failure(now=t0)
+        await breaker.record_failure(now=t0)
+        await breaker.record_failure(now=t0)
         assert breaker.state == CircuitState.OPEN
 
         # Before timeout: still OPEN
         t_before = t0 + 5.0
-        assert breaker.allow_request(now=t_before) is False
+        assert await breaker.allow_request(now=t_before) is False
         assert breaker.state == CircuitState.OPEN
 
         # After 10 seconds, allow_request transitions to HALF_OPEN
         t1 = t0 + 10.0
-        assert breaker.allow_request(now=t1) is True
+        assert await breaker.allow_request(now=t1) is True
         assert breaker.state == CircuitState.HALF_OPEN
 
-    def test_half_open_success_closes_circuit(self):
+    @pytest.mark.asyncio
+    async def test_half_open_success_closes_circuit(self):
         """Success in HALF_OPEN returns circuit to CLOSED."""
         breaker = AsyncCircuitBreaker(failure_threshold=2, reset_timeout=5.0)
 
         t0 = 10000.0
-        breaker.record_failure(now=t0)
-        breaker.record_failure(now=t0)
+        await breaker.record_failure(now=t0)
+        await breaker.record_failure(now=t0)
 
         # Transition to HALF_OPEN
         t1 = t0 + 5.0
-        breaker.allow_request(now=t1)
+        await breaker.allow_request(now=t1)
         assert breaker.state == CircuitState.HALF_OPEN
 
         # Success in half-open
-        breaker.record_success()
+        await breaker.record_success()
         assert breaker.state == CircuitState.CLOSED
         assert breaker.failure_count == 0
 
-    def test_half_open_failure_reopens_circuit(self):
+    @pytest.mark.asyncio
+    async def test_half_open_failure_reopens_circuit(self):
         """Failure in HALF_OPEN returns circuit to OPEN."""
         breaker = AsyncCircuitBreaker(failure_threshold=2, reset_timeout=5.0)
 
         t0 = 10000.0
-        breaker.record_failure(now=t0)
-        breaker.record_failure(now=t0)
+        await breaker.record_failure(now=t0)
+        await breaker.record_failure(now=t0)
 
         # Transition to HALF_OPEN
         t1 = t0 + 5.0
-        breaker.allow_request(now=t1)
+        await breaker.allow_request(now=t1)
         assert breaker.state == CircuitState.HALF_OPEN
 
         # Failure in half-open
-        breaker.record_failure(now=t1)
+        await breaker.record_failure(now=t1)
         assert breaker.state == CircuitState.OPEN
 
-    def test_success_in_closed_stays_closed(self):
+    @pytest.mark.asyncio
+    async def test_success_in_closed_stays_closed(self):
         breaker = AsyncCircuitBreaker()
-        breaker.record_success()
+        await breaker.record_success()
         assert breaker.state == CircuitState.CLOSED
         assert breaker.success_count == 1
 
-    def test_reset(self):
+    @pytest.mark.asyncio
+    async def test_reset(self):
         """Manual reset returns to CLOSED state."""
         breaker = AsyncCircuitBreaker(failure_threshold=1)
-        breaker.record_failure()
+        await breaker.record_failure()
         assert breaker.state == CircuitState.OPEN
 
         breaker.reset()
@@ -151,7 +159,7 @@ class TestAsyncCircuitBreakerContextManager:
     @pytest.mark.asyncio
     async def test_open_raises_circuit_open_error(self):
         breaker = AsyncCircuitBreaker(failure_threshold=1, reset_timeout=60.0)
-        breaker.record_failure()
+        await breaker.record_failure()
 
         with pytest.raises(CircuitOpenError, match="OPEN"):
             async with breaker:
@@ -160,7 +168,7 @@ class TestAsyncCircuitBreakerContextManager:
     @pytest.mark.asyncio
     async def test_circuit_open_error_has_remaining(self):
         breaker = AsyncCircuitBreaker(failure_threshold=1, reset_timeout=60.0)
-        breaker.record_failure()
+        await breaker.record_failure()
 
         try:
             async with breaker:

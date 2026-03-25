@@ -117,7 +117,7 @@ class ProviderFailover:
         for i, provider in enumerate(self._providers):
             breaker = self._breakers[i]
 
-            if not breaker.allow_request():
+            if not await breaker.allow_request():
                 continue
 
             try:
@@ -125,7 +125,7 @@ class ProviderFailover:
                 result = await provider.complete(*args, **kwargs)
                 latency_ms = (time.monotonic() - start) * 1000
 
-                breaker.record_success()
+                await breaker.record_success()
                 await self._track_latency(i, latency_ms)
 
                 logger.debug(
@@ -135,7 +135,7 @@ class ProviderFailover:
                 )
                 return cast(LLMResponse, result)
             except Exception as exc:
-                breaker.record_failure()
+                await breaker.record_failure()
                 category = classify_error(exc)
                 errors.append((exc, category))
 

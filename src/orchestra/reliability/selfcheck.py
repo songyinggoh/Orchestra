@@ -18,6 +18,7 @@ Scoring convention (consistent with the paper):
 from __future__ import annotations
 
 import asyncio
+import threading
 from enum import Enum
 from typing import Any
 
@@ -93,10 +94,12 @@ class SelfChecker:
         print(result.consistency_score)    # 0.0 to 1.0
     """
 
-    # Class-level model cache — loaded once, shared across all instances
+    # Class-level model cache — loaded once, shared across all instances.
+    # Protected by _model_lock to prevent double-loading from concurrent threads.
     _nli_model: Any = None
     _bertscore_model: Any = None
     _ngram_model: Any = None
+    _model_lock: threading.Lock = threading.Lock()
 
     def __init__(
         self,
@@ -239,11 +242,12 @@ class SelfChecker:
 
     def _score_nli(self, sentences: list[str], samples: list[str]) -> list[float]:
         """DeBERTa-v3-large NLI scorer. Loaded once and cached."""
-        if SelfChecker._nli_model is None:
-            from selfcheckgpt.modeling_selfcheck import SelfCheckNLI
+        with SelfChecker._model_lock:
+            if SelfChecker._nli_model is None:
+                from selfcheckgpt.modeling_selfcheck import SelfCheckNLI
 
-            logger.info("selfcheck_loading_model", model="NLI/DeBERTa-v3-large")
-            SelfChecker._nli_model = SelfCheckNLI(device=self.device)
+                logger.info("selfcheck_loading_model", model="NLI/DeBERTa-v3-large")
+                SelfChecker._nli_model = SelfCheckNLI(device=self.device)
 
         result = SelfChecker._nli_model.predict(
             sentences=sentences,
@@ -253,11 +257,12 @@ class SelfChecker:
 
     def _score_bertscore(self, sentences: list[str], samples: list[str]) -> list[float]:
         """BERTScore semantic similarity scorer. Loaded once and cached."""
-        if SelfChecker._bertscore_model is None:
-            from selfcheckgpt.modeling_selfcheck import SelfCheckBERTScore
+        with SelfChecker._model_lock:
+            if SelfChecker._bertscore_model is None:
+                from selfcheckgpt.modeling_selfcheck import SelfCheckBERTScore
 
-            logger.info("selfcheck_loading_model", model="BERTScore")
-            SelfChecker._bertscore_model = SelfCheckBERTScore(rescale_with_baseline=True)
+                logger.info("selfcheck_loading_model", model="BERTScore")
+                SelfChecker._bertscore_model = SelfCheckBERTScore(rescale_with_baseline=True)
 
         result = SelfChecker._bertscore_model.predict(
             sentences=sentences,
@@ -267,11 +272,12 @@ class SelfChecker:
 
     def _score_ngram(self, sentences: list[str], samples: list[str]) -> list[float]:
         """N-gram negative log-probability scorer. No model required."""
-        if SelfChecker._ngram_model is None:
-            from selfcheckgpt.modeling_selfcheck import SelfCheckNgram
+        with SelfChecker._model_lock:
+            if SelfChecker._ngram_model is None:
+                from selfcheckgpt.modeling_selfcheck import SelfCheckNgram
 
-            logger.info("selfcheck_loading_model", model="Ngram")
-            SelfChecker._ngram_model = SelfCheckNgram()
+                logger.info("selfcheck_loading_model", model="Ngram")
+                SelfChecker._ngram_model = SelfCheckNgram()
 
         passage = " ".join(sentences)
         result = SelfChecker._ngram_model.predict(

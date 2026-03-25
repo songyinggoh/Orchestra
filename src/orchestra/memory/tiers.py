@@ -22,7 +22,7 @@ _stdlib_logger = logging.getLogger(__name__)
 _MISS: object = object()
 
 
-def _log_task_exception(task: asyncio.Task) -> None:  # pragma: no cover
+def _log_task_exception(task: asyncio.Task[Any]) -> None:  # pragma: no cover
     """Done-callback that logs any unhandled exception from a background task."""
     if task.cancelled():
         return
@@ -76,7 +76,7 @@ class ColdTierBackend(Protocol):
         embedding: list[float],
         limit: int = 10,
         *,
-        filter_metadata: dict | None = None,
+        filter_metadata: dict[str, Any] | None = None,
         agent_id: str | None = None,
     ) -> list[tuple[str, float]]: ...
     async def delete(self, key: str) -> None: ...
@@ -174,7 +174,7 @@ class TieredMemoryManager(MemoryManager):
         self._policy_lock = asyncio.Lock()
         self._scan_interval = scan_interval
         self._stop_event = asyncio.Event()
-        self._scan_task: asyncio.Task | None = None
+        self._scan_task: asyncio.Task[None] | None = None
         self._initialized = False
 
     async def start(self) -> None:
@@ -238,7 +238,7 @@ class TieredMemoryManager(MemoryManager):
         if val is not _MISS:
             if evictions:
                 await self._handle_evictions(evictions)
-            return val  # type: ignore[return-value]
+            return val
 
         # 2. Try WARM tier — same pattern.
         evictions = []
@@ -253,7 +253,7 @@ class TieredMemoryManager(MemoryManager):
         if val is not _MISS:
             if evictions:
                 await self._handle_evictions(evictions)
-            return val  # type: ignore[return-value]
+            return val
 
         # 3. Try WARM Backend (Redis) — no policy state involved in the get.
         if self._warm:
@@ -262,8 +262,8 @@ class TieredMemoryManager(MemoryManager):
                 if promote:
                     async with self._policy_lock:
                         entry = MemoryEntry(key=key, value=val, tier=Tier.HOT)
-                        self._policy._hot[key] = entry
-                        evictions = self._policy.evictions_due()
+                        evictions = self._policy.insert(key, entry)
+                        self._policy.access(key)
                     await self._handle_evictions(evictions)
                 return val
 
@@ -274,8 +274,8 @@ class TieredMemoryManager(MemoryManager):
                 if promote:
                     async with self._policy_lock:
                         entry = MemoryEntry(key=key, value=val, tier=Tier.HOT)
-                        self._policy._hot[key] = entry
-                        evictions = self._policy.evictions_due()
+                        evictions = self._policy.insert(key, entry)
+                        self._policy.access(key)
                     await self._handle_evictions(evictions)
                     if self._warm:
                         await self._warm.set(key, val)
@@ -315,7 +315,7 @@ class TieredMemoryManager(MemoryManager):
         query: str,
         limit: int = 10,
         *,
-        filter_metadata: dict | None = None,
+        filter_metadata: dict[str, Any] | None = None,
         agent_id: str | None = None,
     ) -> list[tuple[str, float]]:
         """Semantic search across cold tier.

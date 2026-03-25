@@ -102,6 +102,7 @@ class SQLiteEventStore:
         self._db_path = db_path
         self._conn: aiosqlite.Connection | None = None
         self._closed = False
+        self._write_lock = asyncio.Lock()
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -161,27 +162,29 @@ class SQLiteEventStore:
 
         Serializes the event using serialization.py (Pydantic JSON encoding).
         Auto-creates a run record if one does not already exist.
+        Uses a write lock to prevent interleaving from parallel fan-out nodes.
         """
         conn = self._require_conn()
         data_json = json.dumps(event_to_dict(event))
         timestamp_iso = event.timestamp.isoformat()
 
-        await conn.execute(
-            """
-            INSERT OR IGNORE INTO workflow_events
-                (run_id, event_id, event_type, sequence, timestamp_iso, data)
-            VALUES (?, ?, ?, ?, ?, ?)
-            """,
-            (
-                event.run_id,
-                event.event_id,
-                event.event_type.value,
-                event.sequence,
-                timestamp_iso,
-                data_json,
-            ),
-        )
-        await conn.commit()
+        async with self._write_lock:
+            await conn.execute(
+                """
+                INSERT OR IGNORE INTO workflow_events
+                    (run_id, event_id, event_type, sequence, timestamp_iso, data)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    event.run_id,
+                    event.event_id,
+                    event.event_type.value,
+                    event.sequence,
+                    timestamp_iso,
+                    data_json,
+                ),
+            )
+            await conn.commit()
 
     async def get_events(
         self,
