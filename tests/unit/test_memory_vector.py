@@ -954,9 +954,7 @@ try:
 except ImportError:
     HAS_QDRANT = False
 
-_requires_qdrant = pytest.mark.skipif(
-    not HAS_QDRANT, reason="qdrant-client not fully installed"
-)
+_requires_qdrant = pytest.mark.skipif(not HAS_QDRANT, reason="qdrant-client not fully installed")
 
 
 @pytest.fixture

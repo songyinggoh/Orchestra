@@ -78,14 +78,17 @@ class CachedProvider:
         """Execute completion, checking the cache first."""
         # Skip cache for non-deterministic calls (temperature > max_temp)
         if temperature > self._max_temp:
-            return cast(LLMResponse, await self._provider.complete(
-                messages,
-                model=model,
-                tools=tools,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                output_type=output_type,
-            ))
+            return cast(
+                LLMResponse,
+                await self._provider.complete(
+                    messages,
+                    model=model,
+                    tools=tools,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    output_type=output_type,
+                ),
+            )
 
         key = self._cache_key(messages, model, temperature, max_tokens, tools, output_type)
 
@@ -96,14 +99,17 @@ class CachedProvider:
             return cached
 
         # Cache miss -- call provider
-        result: LLMResponse = cast(LLMResponse, await self._provider.complete(
-            messages,
-            model=model,
-            tools=tools,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            output_type=output_type,
-        ))
+        result: LLMResponse = cast(
+            LLMResponse,
+            await self._provider.complete(
+                messages,
+                model=model,
+                tools=tools,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                output_type=output_type,
+            ),
+        )
 
         # Optionally skip caching tool-call responses
         if result.tool_calls and not self._cache_tool_calls:

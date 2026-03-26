@@ -40,8 +40,7 @@ class VectorStore:
         """
         if not _VALID_SQL_IDENTIFIER.match(table_name):
             raise ValueError(
-                f"Invalid table_name {table_name!r}: must match "
-                f"[a-zA-Z_][a-zA-Z0-9_]{{0,62}}"
+                f"Invalid table_name {table_name!r}: must match [a-zA-Z_][a-zA-Z0-9_]{{0,62}}"
             )
         self.pool = pool
         self.table_name = table_name
@@ -292,7 +291,10 @@ class VectorStore:
     async def count(self, agent_id: str | None = None) -> int:
         async with await self.pool.acquire() as conn:
             if agent_id:
-                return cast(int, await conn.fetchval(
-                    f"SELECT COUNT(*) FROM {self.table_name} WHERE agent_id = $1", agent_id
-                ))
+                return cast(
+                    int,
+                    await conn.fetchval(
+                        f"SELECT COUNT(*) FROM {self.table_name} WHERE agent_id = $1", agent_id
+                    ),
+                )
             return cast(int, await conn.fetchval(f"SELECT COUNT(*) FROM {self.table_name}"))
