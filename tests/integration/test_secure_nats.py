@@ -19,7 +19,6 @@ nats_lib = pytest.importorskip("nats", reason="nats-py not installed")
 base58 = pytest.importorskip("base58", reason="base58 not installed")
 
 from orchestra.messaging import SecureNatsProvider, TaskConsumer, TaskPublisher  # noqa: E402
-from orchestra.messaging.client import NATSClientConfig, create_nats_client  # noqa: E402
 
 NATS_URL = "nats://localhost:4222"
 pytestmark = pytest.mark.integration
@@ -28,40 +27,50 @@ pytestmark = pytest.mark.integration
 # ------------------------------------------------------------------ fixtures
 
 
-@pytest_asyncio.fixture(scope="module")
-async def _jetstream_warmup():
-    """Warm up JetStream on first connection (cold-start issue in CI)."""
+@pytest_asyncio.fixture
+async def nats_connection():
+    """Isolated NATS connection with a unique stream per test.
+
+    Creates the stream directly with retries rather than relying on
+    create_nats_client's _ensure_stream (which can silently swallow
+    creation errors in CI environments).
+    """
     import asyncio
 
     import nats as _nats
+    from nats.js.api import RetentionPolicy, StorageType, StreamConfig
+
+    stream_name = f"TEST_{uuid.uuid4().hex[:8].upper()}"
+    subject = f"orchestra.tasks.test.{stream_name}"
 
     nc = await _nats.connect(NATS_URL)
     js = nc.jetstream()
-    from nats.js.api import StreamConfig
 
-    # Create and delete a throwaway stream to force JetStream initialization
-    for _attempt in range(5):
-        try:
-            await js.add_stream(config=StreamConfig(name="_WARMUP", subjects=["_warmup.>"]))
-            await js.delete_stream("_WARMUP")
-            break
-        except Exception:
-            await asyncio.sleep(0.5)
-    await nc.close()
-
-
-@pytest_asyncio.fixture
-async def nats_connection(_jetstream_warmup):
-    """Isolated NATS connection with a unique stream per test."""
-    stream_name = f"TEST_{uuid.uuid4().hex[:8].upper()}"
-    config = NATSClientConfig(
-        servers=[NATS_URL],
-        stream_name=stream_name,
-        stream_subjects=[f"orchestra.tasks.test.{stream_name}"],
-        max_age_seconds=60,
-        duplicate_window_seconds=30,
+    cfg = StreamConfig(
+        name=stream_name,
+        subjects=[subject],
+        storage=StorageType.FILE,
+        retention=RetentionPolicy.LIMITS,
+        max_age=60 * 1_000_000_000,
+        duplicate_window=30 * 1_000_000_000,
     )
-    nc, js = await create_nats_client(config)
+
+    # Retry stream creation — JetStream may not be ready on first attempt in CI
+    last_err: BaseException | None = None
+    for _attempt in range(10):
+        try:
+            await js.add_stream(config=cfg)
+            # Verify the stream actually exists
+            await js.stream_info(stream_name)
+            last_err = None
+            break
+        except Exception as exc:
+            last_err = exc
+            await asyncio.sleep(0.5)
+    if last_err is not None:
+        await nc.close()
+        raise RuntimeError(f"Failed to create NATS stream {stream_name}: {last_err}") from last_err
+
     yield nc, js, stream_name
     await nc.drain()
 
@@ -80,14 +89,8 @@ def agent_pair():
 @pytest.mark.asyncio
 async def test_publish_encrypted_tasks(nats_connection, agent_pair) -> None:
     """Publish encrypted tasks, consume all, verify decryption succeeds."""
-    import asyncio
-
     _nc, js, stream_name = nats_connection
     pub_provider, con_provider = agent_pair
-
-    # Verify stream exists before publishing
-    info = await js.stream_info(stream_name)
-    assert info.config.name == stream_name
 
     agent_type = f"test.{stream_name}"
     publisher = TaskPublisher(js, pub_provider)
@@ -95,18 +98,12 @@ async def test_publish_encrypted_tasks(nats_connection, agent_pair) -> None:
     num_tasks = 20
     results = []
     for i in range(num_tasks):
-        # Retry on transient JetStream NoRespondersError (CI cold-start)
-        for _retry in range(3):
-            try:
-                r = await publisher.publish(
-                    agent_type,
-                    {"index": i, "data": f"payload_{i}"},
-                    recipient_did=con_provider.own_did,
-                )
-                results.append(r)
-                break
-            except Exception:
-                await asyncio.sleep(0.2)
+        r = await publisher.publish(
+            agent_type,
+            {"index": i, "data": f"payload_{i}"},
+            recipient_did=con_provider.own_did,
+        )
+        results.append(r)
 
     assert len(results) == num_tasks
     assert all(r.sequence > 0 for r in results)
