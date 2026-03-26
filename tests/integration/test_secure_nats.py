@@ -28,8 +28,30 @@ pytestmark = pytest.mark.integration
 # ------------------------------------------------------------------ fixtures
 
 
+@pytest_asyncio.fixture(scope="module")
+async def _jetstream_warmup():
+    """Warm up JetStream on first connection (cold-start issue in CI)."""
+    import asyncio
+
+    import nats as _nats
+
+    nc = await _nats.connect(NATS_URL)
+    js = nc.jetstream()
+    from nats.js.api import StreamConfig
+
+    # Create and delete a throwaway stream to force JetStream initialization
+    for _attempt in range(5):
+        try:
+            await js.add_stream(config=StreamConfig(name="_WARMUP", subjects=["_warmup.>"]))
+            await js.delete_stream("_WARMUP")
+            break
+        except Exception:
+            await asyncio.sleep(0.5)
+    await nc.close()
+
+
 @pytest_asyncio.fixture
-async def nats_connection():
+async def nats_connection(_jetstream_warmup):
     """Isolated NATS connection with a unique stream per test."""
     stream_name = f"TEST_{uuid.uuid4().hex[:8].upper()}"
     config = NATSClientConfig(
