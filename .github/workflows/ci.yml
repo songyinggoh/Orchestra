@@ -128,8 +128,11 @@ jobs:
 
       - name: Start NATS with JetStream
         run: |
-          docker run -d --name nats -p 4222:4222 -p 8222:8222 nats:2.10-alpine -js
+          docker run -d --name nats -p 4222:4222 -p 8222:8222 nats:2.10-alpine -js -sd /tmp/nats
+          # Wait for TCP port
           for i in $(seq 1 30); do nc -z localhost 4222 && break || sleep 1; done
+          # Wait for JetStream to be fully ready (monitoring endpoint)
+          for i in $(seq 1 30); do curl -sf http://localhost:8222/jsz > /dev/null 2>&1 && break || sleep 1; done
 
       - name: Set up Python 3.12
         uses: actions/setup-python@v5

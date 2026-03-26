@@ -132,7 +132,7 @@ class PromptShield:
                 return
             try:
                 from optimum.onnxruntime import ORTModelForSequenceClassification
-                from transformers import AutoTokenizer
+                from transformers import AutoTokenizer  # type: ignore[import-not-found]
 
                 self._tokenizer = await asyncio.to_thread(
                     AutoTokenizer.from_pretrained, self.model_id
@@ -157,7 +157,7 @@ class PromptShield:
                 )
             return GuardrailResult(passed=True, output=text)
 
-        import torch
+        import torch  # type: ignore[import-not-found]
 
         inputs = self._tokenizer(text, return_tensors="pt")
         outputs = await asyncio.to_thread(self._model, **inputs)
