@@ -7,7 +7,7 @@ Production-grade graph workflows. Intuitive agent definition. Built-in observabi
 *More debuggable than CrewAI. Less verbose than LangGraph. More secure than both. Completely free.*
 
 > **Status: v1.0 — Production Ready**
-> All four phases of development are complete. Orchestra is installable, tested (696 unit tests passing across unit, integration, security, property, chaos, and load suites), and ready for production use. Code examples reflect the implemented API.
+> All four phases of development are complete. Orchestra is installable, tested (comprehensive test suites across unit, integration, security, property, chaos, and load testing), and ready for production use. Code examples reflect the implemented API.
 
 ---
 
@@ -86,7 +86,7 @@ Orchestra fills every one of these gaps.
 | **Progressive Infrastructure** | 3-4 | Same code runs on SQLite + asyncio locally, PostgreSQL + Redis + Kubernetes in production. |
 | **Intelligent Cost Router** | 4 | Complexity profiling + auto-routing to cost-optimal models. Per-agent and per-workflow budget enforcement. |
 | **Capability-Based Agent Security** | 4 | Agent identity with scoped permissions, tool-level ACLs, and circuit breakers. |
-| **Dynamic Subgraphs** | 4 | `DynamicNode` generates new sub-nodes and edges at runtime — no other framework supports runtime graph mutation. |
+| **Dynamic Subgraphs** | 4 | `SubgraphBuilder` generates new sub-nodes and edges at runtime — no other framework supports runtime graph mutation. |
 
 ---
 
@@ -108,11 +108,11 @@ from orchestra.providers import auto_provider
 provider = auto_provider()  # reads whatever key is available — no setup needed
 ```
 
-| Assistant | Key it reads | Context file |
+| Assistant | What it detects | Context file |
 |---|---|---|
-| Claude Code | `ANTHROPIC_API_KEY` | `CLAUDE.md` |
-| Gemini CLI | `GOOGLE_API_KEY` | `GEMINI.md` |
-| OpenAI Codex | `OPENAI_API_KEY` | `AGENTS.md` |
+| Claude Code | `claude` CLI on PATH | `CLAUDE.md` |
+| Gemini CLI | `gemini` CLI on PATH | `GEMINI.md` |
+| OpenAI Codex | `codex` CLI on PATH | `AGENTS.md` |
 | Cursor | any configured key | `.cursor/rules/orchestra.mdc` |
 | GitHub Copilot | any configured key | `.github/copilot-instructions.md` |
 
@@ -150,7 +150,7 @@ agent = BaseAgent(
 )
 ctx = ExecutionContext(provider=provider)
 result = asyncio.run(agent.run("Alice", ctx))
-print(result.output)   # AgentResult with .output, .messages, .usage, .tool_calls_made
+print(result.output)   # AgentResult with .output, .messages, .token_usage, .tool_calls_made
 ```
 
 ### Your First Workflow
@@ -307,7 +307,7 @@ ctx = ExecutionContext(provider=auto_provider())
 result = await researcher.run("What are the latest AI safety techniques?", ctx)
 print(result.output)
 print(result.tool_calls_made)
-print(result.usage)
+print(result.token_usage)
 ```
 
 ### Workflow Graphs
@@ -346,8 +346,8 @@ compiled = graph.compile()
 |---|---|
 | `AgentNode` | Wraps a `BaseAgent` — executes the agent's reasoning loop |
 | `FunctionNode` | Wraps a plain async Python function — deterministic transformations |
-| `DynamicNode` | Generates sub-nodes and edges at runtime — plan-and-execute, adaptive workflows |
 | `SubgraphNode` | Embeds a pre-compiled graph — reusable workflow composition |
+| `SubgraphBuilder` | Generates sub-nodes and edges at runtime (`core/dynamic.py`) — plan-and-execute, adaptive workflows |
 
 ### Typed State Management
 
@@ -398,18 +398,17 @@ Orchestra is **MCP-first** for external tool integration:
 ```python
 from orchestra.tools import MCPClient
 
-mcp = MCPClient("npx @modelcontextprotocol/server-github")
-github_tools = await mcp.list_tools()
+async with MCPClient.stdio("npx", ["@modelcontextprotocol/server-github"]) as client:
+    github_tools = client.get_tools()
 ```
 
 Tool-level ACLs restrict which agents can invoke which tools:
 
 ```python
-from orchestra.security import ACLEngine
+from orchestra.security.acl import ToolACL
 
-acl = ACLEngine()
-acl.set_acl("researcher", allow=["web_search", "read_file"])
-acl.set_acl("writer", allow=["write_file"], deny=["web_search"])
+researcher_acl = ToolACL.allow_list(["web_search", "read_file"])
+writer_acl = ToolACL.deny_list(["web_search"])  # allows all tools except web_search
 ```
 
 ### Testing Framework
@@ -454,12 +453,18 @@ src/orchestra/                  # installable package
   core/                         # Graph engine, agents, state, execution
     agent.py                    # BaseAgent, @agent decorator
     graph.py                    # WorkflowGraph, fluent API (.then/.parallel/.branch)
-    nodes.py                    # AgentNode, FunctionNode, DynamicNode, SubgraphNode
-    edges.py                    # Edge, ConditionalEdge, HandoffEdge, ParallelEdge
+    nodes.py                    # AgentNode, FunctionNode, SubgraphNode
+    dynamic.py                  # SubgraphBuilder — runtime graph construction
+    edges.py                    # Edge, ConditionalEdge, ParallelEdge
+    handoff.py                  # HandoffEdge — swarm-style agent transfers
+    compiled.py                 # CompiledGraph — validated execution plan
     state.py                    # WorkflowState, reducer functions
     context.py                  # ExecutionContext
     runner.py                   # run(), run_sync(), RunResult
     types.py                    # Message, AgentResult, TokenUsage, END, START
+    errors.py                   # Framework exception hierarchy
+    protocols.py                # LLMProvider and Tool protocols
+    hotreload.py                # GraphHotReloader — live graph reload without restart
   providers/                    # LLM provider adapters
     __init__.py                 # auto_provider() factory
     http.py                     # HttpProvider — any OpenAI-compatible API
@@ -467,34 +472,68 @@ src/orchestra/                  # installable package
     google.py                   # GoogleProvider (Gemini)
     ollama.py                   # OllamaProvider (local)
     callable.py                 # CallableProvider — wrap any function as a provider
-    strategy.py                 # CostRouter
+    claude_code.py              # ClaudeCodeProvider (CLI subscription)
+    gemini_cli.py               # GeminiCliProvider (CLI subscription)
+    codex_cli.py                # CodexCliProvider (CLI subscription)
   tools/                        # Tool system
     base.py                     # @tool decorator, Tool protocol
-    registry.py                 # ToolRegistry with ACLs
-    mcp.py                      # MCPClient, MCPToolProvider
-  memory/                       # Multi-tier memory
-    working.py                  # In-process bounded deque
-    short_term.py               # Session-scoped (SQLite/PostgreSQL)
-    long_term.py                # Semantic search (pgvector)
-    entity.py                   # Structured entity-attribute-value
-    manager.py                  # Unified MemoryManager
+    registry.py                 # ToolRegistry
+    mcp.py                      # MCPClient, MCPToolAdapter
+  memory/                       # Memory backends and utilities
+    manager.py                  # MemoryManager protocol + InMemoryMemoryManager
+    backends.py                 # Storage backends
+    tiers.py                    # Multi-tier memory (working / session / semantic)
+    vector_store.py             # pgvector semantic search
+    embeddings.py               # Embedding helpers
   storage/                      # Persistence layer
+    store.py                    # Storage protocol
+    events.py                   # EventStore, event sourcing
+    checkpoint.py               # Checkpoint management
     sqlite.py                   # Dev backend
     postgres.py                 # Production backend
-    redis.py                    # Hot state cache
-    events.py                   # EventStore, event sourcing
+  cache/                        # Response and state caching
+    backends.py                 # In-memory and Redis cache backends
   observability/                # Tracing, metrics, logging
     tracing.py                  # OpenTelemetry span management
-    metrics.py                  # CostTracker, token usage
-    console.py                  # Rich terminal trace renderer
-    logging.py                  # structlog configuration
-  security/                     # Agent IAM and guardrails
-    identity.py                 # AgentIdentity, Capability
-    acl.py                      # ACLEngine, PermissionPolicy
-    guardrails.py               # ContentFilter, PIIDetector, CostLimiter
-  api/                          # HTTP server (FastAPI)
+    metrics.py                  # OTelMetricsSubscriber — token usage and cost metrics
+    _otel_setup.py              # OTel exporter configuration
+  security/                     # Guardrails and access control
+    acl.py                      # ToolACL — per-tool allow/deny lists
+    guardrails.py               # GuardedAgent, GuardrailChain, ContentFilter, PIIDetector
+    circuit_breaker.py          # Agent-level circuit breakers
+  identity/                     # Cryptographic agent identity
+    agent_identity.py           # AgentIdentity (DID + UCAN)
+    ucan.py                     # UCAN token issuance and verification
+    delegation.py               # Capability delegation chain
+    did.py                      # DID document helpers
+  routing/                      # Cost-aware model routing
+    router.py                   # CostAwareRouter, ThompsonModelSelector
+    types.py                    # ModelOption, RoutingDecision, BudgetConstraint
+  cost/                         # Budget enforcement and cost tracking
+    budget.py                   # WorkflowBudget, per-agent limits
+    aggregator.py               # Cost aggregation across runs
+    persistent_budget.py        # Cross-session budget persistence
+  messaging/                    # NATS-based E2EE messaging
+    client.py                   # NATS client
+    publisher.py / consumer.py  # Pub/sub helpers
+  interop/                      # Cross-framework interoperability
+    a2a.py                      # A2A Agent Cards protocol
+  reliability/                  # Hallucination detection
+    selfcheck.py                # SelfCheckGPT — stochastic consistency scoring
+    factscore.py                # FActScore atomic-fact verification
+    tools.py                    # Orchestra tool wrappers for reliability checks
+  debugging/                    # Time-travel debugging
+    timetravel.py               # State reconstruction and replay
+  discovery/                    # Agent and tool auto-discovery
+    scanner.py                  # File-system scanning
+    hotreload.py                # Live hot-reload support
+  reasoning/                    # Tree of Thoughts reasoning helpers
+  server/                       # HTTP server (FastAPI + SSE)
+    app.py
+    routes/                     # graphs, runs, streams, health endpoints
   testing/                      # ScriptedLLM and test utilities
   cli/                          # orchestra init, run, test, serve
+sdk/typescript/                 # TypeScript SDK
 ```
 
 The `core/` module has **zero upward dependencies** — it depends only on Protocol interfaces, making it straightforward to test in isolation.
@@ -531,31 +570,41 @@ Orchestra provides a capability-based agent identity and access management syste
 
 ### Agent Identity
 
-Each agent has a cryptographic identity with scoped capability types:
+Each agent has a cryptographic identity (DID + UCAN delegation) for zero-trust cross-agent authorization. Identities are created via the factory method in `orchestra.identity`:
 
 ```python
-from orchestra.security import AgentIdentity, Capability
+from orchestra.identity.agent_identity import AgentIdentity
 
-identity = AgentIdentity(
-    agent_name="researcher",
-    capabilities=[
-        Capability.TOOL_USE,
-        Capability.STATE_READ,
-        Capability.NETWORK_ACCESS,
-    ]
+# AgentIdentity.create() generates signing + encryption keys automatically
+identity = AgentIdentity.create()
+```
+
+Tool-level access control uses `ToolACL` — attach one to any `BaseAgent` via the `acl` parameter:
+
+```python
+from orchestra.security.acl import ToolACL
+from orchestra import BaseAgent
+
+researcher = BaseAgent(
+    name="researcher",
+    system_prompt="Research analyst.",
+    acl=ToolACL.allow_list(["web_search", "read_file"]),
 )
 ```
 
 ### Guardrails Middleware
 
-Composable pre/post hooks applied as middleware on agent nodes:
+Composable pre/post hooks applied via `GuardedAgent`. Pass `GuardrailChain` instances for input and/or output validation:
 
 ```python
-from orchestra.security import with_guardrails, ContentFilter, PIIDetector, CostLimiter
+from orchestra.security.guardrails import GuardedAgent, GuardrailChain, ContentFilter, PIIDetector
 
-@with_guardrails(ContentFilter(), PIIDetector(), CostLimiter(max_usd=1.00))
-class SensitiveAgent(BaseAgent):
-    ...
+sensitive_agent = GuardedAgent(
+    name="sensitive",
+    system_prompt="You are a helpful assistant.",
+    input_guardrails=GuardrailChain([ContentFilter(), PIIDetector()]),
+    output_guardrails=GuardrailChain([PIIDetector()]),
+)
 ```
 
 ### Two Security Modes
@@ -567,16 +616,15 @@ class SensitiveAgent(BaseAgent):
 
 ## Memory System
 
-Four-tier memory architecture:
+Three-tier memory architecture:
 
-| Tier | Scope | Backend | Use Case |
+| Tier | Latency | Backend | Use Case |
 |---|---|---|---|
-| **Working Memory** | Current execution | In-process bounded deque | Active context window |
-| **Short-Term Memory** | Session | SQLite / PostgreSQL | Conversation history |
-| **Long-Term Memory** | Cross-session | pgvector | Semantic search across past interactions |
-| **Entity Memory** | Persistent | PostgreSQL | Structured facts about people, projects, concepts |
+| **Hot** (in-process) | <0.01ms | In-process SLRU bounded cache | Active context window |
+| **Warm** (L2 cache) | 0.5–2ms | Redis | Short-term session state |
+| **Cold** (semantic) | 5–50ms | pgvector | Long-term semantic search |
 
-`MemoryManager` provides a unified interface that coordinates reads and writes across all tiers.
+`TieredMemoryManager` provides a unified interface that automatically promotes and demotes entries across tiers based on access patterns. `MemoryManager` is the simplified store/retrieve protocol for agents that don't need tier control.
 
 ---
 
@@ -588,18 +636,24 @@ Four-tier memory architecture:
 - **Cost Attribution** — Track spend per agent, per workflow, per user.
 
 ```python
-from orchestra.providers import CostRouter
+from orchestra.routing.router import CostAwareRouter, ModelOption
+from orchestra.routing.types import BudgetConstraint
 
-router = CostRouter(
-    tiers={
-        "simple":   "gpt-4o-mini",       # Classification, extraction
-        "moderate": "claude-haiku-4-5",  # Summarization, writing
-        "complex":  "gpt-4o",            # Reasoning, planning
-    },
-    budget_per_workflow=5.00,  # USD
+router = CostAwareRouter(cost_weight=0.7, capability_weight=0.3)
+
+options = [
+    ModelOption("gpt-4o-mini", "openai", input_cost_1k=0.00015, capability_score=2),
+    ModelOption("claude-haiku-4-5", "anthropic", input_cost_1k=0.00025, capability_score=3),
+    ModelOption("gpt-4o", "openai", input_cost_1k=0.005, capability_score=5),
+]
+
+budget = BudgetConstraint(max_cost_usd=0.01)
+decision = await router.select_model(
+    options,
+    task_description="complex reasoning task",
+    budget=budget,
 )
-
-result = await run(graph, input={"query": "..."}, provider=router)
+# decision.model.model_name -> the selected model
 ```
 
 ---
@@ -614,7 +668,7 @@ Orchestra works with **any LLM backend** through a unified `LLMProvider` Protoco
 |---|---|---|
 | `HttpProvider` | `ORCHESTRA_API_KEY` or `OPENAI_API_KEY` | GPT-4o, o1, o3, and any OpenAI-compatible model |
 | `AnthropicProvider` | `ANTHROPIC_API_KEY` | Claude Opus 4, Sonnet, Haiku |
-| `GoogleProvider` | `GOOGLE_API_KEY` | Gemini 2.0 Flash, Gemini 1.5 Pro |
+| `GoogleProvider` | `GOOGLE_API_KEY` | `gemini-2.0-flash`, `gemini-2.0-flash-lite`, `gemini-2.5-pro-preview-06-05`, `gemini-2.5-flash-preview-05-20` |
 | `OllamaProvider` | Ollama running at localhost:11434 | Any `ollama pull` model — completely free |
 
 ### Any OpenAI-Compatible API
@@ -663,7 +717,7 @@ Any object implementing `.complete()`, `.stream()`, `.count_tokens()`, and `.get
 | Cost routing | Intelligent | None | None | None | None |
 | HITL | Full + escalation | Best | Manager | Human input | None |
 | Observability | OTel + Rich (free) | LangSmith (paid) | Logs | Basic OTel | Traces |
-| MCP support | Client + Host + Server | Client | None | Client | None |
+| MCP support | Client | Client | None | Client | None |
 | Pricing | **100% Free** | Free + paid cloud | Free + paid enterprise | Free | Free |
 
 ---
@@ -682,7 +736,7 @@ Any object implementing `.complete()`, `.stream()`, `.count_tokens()`, and `.get
 | CLI | Typer | Clean command-line interface |
 | Testing | pytest-asyncio | Native async test support |
 
-**Core dependency count:** ~15 required packages. LLM providers, NATS, and pgvector are optional extras.
+**Core dependency count:** 6 required packages (`pydantic`, `httpx`, `structlog`, `rich`, `typer`, `mcp`). LLM providers, NATS, Redis, and pgvector are optional extras.
 
 ---
 

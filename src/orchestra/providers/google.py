@@ -434,4 +434,4 @@ def _map_finish_reason(
         "OTHER": "stop",
         "FUNCTION_CALL": "tool_calls",
     }
-    return mapping.get(gemini_reason.upper(), "stop")  # type: ignore[return-value]
+    return mapping.get(gemini_reason.upper(), "stop")

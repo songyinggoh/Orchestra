@@ -15,6 +15,7 @@ import structlog
 from watchfiles import awatch
 
 from orchestra.core.agent import BaseAgent
+from orchestra.core.compiled import CompiledGraph
 from orchestra.core.dynamic import SubgraphBuilder
 from orchestra.discovery.agent_loader import load_agent
 from orchestra.discovery.config import DefaultsSection
@@ -179,7 +180,7 @@ class DiscoveryHotReloader:
             update (no graphs were changed in that case).
         """
         # --- Pass 1: collect affected workflows and compile them into staging ---
-        staged: list[tuple[str, object]] = []  # (registry_name, compiled_graph)
+        staged: list[tuple[str, CompiledGraph]] = []  # (registry_name, compiled_graph)
 
         for wf_stem, wf_path in self._workflow_files.items():
             if not wf_path.exists():

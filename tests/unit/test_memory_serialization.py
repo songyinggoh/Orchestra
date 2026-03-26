@@ -1,10 +1,11 @@
 import datetime
 
-import msgpack
 import pytest
 
 from orchestra.core.types import Message, MessageRole
 from orchestra.memory.serialization import pack, unpack
+
+msgpack = pytest.importorskip("msgpack")
 
 
 def test_roundtrip_primitives():

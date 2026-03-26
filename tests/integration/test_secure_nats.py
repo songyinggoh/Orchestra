@@ -35,7 +35,7 @@ async def nats_connection():
     config = NATSClientConfig(
         servers=[NATS_URL],
         stream_name=stream_name,
-        stream_subjects=[f"orchestra.tasks.test.{stream_name}.>"],
+        stream_subjects=[f"orchestra.tasks.test.{stream_name}"],
         max_age_seconds=60,
         duplicate_window_seconds=30,
     )

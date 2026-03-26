@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 import structlog
@@ -62,7 +62,7 @@ class SemanticDeduplicator:
 
     async def embed_query(self, query: str) -> np.ndarray:
         """Embed a single query string. Returns array of shape ``(256,)``."""
-        return (await self.embed_texts([query]))[0]
+        return cast(np.ndarray, (await self.embed_texts([query]))[0])
 
     async def embed(self, texts: Sequence[str]) -> np.ndarray:
         """Alias for :meth:`embed_texts`. Kept for backward compatibility."""
@@ -96,6 +96,6 @@ class SemanticDeduplicator:
 
         if max_sim >= self.threshold:
             logger.debug("semantic_duplicate_detected", similarity=f"{max_sim:.4f}")
-            return True, existing_keys[max_idx]
+            return True, existing_keys[int(max_idx)]
 
         return False, None

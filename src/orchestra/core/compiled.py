@@ -163,7 +163,7 @@ class CompiledGraph:
             _bound_store = event_store
 
             async def _store_callback(e: Any) -> None:
-                await _bound_store.append(e)  # type: ignore[arg-type]
+                await _bound_store.append(e)
 
             event_bus.subscribe(_store_callback)
 
@@ -176,7 +176,7 @@ class CompiledGraph:
                 from orchestra.observability.console import RichTraceRenderer
 
                 _renderer = RichTraceRenderer(verbose=(trace_mode == "verbose"))
-                event_bus.subscribe(_renderer.on_event)
+                event_bus.subscribe(_renderer.on_event)  # type: ignore[arg-type]
                 _renderer.start()
             except ImportError:
                 _renderer = None
@@ -231,7 +231,7 @@ class CompiledGraph:
             )
         finally:
             if _store_owner and event_store is not None:
-                await event_store.close()  # type: ignore[union-attr]
+                await event_store.close()  # type: ignore[attr-defined]
 
         return final_state_dict
 
@@ -263,7 +263,7 @@ class CompiledGraph:
                 from orchestra.storage.sqlite import SQLiteEventStore
 
                 event_store = SQLiteEventStore()
-                await event_store.initialize()  # type: ignore[attr-defined]
+                await event_store.initialize()
             except (ImportError, OSError, sqlite3.Error) as e:
                 raise AgentError(f"Failed to auto-initialize event store for resume: {e}") from e
 
@@ -291,7 +291,7 @@ class CompiledGraph:
 
         # Bind store
         async def _store_callback(e: Any) -> None:
-            await event_store.append(e)  # type: ignore[union-attr]
+            await event_store.append(e)
 
         event_bus.subscribe(_store_callback)
 
@@ -343,7 +343,7 @@ class CompiledGraph:
             from orchestra.storage.sqlite import SQLiteEventStore
 
             event_store = SQLiteEventStore()
-            await event_store.initialize()  # type: ignore[attr-defined]
+            await event_store.initialize()
 
         # 1. Reconstruct historical state
         tt = TimeTravelController(event_store)

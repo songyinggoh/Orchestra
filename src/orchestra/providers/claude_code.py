@@ -241,7 +241,7 @@ class ClaudeCodeProvider:
 
         # Check for tool calls in the response text.
         tool_calls: list[ToolCall] = []
-        content = result_text
+        content: str | None = result_text
         if tools:
             parsed = parse_tool_calls(result_text)
             if parsed:

@@ -65,12 +65,14 @@ class FactScorerAgent(BaseAgent):
     factscore_gamma: int = 10
     topic_state_key: str = "topic"  # state key to read the topic from
 
-    model_config: dict = {"arbitrary_types_allowed": True}  # noqa: RUF012
+    model_config = {"arbitrary_types_allowed": True}  # noqa: RUF012
 
     async def run(
         self,
         input: str | list[Message],
         context: ExecutionContext,
+        *,
+        emit_partial_on_max_iterations: bool = False,
     ) -> AgentResult:
         # Primary agent run
         result = await super().run(input, context)

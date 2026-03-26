@@ -172,6 +172,7 @@ module = [
     "blst",
     "diskcache",
     "factscore.factscorer",
+    "jsonschema",
     "model2vec",
     "msgpack",
     "nltk",

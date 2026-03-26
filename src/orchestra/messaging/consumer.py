@@ -54,7 +54,7 @@ class TaskConsumer:
 
     async def fetch_and_process(
         self,
-        handler: Callable[[dict], Awaitable[Any]],
+        handler: Callable[[dict[str, Any]], Awaitable[Any]],
         *,
         batch_size: int = 1,
         timeout: float = 1.0,
@@ -120,8 +120,8 @@ class TaskConsumer:
 
     @staticmethod
     async def _run_with_heartbeat(
-        handler: Callable[[dict], Awaitable[Any]],
-        plaintext: dict,
+        handler: Callable[[dict[str, Any]], Awaitable[Any]],
+        plaintext: dict[str, Any],
         msg: Any,
         heartbeat_interval: float,
     ) -> None:

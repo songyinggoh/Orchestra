@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import Any
+from typing import Any, cast
 
 from pydantic import BaseModel
 
@@ -36,12 +36,12 @@ class CachedProvider:
     @property
     def provider_name(self) -> str:
         """Name of the underlying provider."""
-        return self._provider.provider_name
+        return cast(str, self._provider.provider_name)
 
     @property
     def default_model(self) -> str:
         """Default model for the underlying provider."""
-        return self._provider.default_model
+        return cast(str, self._provider.default_model)
 
     def _cache_key(
         self,
@@ -78,14 +78,14 @@ class CachedProvider:
         """Execute completion, checking the cache first."""
         # Skip cache for non-deterministic calls (temperature > max_temp)
         if temperature > self._max_temp:
-            return await self._provider.complete(
+            return cast(LLMResponse, await self._provider.complete(
                 messages,
                 model=model,
                 tools=tools,
                 temperature=temperature,
                 max_tokens=max_tokens,
                 output_type=output_type,
-            )
+            ))
 
         key = self._cache_key(messages, model, temperature, max_tokens, tools, output_type)
 
@@ -96,14 +96,14 @@ class CachedProvider:
             return cached
 
         # Cache miss -- call provider
-        result = await self._provider.complete(
+        result: LLMResponse = cast(LLMResponse, await self._provider.complete(
             messages,
             model=model,
             tools=tools,
             temperature=temperature,
             max_tokens=max_tokens,
             output_type=output_type,
-        )
+        ))
 
         # Optionally skip caching tool-call responses
         if result.tool_calls and not self._cache_tool_calls:
@@ -114,14 +114,14 @@ class CachedProvider:
         await self._cache.set(key, result, self._default_ttl)
         return result
 
-    async def stream(self, *args, **kwargs):
+    async def stream(self, *args: Any, **kwargs: Any) -> Any:
         """Delegate streaming to the underlying provider (streaming is not cached)."""
         return await self._provider.stream(*args, **kwargs)
 
-    def count_tokens(self, *args, **kwargs):
+    def count_tokens(self, *args: Any, **kwargs: Any) -> Any:
         """Delegate token counting to the underlying provider."""
         return self._provider.count_tokens(*args, **kwargs)
 
-    def get_model_cost(self, *args, **kwargs):
+    def get_model_cost(self, *args: Any, **kwargs: Any) -> Any:
         """Delegate cost calculation to the underlying provider."""
         return self._provider.get_model_cost(*args, **kwargs)

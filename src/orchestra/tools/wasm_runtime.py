@@ -148,7 +148,7 @@ class WasmToolSandbox:
             raise ToolExecutionError("Wasm module must export '_start' or 'run' function")
 
         try:
-            start_fn(store)
+            start_fn(store)  # type: ignore[operator]
         except Exception as exc:
             self._classify_error(exc, policy)
 

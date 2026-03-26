@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import cast
 
 import structlog
 
@@ -40,7 +41,7 @@ class ModelCostRegistry:
         """Load pricing data from the bundled JSON file."""
         try:
             with open(_PRICES_FILE) as f:
-                return json.load(f)
+                return cast(dict[str, dict[str, float]], json.load(f))
         except (FileNotFoundError, json.JSONDecodeError) as e:
             logger.warning("default_prices_load_failed", error=str(e))
             return {}

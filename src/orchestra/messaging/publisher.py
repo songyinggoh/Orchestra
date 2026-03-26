@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import structlog
 
@@ -35,7 +35,7 @@ class TaskPublisher:
     async def publish(
         self,
         agent_type: str,
-        body: dict,
+        body: dict[str, Any],
         recipient_did: str,
         *,
         dedup_id: str | None = None,

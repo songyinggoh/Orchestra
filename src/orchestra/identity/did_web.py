@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import base64
-from typing import Any
+from typing import Any, cast
 
 import structlog
 
@@ -101,4 +101,4 @@ async def resolve_did_web(did: str) -> dict[str, Any]:
     async with aiohttp.ClientSession() as session, session.get(url) as response:
         if response.status != 200:
             raise RuntimeError(f"Failed to resolve {did}: HTTP {response.status}")
-        return await response.json()
+        return cast(dict[str, Any], await response.json())

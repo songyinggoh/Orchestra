@@ -12,7 +12,7 @@ from typing import Any
 
 import structlog
 from joserfc.jwk import OKPKey
-from joserfc.jws import sign_compact, verify_compact
+from joserfc.jws import sign_compact, verify_compact  # type: ignore[attr-defined]
 
 from orchestra.identity.agent_identity import AgentIdentity
 from orchestra.identity.did import DIDManager
@@ -61,7 +61,7 @@ class A2AStateTransfer:
         # In a real system, we'd use the identity.signer directly with joserfc
         signer_key = identity._make_okp_key()
         protected = {"alg": "EdDSA", "typ": "JWM"}
-        signature = sign_compact(protected, payload, signer_key)
+        signature = sign_compact(protected, payload, signer_key)  # type: ignore[arg-type]
 
         return cls(
             state=state,
@@ -69,7 +69,7 @@ class A2AStateTransfer:
             nonce=res.nonce,
             chain_root=chain_root,
             sender_did=identity.did,
-            signature=signature,
+            signature=signature,  # type: ignore[arg-type]
         )
 
     async def verify(self) -> bool:
@@ -104,15 +104,15 @@ class A2AStateTransfer:
             verification_key = OKPKey.import_key({"kty": "OKP", "crv": "Ed25519", "x": x_b64})
 
             # 3. Verify JWS signature
-            member = verify_compact(self.signature, verification_key)
-            payload = member.payload
+            member = verify_compact(self.signature, verification_key)  # type: ignore[arg-type, call-arg]
+            payload = member.payload  # type: ignore[attr-defined]
 
             # 4. Verify payload matches envelope fields
             if payload.get("cmt") != base64.b64encode(self.commitment).decode():
                 return False
             if payload.get("root") != base64.b64encode(self.chain_root).decode():
                 return False
-            return payload.get("iss") == self.sender_did
+            return bool(payload.get("iss") == self.sender_did)
         except Exception as e:
             logger.error("a2a_verification_error", error=str(e))
             return False

@@ -250,7 +250,7 @@ class PersistentBudgetStore:
 
     async def _recursive_check_and_update(
         self,
-        db,
+        db: aiosqlite.Connection,
         tenant_id: str,
         amount_micro: int,
         period: str,
@@ -368,7 +368,7 @@ class PersistentBudgetStore:
 
     async def _recursive_update_balance(
         self,
-        db,
+        db: aiosqlite.Connection,
         tenant_id: str,
         amount_micro: int,
         period: str,
@@ -397,7 +397,7 @@ class PersistentBudgetStore:
         if row and row[0]:
             await self._recursive_update_balance(db, row[0], amount_micro, period, visited=visited)
 
-    async def _get_remaining_usd_with_db(self, db, tenant_id: str) -> float:
+    async def _get_remaining_usd_with_db(self, db: aiosqlite.Connection, tenant_id: str) -> float:
         cursor = await db.execute(
             "SELECT reset_period, limit_micro FROM budget_accounts WHERE tenant_id = ?",
             (tenant_id,),

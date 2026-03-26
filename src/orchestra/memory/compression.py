@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
-
-import msgpack
+from typing import Any, cast
 
 try:
     import pyzstd
@@ -33,9 +31,11 @@ class StateCompressor:
 
     def compress(self, value: Any) -> bytes:
         """Serialize and compress a value."""
+        import msgpack
+
         packed = msgpack.packb(value, default=_default, use_bin_type=True)
         if HAS_PYZSTD:
-            return pyzstd.compress(packed, self.level)
+            return cast(bytes, pyzstd.compress(packed, self.level))
         else:
             # map zstd level 3 to zlib (zlib range 0-9)
             z_level = min(9, max(0, self.level))
@@ -51,4 +51,6 @@ class StateCompressor:
                 decompressed = zlib.decompress(data)
         else:
             decompressed = zlib.decompress(data)
+        import msgpack
+
         return msgpack.unpackb(decompressed, object_hook=_object_hook, raw=False)

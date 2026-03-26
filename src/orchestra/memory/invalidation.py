@@ -27,7 +27,7 @@ class InvalidationSubscriber:
     def __init__(self, redis_client: Any, on_invalidate: Callable[[str], Any]) -> None:
         self._redis = redis_client
         self._on_invalidate = on_invalidate
-        self._task: asyncio.Task | None = None
+        self._task: asyncio.Task[None] | None = None
         self._running = False
 
     async def start(self) -> None:

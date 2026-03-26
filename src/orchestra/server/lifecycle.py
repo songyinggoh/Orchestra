@@ -6,7 +6,7 @@ import asyncio
 import threading
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import structlog
 
@@ -106,7 +106,7 @@ class RunManager:
 
         active_run = ActiveRun(
             run_id=run_id,
-            task=asyncio.Future(),  # placeholder, replaced below
+            task=cast(asyncio.Task[Any], asyncio.Future[Any]()),  # placeholder, replaced below
             event_store=event_store,
             graph_name=graph._name or "workflow",
         )
@@ -150,10 +150,10 @@ class RunManager:
                 return await self._inner.list_runs(*args, **kwargs)
 
             async def create_run(self, *args: Any, **kwargs: Any) -> Any:
-                return await self._inner.create_run(*args, **kwargs)
+                return await self._inner.create_run(*args, **kwargs)  # type: ignore[attr-defined]
 
             async def update_run_status(self, *args: Any, **kwargs: Any) -> Any:
-                return await self._inner.update_run_status(*args, **kwargs)
+                return await self._inner.update_run_status(*args, **kwargs)  # type: ignore[attr-defined]
 
         broadcast_store = _BroadcastStore(event_store, active_run.event_queue)
 
@@ -162,7 +162,7 @@ class RunManager:
                 result = await graph.run(
                     input=input_data,
                     run_id=run_id,
-                    event_store=broadcast_store,  # type: ignore[arg-type]
+                    event_store=broadcast_store,
                     persist=False,  # we manage store ourselves
                 )
                 active_run.status = "completed"

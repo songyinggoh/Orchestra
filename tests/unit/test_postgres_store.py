@@ -134,6 +134,7 @@ sys.modules["asyncpg.pool"] = _asyncpg_mock.pool  # type: ignore[attr-defined]
 # Now import the module under test
 from datetime import UTC  # noqa: E402
 
+import orchestra.storage.postgres as _pg_mod  # noqa: E402
 from orchestra.storage.checkpoint import Checkpoint  # noqa: E402
 from orchestra.storage.events import (  # noqa: E402
     EventType,
@@ -142,6 +143,10 @@ from orchestra.storage.events import (  # noqa: E402
     NodeStarted,
 )
 from orchestra.storage.postgres import PostgresEventStore  # noqa: E402
+
+# Ensure the postgres module uses our mock even if it was already imported
+# with the real asyncpg (e.g., by another test or via transitive imports).
+_pg_mod.asyncpg = _asyncpg_mock  # type: ignore[attr-defined]
 
 # ---------------------------------------------------------------------------
 # Helpers

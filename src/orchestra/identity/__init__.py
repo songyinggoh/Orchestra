@@ -26,7 +26,7 @@ __all__ = [
 ]
 
 
-def __getattr__(name: str):
+def __getattr__(name: str) -> object:
     if name == "DidWebManager":
         from orchestra.identity.did_web import DidWebManager
 

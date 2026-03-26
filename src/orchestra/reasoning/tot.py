@@ -168,12 +168,14 @@ class TreeOfThoughtsAgent(BaseAgent):
     tot_temperature: float = 0.7
     eval_temperature: float = 0.0
 
-    model_config: dict = {"arbitrary_types_allowed": True}  # noqa: RUF012
+    model_config = {"arbitrary_types_allowed": True}  # noqa: RUF012
 
     async def run(
         self,
         input: str | list[Message],
         context: ExecutionContext,
+        *,
+        emit_partial_on_max_iterations: bool = False,
     ) -> AgentResult:
         llm = context.provider
         if not llm:
@@ -250,9 +252,10 @@ class TreeOfThoughtsAgent(BaseAgent):
 
             candidates: list[ThoughtNode] = []
             for node, result in zip(frontier, gen_results, strict=False):
-                if isinstance(result, Exception):
+                if isinstance(result, BaseException):
                     logger.warning("tot_generate_error", error=str(result))
                     continue
+                assert not isinstance(result, BaseException)
                 thoughts, usage = result
                 _accumulate(total_usage, usage)
                 for t in thoughts:
@@ -268,12 +271,12 @@ class TreeOfThoughtsAgent(BaseAgent):
             eval_results = await asyncio.gather(*eval_tasks, return_exceptions=True)
 
             scored: list[ThoughtNode] = []
-            for node, result in zip(candidates, eval_results, strict=False):
-                if isinstance(result, Exception):
-                    logger.warning("tot_evaluate_error", error=str(result))
+            for node, eval_result in zip(candidates, eval_results, strict=False):
+                if isinstance(eval_result, BaseException):
+                    logger.warning("tot_evaluate_error", error=str(eval_result))
                     node.value = 0.5
                 else:
-                    value, usage = result
+                    value, usage = eval_result
                     node.value = value
                     _accumulate(total_usage, usage)
 
@@ -357,12 +360,12 @@ class TreeOfThoughtsAgent(BaseAgent):
             eval_results = await asyncio.gather(*eval_tasks, return_exceptions=True)
 
             viable: list[ThoughtNode] = []
-            for child, result in zip(children, eval_results, strict=False):
-                if isinstance(result, Exception):
+            for child, eval_result in zip(children, eval_results, strict=False):
+                if isinstance(eval_result, BaseException):
                     child.value = 0.5
                     viable.append(child)
                 else:
-                    value, usage = result
+                    value, usage = eval_result
                     child.value = value
                     _accumulate(total_usage, usage)
                     if child.is_terminal:

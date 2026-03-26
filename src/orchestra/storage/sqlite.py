@@ -452,4 +452,4 @@ class SnapshotManager:
             # Only CheckpointCreated events carry state_snapshot, so we only
             # snapshot when we receive one (full state available). For a generic
             # event we create a minimal checkpoint marker.
-            asyncio.ensure_future(self._store.save_checkpoint(event))  # noqa: RUF006
+            asyncio.ensure_future(self._store.save_checkpoint(event))  # type: ignore[arg-type]  # noqa: RUF006

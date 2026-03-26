@@ -114,8 +114,8 @@ class PromptShield:
         self.model_id = model_id
         self.threshold = threshold
         self._on_fail = on_fail
-        self._model = None
-        self._tokenizer = None
+        self._model: Any = None
+        self._tokenizer: Any = None
         self._lock = asyncio.Lock()
 
     @property

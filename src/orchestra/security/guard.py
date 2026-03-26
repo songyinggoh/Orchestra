@@ -6,7 +6,8 @@ and post-execution output scanning for secrets/PII leaks.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable, Sequence
+from typing import Any
 
 import structlog
 
@@ -97,10 +98,12 @@ class PromptShieldGuard:
         return result
 
 
-def make_security_guard_middleware(guard: PromptShieldGuard):
+def make_security_guard_middleware(
+    guard: PromptShieldGuard,
+) -> Callable[..., Awaitable[AgentResult]]:
     """Factory for middleware that applies PromptShieldGuard to every run."""
 
-    async def security_middleware(run_func, input, context):
+    async def security_middleware(run_func: Any, input: Any, context: Any) -> AgentResult:
         # 1. Identify user input
         user_text = ""
         if isinstance(input, str):

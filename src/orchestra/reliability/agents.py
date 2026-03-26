@@ -113,12 +113,14 @@ class SelfCheckAgent(BaseAgent):
     selfcheck_device: str = "cpu"
     retry_on_high_risk: bool = False  # retry once if risk is "high"
 
-    model_config: dict = {"arbitrary_types_allowed": True}  # noqa: RUF012
+    model_config = {"arbitrary_types_allowed": True}  # noqa: RUF012
 
     async def run(
         self,
         input: str | list[Message],
         context: ExecutionContext,
+        *,
+        emit_partial_on_max_iterations: bool = False,
     ) -> AgentResult:
         checker = SelfChecker(
             method=self.selfcheck_method,
@@ -241,12 +243,14 @@ class SessionAuditorAgent(BaseAgent):
     audited_agent_key: str = "output"  # state key → response to audit
     messages_key: str = "messages"  # state key → original messages
 
-    model_config: dict = {"arbitrary_types_allowed": True}  # noqa: RUF012
+    model_config = {"arbitrary_types_allowed": True}  # noqa: RUF012
 
     async def run(
         self,
         input: str | list[Message],
         context: ExecutionContext,
+        *,
+        emit_partial_on_max_iterations: bool = False,
     ) -> AgentResult:
         # Pull the response to audit from workflow state
         response_to_audit: str = context.state.get(self.audited_agent_key, "")

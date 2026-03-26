@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import AsyncIterator
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Protocol, cast, runtime_checkable
 
 import structlog
 from pydantic import BaseModel
@@ -229,14 +229,21 @@ class StrategySwitchingProvider:
         temperature: float = 0.7,
         max_tokens: int | None = None,
     ) -> AsyncIterator[StreamChunk]:
-        # Streaming usually defaults to native for content
-        return self._provider.stream(
-            messages=messages,
-            model=model,
-            tools=tools,
-            temperature=temperature,
-            max_tokens=max_tokens,
+        # All concrete providers implement stream() as async generators.
+        # The Protocol annotates stream() as 'async def -> AsyncIterator' but
+        # generators are directly iterable (no await needed). Cast to satisfy mypy.
+        inner = cast(
+            AsyncIterator[StreamChunk],
+            self._provider.stream(
+                messages=messages,
+                model=model,
+                tools=tools,
+                temperature=temperature,
+                max_tokens=max_tokens,
+            ),
         )
+        async for chunk in inner:
+            yield chunk
 
     def count_tokens(self, messages: list[Message], model: str | None = None) -> int:
         return self._provider.count_tokens(messages, model)

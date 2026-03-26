@@ -17,7 +17,7 @@ import json
 import logging
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from orchestra.core.context import ExecutionContext
 from orchestra.core.errors import (
@@ -51,7 +51,7 @@ class MCPToolAdapter:
 
     @property
     def name(self) -> str:
-        return self._tool_schema.name
+        return cast(str, self._tool_schema.name)
 
     @property
     def description(self) -> str:
@@ -249,7 +249,7 @@ class MCPClient:
         from mcp.client.stdio import stdio_client
 
         params = StdioServerParameters(
-            command=self._command,  # type: ignore[arg-type]
+            command=self._command,
             args=self._args,
             env=self._env,
         )

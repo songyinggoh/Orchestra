@@ -95,7 +95,7 @@ logger = structlog.get_logger(__name__)
 def _require_rebuff() -> Any:
     """Import RebuffSdk or raise a helpful error."""
     try:
-        from rebuff import RebuffSdk  # type: ignore[import]
+        from rebuff import RebuffSdk  # type: ignore[import-not-found]
 
         return RebuffSdk
     except ImportError as exc:
@@ -283,7 +283,7 @@ class PromptInjectionAgent(BaseAgent):
     blocked_message: str = _DEFAULT_BLOCKED
     canary_leak_message: str = _DEFAULT_CANARY_LEAK
 
-    model_config: dict = {"arbitrary_types_allowed": True}  # noqa: RUF012
+    model_config = {"arbitrary_types_allowed": True}  # noqa: RUF012
 
     # Lazily initialised so __init__ doesn't require rebuff when just importing
     _checker: RebuffChecker | None = None
@@ -306,7 +306,7 @@ class PromptInjectionAgent(BaseAgent):
         user_msgs = [m.content for m in input if m.role == MessageRole.USER]
         return user_msgs[-1] if user_msgs else ""
 
-    async def run(
+    async def run(  # type: ignore[override]
         self,
         input: str | list[Message],
         context: ExecutionContext,
@@ -436,7 +436,7 @@ class InjectionAuditorAgent(BaseAgent):
     rebuff_openai_model: str = "gpt-3.5-turbo"
     input_key: str = "user_input"
 
-    model_config: dict = {"arbitrary_types_allowed": True}  # noqa: RUF012
+    model_config = {"arbitrary_types_allowed": True}  # noqa: RUF012
 
     _checker: RebuffChecker | None = None
 
@@ -450,7 +450,7 @@ class InjectionAuditorAgent(BaseAgent):
             )
         return self._checker
 
-    async def run(
+    async def run(  # type: ignore[override]
         self,
         input: str | list[Message],
         context: ExecutionContext,

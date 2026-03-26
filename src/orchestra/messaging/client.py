@@ -10,6 +10,7 @@ import structlog
 if TYPE_CHECKING:
     from nats.aio.client import Client as NATSClient
     from nats.js import JetStreamContext
+    from nats.js.api import StreamConfig
 
 log = structlog.get_logger(__name__)
 
@@ -92,7 +93,7 @@ async def create_nats_client(
     return nc, js
 
 
-async def _ensure_stream(js: JetStreamContext, cfg: object, stream_name: str) -> None:
+async def _ensure_stream(js: JetStreamContext, cfg: StreamConfig, stream_name: str) -> None:
     """Create the stream, or update it if it already exists."""
     try:
         await js.add_stream(config=cfg)

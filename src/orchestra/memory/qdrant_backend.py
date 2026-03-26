@@ -149,7 +149,7 @@ class QdrantColdBackend:
 
     def _agent_filter(
         self,
-        extra: dict | None = None,
+        extra: dict[str, Any] | None = None,
         agent_id: str | None = None,
     ) -> Filter:
         """Build a Filter scoped to an agent, with optional extra conditions.
@@ -213,7 +213,7 @@ class QdrantColdBackend:
         if not results:
             return None
 
-        payload = results[0].payload or {}
+        payload: dict[str, Any] = dict(results[0].payload or {})
 
         # Drift detection: warn if the stored model differs from the active one.
         stored_model = payload.get("_embedding_model")
@@ -233,7 +233,7 @@ class QdrantColdBackend:
         embedding: list[float],
         limit: int = 10,
         *,
-        filter_metadata: dict | None = None,
+        filter_metadata: dict[str, Any] | None = None,
         agent_id: str | None = None,
     ) -> list[tuple[str, float]]:
         """Semantic search scoped to an agent.
@@ -258,7 +258,11 @@ class QdrantColdBackend:
             limit=limit,
             with_payload=True,
         )
-        return [(p.payload["key"], p.score) for p in response.points]
+        results_list: list[tuple[str, float]] = []
+        for p in response.points:
+            if p.payload is not None:
+                results_list.append((str(p.payload["key"]), p.score))
+        return results_list
 
     async def delete(self, key: str) -> None:
         """Delete a point by key."""

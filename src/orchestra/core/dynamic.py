@@ -7,7 +7,7 @@ YAML-to-Graph hydration with security allowlisting.
 from __future__ import annotations
 
 import importlib
-from typing import Any
+from typing import Any, cast
 
 import structlog
 from ruamel.yaml import YAML
@@ -104,7 +104,7 @@ def load_graph_yaml(yaml_str: str, builder: SubgraphBuilder | None = None) -> Co
     if "entry_point" in data:
         graph.set_entry_point(data["entry_point"])
 
-    return graph.compile(max_turns=data.get("max_turns", 50))
+    return cast(CompiledGraph, graph.compile(max_turns=data.get("max_turns", 50)))
 
 
 def dump_graph_yaml(graph_data: dict[str, Any]) -> str:

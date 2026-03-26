@@ -1,11 +1,12 @@
 """Locust load test for the Orchestra FastAPI server.
 
 To run this test:
-1. Start the FastAPI server: `poetry run uvicorn orchestra.server.app:create_app`
+1. Start the FastAPI server: `poetry run uvicorn orchestra.server.app:create_app --factory`
 2. Run Locust: `locust -f load_tests/locustfile.py --host http://127.0.0.1:8000`
 """
 
-from locust import HttpUser, task, between
+from locust import HttpUser, between, task
+
 
 class OrchestraUser(HttpUser):
     wait_time = between(1, 5)
@@ -21,7 +22,7 @@ class OrchestraUser(HttpUser):
 
     def on_start(self):
         """Register the test graph before starting the test.
-        
+
         This is a workaround for a test setup. In a real deployment,
         the graphs would be pre-registered. We can't easily do this
         from locust, so we assume the 'test-graph' is available.

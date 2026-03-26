@@ -9,7 +9,7 @@ dynamic WorkflowState generation and ``state_ref:`` for Python escape hatches.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, cast
 
 import structlog
 from ruamel.yaml import YAML
@@ -268,4 +268,4 @@ def load_workflow(
     if "entry_point" in data:
         graph.set_entry_point(data["entry_point"])
 
-    return graph.compile(max_turns=data.get("max_turns", 50))
+    return cast(CompiledGraph, graph.compile(max_turns=data.get("max_turns", 50)))

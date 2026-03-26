@@ -30,7 +30,7 @@ class GraphHotReloader:
         self._watch_dir = Path(watch_dir)
         self._registry = registry
         self._builder = builder or SubgraphBuilder()
-        self._task: asyncio.Task | None = None
+        self._task: asyncio.Task[None] | None = None
 
     async def start(self) -> None:
         """Start the background watcher task."""

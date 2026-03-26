@@ -564,12 +564,12 @@ class PostgresEventStore:
                     event = dict_to_event(raw)
                     await callback(event)
 
-            await conn.add_listener("workflow_events", _on_notification)  # type: ignore[arg-type]
+            await conn.add_listener("workflow_events", _on_notification)
             # Keep the connection open until cancelled
             import asyncio
 
             while True:
                 await asyncio.sleep(1)
         finally:
-            await conn.remove_listener("workflow_events", _on_notification)  # type: ignore[arg-type]
+            await conn.remove_listener("workflow_events", _on_notification)
             await pool.release(conn)

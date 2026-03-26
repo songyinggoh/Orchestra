@@ -158,8 +158,8 @@ class PIIRedactionGuardrail:
         self._analyzer: Any = None
         self._anonymizer: Any = None
         try:
-            from presidio_analyzer import AnalyzerEngine  # type: ignore[import-untyped]
-            from presidio_anonymizer import AnonymizerEngine  # type: ignore[import-untyped]
+            from presidio_analyzer import AnalyzerEngine
+            from presidio_anonymizer import AnonymizerEngine
 
             self._analyzer = AnalyzerEngine()
             self._anonymizer = AnonymizerEngine()

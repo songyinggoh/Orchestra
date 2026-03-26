@@ -93,6 +93,7 @@ class PedersenCommitment:
     """
 
     def __init__(self) -> None:
+        self._backend: str | None = None
         try:
             import blst  # noqa: F401
 
@@ -104,7 +105,6 @@ class PedersenCommitment:
                 self._backend = "py_ecc"
                 logger.warning("using_slow_ecc_backend", backend="py_ecc")
             except ImportError:
-                self._backend = None
                 logger.warning("no_ecc_backend_available", task="T-4.11")
 
     def is_available(self) -> bool:

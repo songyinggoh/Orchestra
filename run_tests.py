@@ -1,5 +1,8 @@
 """Helper script: run pytest and write results to a file so they can be read back."""
-import subprocess, sys, pathlib
+
+import pathlib
+import subprocess
+import sys
 
 result = subprocess.run(
     [sys.executable, "-m", "pytest", "tests/unit/test_core.py", "--tb=short", "-q", "--no-header"],

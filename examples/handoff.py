@@ -13,19 +13,17 @@ Usage:
 """
 
 import asyncio
-import sys
-from typing import Any
 
 from orchestra.core.agent import agent
 from orchestra.core.graph import WorkflowGraph
-from orchestra.core.types import LLMResponse, Message, MessageRole, ToolCall
+from orchestra.core.types import LLMResponse, Message
 from orchestra.testing.scripted import ScriptedLLM
 
 
 @agent(name="triage")
 async def triage_agent(messages: list[Message]) -> str:
     """You are a triage assistant. Determine the user's intent.
-    
+
     If it's about billing, hand off to 'billing'.
     If it's technical, hand off to 'technical'.
     Otherwise, help them yourself.
@@ -48,24 +46,24 @@ async def technical_agent(messages: list[Message]) -> str:
 async def main() -> None:
     # Build graph
     graph = WorkflowGraph()
-    
+
     # 1. Define nodes
     graph.add_node("triage", triage_agent)
     graph.add_node("billing", billing_agent)
     graph.add_node("technical", technical_agent)
-    
+
     # 2. Define handoffs
     def is_billing(state: dict) -> bool:
         last_msg = state.get("triage_output", "").lower()
         return "billing" in last_msg
-        
+
     def is_technical(state: dict) -> bool:
         last_msg = state.get("triage_output", "").lower()
         return "technical" in last_msg
 
     graph.add_handoff("triage", "billing", condition=is_billing)
     graph.add_handoff("triage", "technical", condition=is_technical)
-    
+
     graph.set_entry_point("triage")
     compiled = graph.compile()
 
@@ -74,17 +72,16 @@ async def main() -> None:
         # Triage classifies as technical
         LLMResponse(content="This sounds like a technical issue. I'll hand you over."),
         # Technical agent responds
-        LLMResponse(content="I've analyzed your logs. The error is in the API key format.")
+        LLMResponse(content="I've analyzed your logs. The error is in the API key format."),
     ]
     provider = ScriptedLLM(responses)
 
     # 4. Run
     print("\n--- Running Handoff Example ---")
     state = await compiled.run(
-        input="My API calls are failing with a 401 error.",
-        provider=provider
+        input="My API calls are failing with a 401 error.", provider=provider
     )
-    
+
     print(f"\nFinal Response: {state.get('technical_output') or state.get('output')}")
 
 

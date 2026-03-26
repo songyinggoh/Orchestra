@@ -8,9 +8,8 @@ from __future__ import annotations
 
 import datetime
 from dataclasses import asdict, is_dataclass
-from typing import Any
+from typing import Any, cast
 
-import msgpack
 import structlog
 from pydantic import BaseModel
 
@@ -103,9 +102,13 @@ def _object_hook(obj: Any) -> Any:
 
 def pack(value: Any) -> bytes:
     """Pack an object into msgpack bytes."""
-    return msgpack.packb(value, default=_default, use_bin_type=True)
+    import msgpack
+
+    return cast(bytes, msgpack.packb(value, default=_default, use_bin_type=True))
 
 
 def unpack(data: bytes) -> Any:
     """Unpack msgpack bytes into an object."""
+    import msgpack
+
     return msgpack.unpackb(data, object_hook=_object_hook, raw=False)
