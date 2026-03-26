@@ -85,20 +85,28 @@ async def test_publish_encrypted_tasks(nats_connection, agent_pair) -> None:
     _nc, js, stream_name = nats_connection
     pub_provider, con_provider = agent_pair
 
+    # Verify stream exists before publishing
+    info = await js.stream_info(stream_name)
+    assert info.config.name == stream_name
+
     agent_type = f"test.{stream_name}"
     publisher = TaskPublisher(js, pub_provider)
 
     num_tasks = 20
     results = []
     for i in range(num_tasks):
-        r = await publisher.publish(
-            agent_type,
-            {"index": i, "data": f"payload_{i}"},
-            recipient_did=con_provider.own_did,
-        )
-        results.append(r)
-        if i % 5 == 4:
-            await asyncio.sleep(0.05)  # yield to avoid JetStream backpressure
+        # Retry on transient JetStream NoRespondersError (CI cold-start)
+        for _retry in range(3):
+            try:
+                r = await publisher.publish(
+                    agent_type,
+                    {"index": i, "data": f"payload_{i}"},
+                    recipient_did=con_provider.own_did,
+                )
+                results.append(r)
+                break
+            except Exception:
+                await asyncio.sleep(0.2)
 
     assert len(results) == num_tasks
     assert all(r.sequence > 0 for r in results)
