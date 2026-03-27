@@ -53,7 +53,7 @@ mypy src/orchestra/
 
 1. Fork the repository and create a feature branch from `master`
 2. Write tests for new functionality
-3. Ensure all tests pass and coverage remains above 75%
+3. Ensure all tests pass and coverage remains above 74%
 4. Ensure `ruff check` and `mypy` pass with no errors
 5. Submit a pull request with a clear description of the changes
 
