@@ -83,9 +83,9 @@ async def create_nats_client(
         max_bytes=config.max_bytes,
         max_msg_size=config.max_msg_size,
         num_replicas=config.num_replicas,
-        # nats-py uses nanoseconds for time-based fields
-        max_age=config.max_age_seconds * 1_000_000_000,
-        duplicate_window=config.duplicate_window_seconds * 1_000_000_000,
+        # nats-py >=2.14 accepts seconds and converts to nanoseconds internally
+        max_age=config.max_age_seconds,
+        duplicate_window=config.duplicate_window_seconds,
     )
     await _ensure_stream(js, stream_cfg, config.stream_name)
 
@@ -100,7 +100,7 @@ async def _ensure_stream(js: JetStreamContext, cfg: StreamConfig, stream_name: s
         log.info("nats_stream_created", stream=stream_name)
     except Exception as exc:
         msg = str(exc).lower()
-        if "already in use" in msg or "bad request" in msg or "400" in msg:
+        if "already in use" in msg or "already exists" in msg:
             try:
                 await js.update_stream(config=cfg)
                 log.debug("nats_stream_updated", stream=stream_name)
