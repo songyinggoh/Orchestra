@@ -4,7 +4,7 @@ Requires a live NATS server with JetStream enabled (provided by the
 integration-test job's service container).
 
 Run locally:
-    docker run -p 4222:4222 nats:2.10-alpine -js
+    docker run -p 4222:4222 nats:latest -js
     pytest tests/integration/test_secure_nats.py -v
 """
 
@@ -19,6 +19,7 @@ nats_lib = pytest.importorskip("nats", reason="nats-py not installed")
 base58 = pytest.importorskip("base58", reason="base58 not installed")
 
 from orchestra.messaging import SecureNatsProvider, TaskConsumer, TaskPublisher  # noqa: E402
+from orchestra.messaging.client import NATSClientConfig, create_nats_client  # noqa: E402
 
 NATS_URL = "nats://localhost:4222"
 pytestmark = pytest.mark.integration
@@ -31,45 +32,34 @@ pytestmark = pytest.mark.integration
 async def nats_connection():
     """Isolated NATS connection with a unique stream per test.
 
-    Creates the stream directly with retries rather than relying on
-    create_nats_client's _ensure_stream (which can silently swallow
-    creation errors in CI environments).
+    Retries create_nats_client + verifies stream exists because
+    _ensure_stream can silently swallow creation errors (e.g. 'invalid
+    JSON' during JetStream cold start) due to broad 'bad request' matching.
     """
     import asyncio
 
-    import nats as _nats
-    from nats.js.api import RetentionPolicy, StorageType, StreamConfig
-
     stream_name = f"TEST_{uuid.uuid4().hex[:8].upper()}"
-    subject = f"orchestra.tasks.test.{stream_name}"
-
-    nc = await _nats.connect(NATS_URL)
-    js = nc.jetstream()
-
-    cfg = StreamConfig(
-        name=stream_name,
-        subjects=[subject],
-        storage=StorageType.FILE,
-        retention=RetentionPolicy.LIMITS,
-        max_age=60 * 1_000_000_000,
-        duplicate_window=30 * 1_000_000_000,
+    config = NATSClientConfig(
+        servers=[NATS_URL],
+        stream_name=stream_name,
+        stream_subjects=[f"orchestra.tasks.test.{stream_name}"],
+        max_age_seconds=60,
+        duplicate_window_seconds=30,
     )
 
-    # Retry stream creation — JetStream may not be ready on first attempt in CI
-    last_err: BaseException | None = None
+    nc = js = None
     for _attempt in range(10):
+        nc, js = await create_nats_client(config)
         try:
-            await js.add_stream(config=cfg)
-            # Verify the stream actually exists
             await js.stream_info(stream_name)
-            last_err = None
-            break
-        except Exception as exc:
-            last_err = exc
+            break  # stream verified
+        except Exception:
+            await nc.close()
+            nc = js = None
             await asyncio.sleep(0.5)
-    if last_err is not None:
-        await nc.close()
-        raise RuntimeError(f"Failed to create NATS stream {stream_name}: {last_err}") from last_err
+
+    if nc is None or js is None:
+        raise RuntimeError(f"Failed to create NATS stream {stream_name} after 10 retries")
 
     yield nc, js, stream_name
     await nc.drain()
