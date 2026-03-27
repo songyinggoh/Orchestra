@@ -39,20 +39,20 @@ from orchestra.providers import HttpProvider
 # OpenAI
 provider = HttpProvider(
     api_key="sk-...",
-    model="gpt-4o-mini",
+    default_model="gpt-4o-mini",
 )
 
 # Ollama (local)
 provider = HttpProvider(
     base_url="http://localhost:11434/v1",
-    model="llama3",
+    default_model="llama3",
 )
 
 # Custom endpoint
 provider = HttpProvider(
     base_url="https://my-api.example.com/v1",
     api_key="my-key",
-    model="my-model",
+    default_model="my-model",
 )
 ```
 
@@ -80,7 +80,7 @@ from orchestra.providers import AnthropicProvider
 
 provider = AnthropicProvider(
     api_key="sk-ant-...",
-    model="claude-sonnet-4-20250514",
+    default_model="claude-sonnet-4-20250514",
 )
 
 result = await run(graph, input="Hello", provider=provider)
