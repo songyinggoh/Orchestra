@@ -137,21 +137,25 @@ compiled = graph.compile(max_turns=50)
 - All edge sources and targets reference valid nodes
 - Auto-appends an `END` edge to the last node if missing
 
-Run the compiled graph:
+Run the compiled graph. Note that `compiled.run()` returns a plain `dict[str, Any]` (the final state):
 
 ```python
 result = await compiled.run(
     initial_state={"topic": "AI"},
     provider=my_llm_provider,
 )
+print(result["output"])  # result is a dict
 ```
 
-Or use the top-level `run()` function which handles compilation automatically:
+Or use the top-level `run()` function from `orchestra.core.runner`, which handles compilation automatically and returns a `RunResult` with attribute access:
 
 ```python
 from orchestra import run
 
 result = await run(graph, initial_state={"topic": "AI"}, provider=llm)
+print(result.output)      # RunResult has attribute access
+print(result.state)        # underlying state dict
+print(result.duration_ms)  # execution time
 ```
 
 ## Visualization

@@ -53,7 +53,7 @@ Verifies that all scripted responses were used. Catches cases where the workflow
 ```python
 llm = ScriptedLLM(["response 1", "response 2", "response 3"])
 # ... run workflow that only uses 2 responses ...
-llm.assert_all_consumed()  # Raises AssertionError: "1 unconsumed response(s)"
+llm.assert_all_consumed()  # Raises AssertionError: "ScriptedLLM has 1 unconsumed response(s) (used 2 of 3). The workflow completed earlier than expected."
 ```
 
 ### `assert_prompt_received(call_index, pattern)`

@@ -37,7 +37,7 @@ dependencies = [
 anthropic = ["anthropic>=0.20"]
 google = ["google-generativeai>=0.5"]
 ollama = []  # No SDK needed, uses httpx (already in core)
-all-providers = ["orchestra-agents[anthropic,google,nats,ray]"]
+all-providers = ["orchestra-agents[anthropic,google,nats]"]
 storage = ["aiosqlite>=0.19"]
 postgres = ["asyncpg>=0.29"]
 telemetry = [
@@ -192,7 +192,7 @@ source = ["orchestra"]
 omit = ["tests/*"]
 
 [tool.coverage.report]
-fail_under = 74
+fail_under = 75
 show_missing = true
 [tool.bandit]
 # B104: binding to 0.0.0.0 is intentional for an HTTP server

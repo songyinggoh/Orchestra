@@ -1,6 +1,6 @@
 # Providers API Reference
 
-Orchestra includes two built-in LLM providers and a protocol for implementing custom ones.
+Orchestra includes eleven built-in LLM providers (HttpProvider, AnthropicProvider, ClaudeCodeProvider, GeminiCliProvider, CodexCliProvider, GoogleProvider, OllamaProvider, CallableProvider, CachedProvider, ReplayProvider, and StrategySwitchingProvider) and a protocol for implementing custom ones.
 
 ## LLMProvider Protocol
 

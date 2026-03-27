@@ -26,7 +26,7 @@ It checks these in order and returns the first one found:
 
 | # | What it looks for | Provider | Setup needed |
 |---|---|---|---|
-| 1 | `ORCHESTRA_BASE_URL` env var | `HttpProvider` | Custom endpoint |
+| 1 | `ORCHESTRA_BASE_URL` or `ORCHESTRA_API_KEY` env var | `HttpProvider` | Custom endpoint |
 | 2 | `claude` CLI on PATH | `ClaudeCodeProvider` | **None** (uses subscription) |
 | 3 | `gemini` CLI on PATH | `GeminiCliProvider` | **None** (uses subscription) |
 | 4 | `codex` CLI on PATH | `CodexCliProvider` | **None** (uses subscription) |
@@ -118,7 +118,7 @@ Usually `auto_provider()` is all you need. To use a specific one:
 ```python
 # Cloud agentic providers — use your existing subscription, no API key:
 from orchestra.providers.claude_code import ClaudeCodeProvider
-provider = ClaudeCodeProvider(model="opus")
+provider = ClaudeCodeProvider()  # default: sonnet
 
 from orchestra.providers.gemini_cli import GeminiCliProvider
 provider = GeminiCliProvider(model="gemini-2.5-pro")
@@ -145,13 +145,27 @@ provider = HttpProvider()  # needs OPENAI_API_KEY or ORCHESTRA_API_KEY
 
 ```
 src/orchestra/
+  cache/         — in-memory and disk cache backends
+  cli/           — CLI entry points
   core/          — agent, graph, runner, state, types, context
-  providers/     — ClaudeCodeProvider, GeminiCliProvider, CodexCliProvider, AnthropicProvider, HttpProvider, GoogleProvider, OllamaProvider, CallableProvider
-  tools/         — @tool decorator, built-in tools
+  cost/          — cost aggregator, tenant billing, persistent budget
+  debugging/     — time-travel replay
+  discovery/     — auto-discovery of agents, tools, and workflows
+  identity/      — agent identity, DID, UCAN, delegation
+  interop/       — A2A protocol, ZKP state commitments
+  memory/        — tiered memory, embeddings, vector store, Redis backend
+  messaging/     — NATS JetStream, DIDComm v2 E2EE
   observability/ — OpenTelemetry tracing and metrics
-  reliability/   — circuit breaker, rate limiter, failover
+  providers/     — ClaudeCode, GeminiCli, CodexCli, Anthropic, Http, Google, Ollama, Callable, Failover
+  reasoning/     — Tree of Thoughts structured reasoning
+  reliability/   — SelfCheckGPT, FActScore hallucination detection
+  routing/       — cost-aware router with Thompson Sampling
+  security/      — guardrails, circuit breaker, rate limiter, PromptShield, ACL
+  server/        — FastAPI HTTP server with SSE streaming
   storage/       — SQLite and Postgres run persistence
+  testing/       — scripted test helpers
+  tools/         — @tool decorator, built-in tools
 tests/
-  unit/          — 696 tests, all mocked
+  unit/          — 1069 tests, all mocked
   live/          — real-API tests (pytest tests/live/ -m live -v)
 ```

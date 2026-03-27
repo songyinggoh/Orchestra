@@ -15,10 +15,10 @@ Orchestra uses [structlog](https://www.structlog.org/) for structured logging wi
 from orchestra.observability.logging import setup_logging
 
 # Development: colored console output
-setup_logging(level="DEBUG", format="console")
+setup_logging(level="DEBUG")
 
 # Production: JSON lines
-setup_logging(level="INFO", format="json")
+setup_logging(level="INFO", json_output=True)
 ```
 
 ## get_logger

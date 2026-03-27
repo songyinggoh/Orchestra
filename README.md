@@ -6,8 +6,8 @@ Production-grade graph workflows. Intuitive agent definition. Built-in observabi
 
 *More debuggable than CrewAI. Less verbose than LangGraph. More secure than both. Completely free.*
 
-> **Status: v1.0 — Production Ready**
-> All four phases of development are complete. Orchestra is installable, tested (comprehensive test suites across unit, integration, security, property, chaos, and load testing), and ready for production use. Code examples reflect the implemented API.
+> **Status: v0.1.0 — Alpha**
+> All four phases of development are complete. Orchestra is installable and tested (comprehensive test suites across unit, integration, security, property, chaos, and load testing). Code examples reflect the implemented API.
 
 ---
 
@@ -120,18 +120,34 @@ provider = auto_provider()  # reads whatever key is available — no setup neede
 
 `auto_provider()` checks in priority order:
 
+| # | What it looks for | Provider | Setup needed |
+|---|---|---|---|
+| 1 | `ORCHESTRA_BASE_URL` env var | `HttpProvider` | Custom endpoint |
+| 2 | `claude` CLI on PATH | `ClaudeCodeProvider` | **None** (uses subscription) |
+| 3 | `gemini` CLI on PATH | `GeminiCliProvider` | **None** (uses subscription) |
+| 4 | `codex` CLI on PATH | `CodexCliProvider` | **None** (uses subscription) |
+| 5 | `ANTHROPIC_API_KEY` env var | `AnthropicProvider` | API key |
+| 6 | `OPENAI_API_KEY` env var | `HttpProvider` | API key |
+| 7 | `GOOGLE_API_KEY` env var | `GoogleProvider` | API key |
+| 8 | Ollama on localhost:11434 | `OllamaProvider` | Install + run Ollama |
+
+Options 2-4 use your existing cloud subscription -- no separate billing.
+
 ```bash
 # 1. Any OpenAI-compatible API — Groq, Together, Mistral, vLLM, LiteLLM, Azure, ...
 export ORCHESTRA_BASE_URL=https://api.groq.com/openai/v1
 export ORCHESTRA_API_KEY=gsk_...
 export ORCHESTRA_MODEL=llama-3.3-70b-versatile
 
-# 2. Named providers (auto-detected when their key is set)
+# 2-4. CLI providers — auto-detected, uses your existing subscription
+# Just have claude, gemini, or codex CLI installed and on PATH
+
+# 5-7. Named providers (auto-detected when their key is set)
 export ANTHROPIC_API_KEY=sk-ant-...   # → AnthropicProvider
 export OPENAI_API_KEY=sk-...          # → HttpProvider (OpenAI)
 export GOOGLE_API_KEY=AIza...         # → GoogleProvider
 
-# 3. Local — no key needed
+# 8. Local — no key needed
 ollama serve && ollama pull llama3.1  # → OllamaProvider
 ```
 
@@ -365,7 +381,7 @@ class MyState(WorkflowState):
     current_agent: str = ""
 ```
 
-**Built-in reducers:** `merge_list`, `merge_dict`, `merge_set`, `sum_numbers`, `last_write_wins`, `concat_str`, `keep_first`
+**Built-in reducers (9):** `merge_list`, `merge_dict`, `merge_set`, `sum_numbers`, `last_write_wins`, `concat_str`, `keep_first`, `max_value`, `min_value`
 
 When parallel agents write to the same state field, reducers guarantee deterministic, conflict-free merges.
 
@@ -451,86 +467,23 @@ result = await run(graph, input={"query": "test"}, provider=provider, persist=Fa
 src/orchestra/                  # installable package
   __init__.py                   # Public API: BaseAgent, WorkflowGraph, run, WorkflowState, ...
   core/                         # Graph engine, agents, state, execution
-    agent.py                    # BaseAgent, @agent decorator
-    graph.py                    # WorkflowGraph, fluent API (.then/.parallel/.branch)
-    nodes.py                    # AgentNode, FunctionNode, SubgraphNode
-    dynamic.py                  # SubgraphBuilder — runtime graph construction
-    edges.py                    # Edge, ConditionalEdge, ParallelEdge
-    handoff.py                  # HandoffEdge — swarm-style agent transfers
-    compiled.py                 # CompiledGraph — validated execution plan
-    state.py                    # WorkflowState, reducer functions
-    context.py                  # ExecutionContext
-    runner.py                   # run(), run_sync(), RunResult
-    types.py                    # Message, AgentResult, TokenUsage, END, START
-    errors.py                   # Framework exception hierarchy
-    protocols.py                # LLMProvider and Tool protocols
-    hotreload.py                # GraphHotReloader — live graph reload without restart
-  providers/                    # LLM provider adapters
-    __init__.py                 # auto_provider() factory
-    http.py                     # HttpProvider — any OpenAI-compatible API
-    anthropic.py                # AnthropicProvider
-    google.py                   # GoogleProvider (Gemini)
-    ollama.py                   # OllamaProvider (local)
-    callable.py                 # CallableProvider — wrap any function as a provider
-    claude_code.py              # ClaudeCodeProvider (CLI subscription)
-    gemini_cli.py               # GeminiCliProvider (CLI subscription)
-    codex_cli.py                # CodexCliProvider (CLI subscription)
-  tools/                        # Tool system
-    base.py                     # @tool decorator, Tool protocol
-    registry.py                 # ToolRegistry
-    mcp.py                      # MCPClient, MCPToolAdapter
-  memory/                       # Memory backends and utilities
-    manager.py                  # MemoryManager protocol + InMemoryMemoryManager
-    backends.py                 # Storage backends
-    tiers.py                    # Multi-tier memory (working / session / semantic)
-    vector_store.py             # pgvector semantic search
-    embeddings.py               # Embedding helpers
-  storage/                      # Persistence layer
-    store.py                    # Storage protocol
-    events.py                   # EventStore, event sourcing
-    checkpoint.py               # Checkpoint management
-    sqlite.py                   # Dev backend
-    postgres.py                 # Production backend
-  cache/                        # Response and state caching
-    backends.py                 # In-memory and Redis cache backends
-  observability/                # Tracing, metrics, logging
-    tracing.py                  # OpenTelemetry span management
-    metrics.py                  # OTelMetricsSubscriber — token usage and cost metrics
-    _otel_setup.py              # OTel exporter configuration
-  security/                     # Guardrails and access control
-    acl.py                      # ToolACL — per-tool allow/deny lists
-    guardrails.py               # GuardedAgent, GuardrailChain, ContentFilter, PIIDetector
-    circuit_breaker.py          # Agent-level circuit breakers
-  identity/                     # Cryptographic agent identity
-    agent_identity.py           # AgentIdentity (DID + UCAN)
-    ucan.py                     # UCAN token issuance and verification
-    delegation.py               # Capability delegation chain
-    did.py                      # DID document helpers
-  routing/                      # Cost-aware model routing
-    router.py                   # CostAwareRouter, ThompsonModelSelector
-    types.py                    # ModelOption, RoutingDecision, BudgetConstraint
+  providers/                    # LLM provider adapters (auto_provider, CLI, API, utility)
+  tools/                        # @tool decorator, ToolRegistry, MCPClient
+  memory/                       # Multi-tier memory (working / session / semantic / pgvector)
+  storage/                      # Event-sourced persistence (SQLite, PostgreSQL)
+  cache/                        # Response and state caching (in-memory, Redis)
+  observability/                # OpenTelemetry tracing, metrics, structured logging
+  security/                     # Guardrails, ToolACL, circuit breakers
+  identity/                     # Cryptographic agent identity (DID + UCAN delegation)
+  routing/                      # Cost-aware model routing (CostAwareRouter, ThompsonModelSelector)
   cost/                         # Budget enforcement and cost tracking
-    budget.py                   # WorkflowBudget, per-agent limits
-    aggregator.py               # Cost aggregation across runs
-    persistent_budget.py        # Cross-session budget persistence
-  messaging/                    # NATS-based E2EE messaging
-    client.py                   # NATS client
-    publisher.py / consumer.py  # Pub/sub helpers
-  interop/                      # Cross-framework interoperability
-    a2a.py                      # A2A Agent Cards protocol
-  reliability/                  # Hallucination detection
-    selfcheck.py                # SelfCheckGPT — stochastic consistency scoring
-    factscore.py                # FActScore atomic-fact verification
-    tools.py                    # Orchestra tool wrappers for reliability checks
-  debugging/                    # Time-travel debugging
-    timetravel.py               # State reconstruction and replay
-  discovery/                    # Agent and tool auto-discovery
-    scanner.py                  # File-system scanning
-    hotreload.py                # Live hot-reload support
+  messaging/                    # NATS-based E2EE messaging (pub/sub)
+  interop/                      # Cross-framework interop (A2A Agent Cards)
+  reliability/                  # Hallucination detection (SelfCheckGPT, FActScore)
+  debugging/                    # Time-travel debugging and state replay
+  discovery/                    # Agent and tool auto-discovery, hot-reload
   reasoning/                    # Tree of Thoughts reasoning helpers
   server/                       # HTTP server (FastAPI + SSE)
-    app.py
-    routes/                     # graphs, runs, streams, health endpoints
   testing/                      # ScriptedLLM and test utilities
   cli/                          # orchestra init, run, test, serve
 sdk/typescript/                 # TypeScript SDK
@@ -664,12 +617,32 @@ Orchestra works with **any LLM backend** through a unified `LLMProvider` Protoco
 
 ### Built-in Providers
 
+**CLI Providers (zero-friction -- use your existing subscription, no API key):**
+
+| Provider | Activated by | Models |
+|---|---|---|
+| `ClaudeCodeProvider` | `claude` CLI on PATH | Claude Opus 4, Sonnet, Haiku |
+| `GeminiCliProvider` | `gemini` CLI on PATH | Gemini 2.5 Pro, Flash, etc. |
+| `CodexCliProvider` | `codex` CLI on PATH | o4-mini, GPT-4o, etc. |
+
+**API Providers:**
+
 | Provider | Activated by | Models |
 |---|---|---|
 | `HttpProvider` | `ORCHESTRA_API_KEY` or `OPENAI_API_KEY` | GPT-4o, o1, o3, and any OpenAI-compatible model |
 | `AnthropicProvider` | `ANTHROPIC_API_KEY` | Claude Opus 4, Sonnet, Haiku |
 | `GoogleProvider` | `GOOGLE_API_KEY` | `gemini-2.0-flash`, `gemini-2.0-flash-lite`, `gemini-2.5-pro-preview-06-05`, `gemini-2.5-flash-preview-05-20` |
-| `OllamaProvider` | Ollama running at localhost:11434 | Any `ollama pull` model — completely free |
+| `OllamaProvider` | Ollama running at localhost:11434 | Any `ollama pull` model -- completely free |
+
+**Utility Providers:**
+
+| Provider | Purpose |
+|---|---|
+| `CallableProvider` | Wrap any async function as a provider |
+| `CachedProvider` | Cache-through wrapper for any provider |
+| `ReplayProvider` | Play back recorded LLM responses for time-travel debugging |
+| `ProviderFailover` | Failover chain with circuit breaking across multiple providers |
+| `StrategySwitchingProvider` | Switch between native and prompted schema strategies |
 
 ### Any OpenAI-Compatible API
 

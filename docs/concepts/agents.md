@@ -82,7 +82,7 @@ graph = WorkflowGraph().then(researcher).then(writer)
 
 When an agent node executes, it:
 
-1. Reads input from the state (the `input`, `output`, or `messages` field)
+1. Reads input from the state (checking `messages` first, then `input`, then `output`)
 2. Calls the agent's `run()` method with an `ExecutionContext`
 3. Writes the agent's output back to the state's `output` field
 

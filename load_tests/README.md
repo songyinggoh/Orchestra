@@ -5,7 +5,7 @@ This directory contains scripts for load testing the Orchestra FastAPI server us
 ## Prerequisites
 
 - Install Locust: `pip install locust`
-- Make sure the server dependencies are installed in your environment: `poetry install --extras "server"`
+- Make sure the server dependencies are installed in your environment: `pip install -e ".[server]"`
 
 ## Running the Test
 
@@ -13,7 +13,13 @@ This directory contains scripts for load testing the Orchestra FastAPI server us
     From the project root, start the server with the `--factory` flag (required because `create_app` is a factory function, not a bare ASGI app):
 
     ```sh
-    poetry run uvicorn orchestra.server.app:create_app --factory
+    orchestra serve
+    ```
+
+    Or, using uvicorn directly:
+
+    ```sh
+    uvicorn orchestra.server.app:create_app --factory
     ```
 
     > **Note — Authentication:** The `/api/v1/runs` endpoint requires an API key when `ORCHESTRA_API_KEY` is set in the environment. For local load testing, either leave `ORCHESTRA_API_KEY` unset, or add an `Authorization: Bearer <key>` header in the locustfile before running against an authenticated server.
@@ -33,3 +39,6 @@ This directory contains scripts for load testing the Orchestra FastAPI server us
 ## Test Scenarios
 
 - `locustfile.py`: A simple test that repeatedly calls the `POST /api/v1/runs` endpoint for a basic graph. This is useful for testing the baseline overhead of the run creation and execution process.
+
+> **Note:** `tests/load/locustfile.py` is a more complete alternative with multiple
+> task types (health checks, run creation, SSE streaming, etc.).

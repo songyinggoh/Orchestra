@@ -6,7 +6,7 @@ Thank you for your interest in contributing to Orchestra! This document provides
 
 ```bash
 # Clone the repository
-git clone https://github.com/orchestra-agents/orchestra.git
+git clone https://github.com/songyinggoh/Orchestra.git
 cd orchestra
 
 # Create a virtual environment
@@ -20,15 +20,21 @@ pip install -e ".[dev]"
 ## Running Tests
 
 ```bash
-# Run all tests
-pytest tests/ -x -q
+# Run unit tests (recommended for quick local validation)
+pytest tests/unit/ -x -q
 
-# Run with coverage
-pytest tests/ --cov=orchestra --cov-report=term-missing
+# Run unit tests with coverage
+pytest tests/unit/ --cov=orchestra --cov-report=term-missing
 
 # Run specific test file
 pytest tests/unit/test_state.py -v
 ```
+
+> **Note:** Running `pytest tests/` without a subdirectory will execute ALL tests
+> including integration, live, and load tests, which require external services
+> (Postgres, Redis, NATS, Ollama, etc.). Use `pytest tests/unit/` for quick local
+> validation. Also note that `[dev]` extras do not include `locust` or `hypothesis`;
+> those are in `[test-advanced]`.
 
 ## Code Quality
 
@@ -45,9 +51,9 @@ mypy src/orchestra/
 
 ## Pull Request Process
 
-1. Fork the repository and create a feature branch from `main`
+1. Fork the repository and create a feature branch from `master`
 2. Write tests for new functionality
-3. Ensure all tests pass and coverage remains above 80%
+3. Ensure all tests pass and coverage remains above 75%
 4. Ensure `ruff check` and `mypy` pass with no errors
 5. Submit a pull request with a clear description of the changes
 
