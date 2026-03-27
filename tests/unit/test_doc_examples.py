@@ -534,24 +534,27 @@ class TestDocAPIContracts:
         from orchestra.providers.claude_code import ClaudeCodeProvider
 
         sig = inspect.signature(ClaudeCodeProvider.__init__)
-        assert "model" in sig.parameters, \
+        assert "model" in sig.parameters, (
             "ClaudeCodeProvider.__init__ must accept 'model' kwarg (documented in CLAUDE.md)"
+        )
 
     def test_gemini_cli_provider_accepts_model_param(self) -> None:
         # CLAUDE.md: GeminiCliProvider(model="gemini-2.5-pro")
         from orchestra.providers.gemini_cli import GeminiCliProvider
 
         sig = inspect.signature(GeminiCliProvider.__init__)
-        assert "model" in sig.parameters, \
+        assert "model" in sig.parameters, (
             "GeminiCliProvider.__init__ must accept 'model' kwarg (documented in CLAUDE.md)"
+        )
 
     def test_codex_cli_provider_accepts_model_param(self) -> None:
         # CLAUDE.md: CodexCliProvider(model="o4-mini")
         from orchestra.providers.codex_cli import CodexCliProvider
 
         sig = inspect.signature(CodexCliProvider.__init__)
-        assert "model" in sig.parameters, \
+        assert "model" in sig.parameters, (
             "CodexCliProvider.__init__ must accept 'model' kwarg (documented in CLAUDE.md)"
+        )
 
     # --- API providers: default_model param (not 'model') ---
 
@@ -562,19 +565,21 @@ class TestDocAPIContracts:
         from orchestra.providers.http import HttpProvider
 
         sig = inspect.signature(HttpProvider.__init__)
-        assert "default_model" in sig.parameters, \
-            "HttpProvider uses 'default_model' (not 'model'). " \
-            "docs/api/providers.md shows 'model=' which is incorrect — " \
+        assert "default_model" in sig.parameters, (
+            "HttpProvider uses 'default_model' (not 'model'). "
+            "docs/api/providers.md shows 'model=' which is incorrect — "
             "update the docs or rename the param."
+        )
 
     def test_anthropic_provider_uses_default_model_not_model(self) -> None:
         # docs/api/providers.md shows AnthropicProvider(model=...) but actual is default_model
         from orchestra.providers.anthropic import AnthropicProvider
 
         sig = inspect.signature(AnthropicProvider.__init__)
-        assert "default_model" in sig.parameters, \
-            "AnthropicProvider uses 'default_model' (not 'model'). " \
+        assert "default_model" in sig.parameters, (
+            "AnthropicProvider uses 'default_model' (not 'model'). "
             "docs/api/providers.md shows 'model=' which is incorrect."
+        )
 
     def test_ollama_provider_uses_default_model(self) -> None:
         # CLAUDE.md shows OllamaProvider(default_model="llama3.1") -- param name correct
@@ -593,8 +598,9 @@ class TestDocAPIContracts:
         params = sig.parameters
         assert "level" in params, "setup_logging must accept 'level' param"
         assert "json_output" in params, "setup_logging must accept 'json_output' param"
-        assert "format" not in params, \
+        assert "format" not in params, (
             "setup_logging must NOT accept 'format' — docs use 'json_output'"
+        )
 
     # --- ScriptedLLM ---
 
@@ -820,12 +826,7 @@ class TestDocWorkflowPatterns:
         async def synthesizer(state: dict[str, Any]) -> dict[str, Any]:
             return {"output": "synthesized"}
 
-        graph = (
-            WorkflowGraph()
-            .then(planner)
-            .parallel(researcher_a, researcher_b)
-            .join(synthesizer)
-        )
+        graph = WorkflowGraph().then(planner).parallel(researcher_a, researcher_b).join(synthesizer)
         result = await run(graph, persist=False)
         assert result.state["output"] == "synthesized"
 
@@ -891,10 +892,12 @@ class TestDocWorkflowPatterns:
         graph.add_edge("research", "write")
         graph.add_edge("write", END)
 
-        provider = ScriptedLLM([
-            "Multi-agent systems have evolved significantly...",
-            "## Research Report\n\nKey findings include...",
-        ])
+        provider = ScriptedLLM(
+            [
+                "Multi-agent systems have evolved significantly...",
+                "## Research Report\n\nKey findings include...",
+            ]
+        )
         result = await run(graph, input={"query": "test query"}, provider=provider, persist=False)
 
         assert "Key findings" in result.state["report"]
@@ -1193,10 +1196,12 @@ class TestDocScriptedLLM:
         from orchestra.core.types import Message, MessageRole
         from orchestra.testing import ScriptedLLM
 
-        llm = ScriptedLLM([
-            "First response from the LLM.",
-            "Second response from the LLM.",
-        ])
+        llm = ScriptedLLM(
+            [
+                "First response from the LLM.",
+                "Second response from the LLM.",
+            ]
+        )
 
         msgs = [Message(role=MessageRole.USER, content="hello")]
         r1 = await llm.complete(msgs)
@@ -1364,10 +1369,12 @@ class TestDocScriptedLLM:
 
         graph = WorkflowGraph().then(researcher).then(writer)
 
-        llm = ScriptedLLM([
-            "Key facts about quantum computing: superposition, entanglement.",
-            "Quantum computing harnesses quantum mechanics for computation.",
-        ])
+        llm = ScriptedLLM(
+            [
+                "Key facts about quantum computing: superposition, entanglement.",
+                "Quantum computing harnesses quantum mechanics for computation.",
+            ]
+        )
         result = await run(graph, input="quantum computing", provider=llm, persist=False)
 
         # Agent outputs land in per-agent state keys, not result.output
