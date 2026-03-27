@@ -45,14 +45,6 @@ from typing import Annotated, Any
 
 import pytest
 
-# ---------------------------------------------------------------------------
-# Module-level state class definitions
-#
-# These must live at module scope so that get_type_hints() can resolve the
-# Annotated reducer names.  State classes defined inside test-method bodies
-# would cause NameError in extract_reducers() on Python 3.13.
-# ---------------------------------------------------------------------------
-
 from orchestra.core.state import (
     WorkflowState,
     concat_str,
@@ -65,6 +57,14 @@ from orchestra.core.state import (
     min_value,
     sum_numbers,
 )
+
+# ---------------------------------------------------------------------------
+# Module-level state class definitions
+#
+# These must live at module scope so that get_type_hints() can resolve the
+# Annotated reducer names.  State classes defined inside test-method bodies
+# would cause NameError in extract_reducers() on Python 3.13.
+# ---------------------------------------------------------------------------
 
 
 # Used by TestDocWorkflowPatterns.test_linear_graph_fluent_api
@@ -350,7 +350,7 @@ class TestDocAPIContracts:
         assert "output_type" in fields, "BaseAgent must have an 'output_type' field"
 
     def test_base_agent_instantiation_with_documented_params(self) -> None:
-        # README.md: BaseAgent(name=..., system_prompt=..., model=..., tools=..., max_iterations=...)
+        # README.md: BaseAgent(name, system_prompt, model, tools, max_iterations)
         from orchestra.core.agent import BaseAgent
 
         agent = BaseAgent(
@@ -382,7 +382,8 @@ class TestDocAPIContracts:
 
         assert isinstance(researcher, DecoratedAgent)
         assert researcher.name == "researcher"
-        assert researcher.system_prompt == "You are a research analyst. Find key facts about the given topic."
+        expected = "You are a research analyst. Find key facts about the given topic."
+        assert researcher.system_prompt == expected
         assert researcher.model == "gpt-4o-mini"
         assert researcher.temperature == 0.3
 
@@ -585,7 +586,7 @@ class TestDocAPIContracts:
     # --- setup_logging ---
 
     def test_setup_logging_accepts_level_and_json_output(self) -> None:
-        # docs/api/observability.md: setup_logging(level="DEBUG") and setup_logging(level="INFO", json_output=True)
+        # docs/api/observability.md: setup_logging(level, json_output)
         from orchestra.observability.logging import setup_logging
 
         sig = inspect.signature(setup_logging)
@@ -910,7 +911,7 @@ class TestDocStateReducers:
 
     def test_workflow_state_subclass_with_annotated_field(self) -> None:
         # docs/concepts/state.md defining state with reducers
-        from orchestra.core.state import WorkflowState, merge_list
+        from orchestra.core.state import WorkflowState
 
         class MyState(WorkflowState):
             messages: Annotated[list[str], merge_list] = []
