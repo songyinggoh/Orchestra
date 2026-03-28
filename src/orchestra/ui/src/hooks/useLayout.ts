@@ -1,0 +1,81 @@
+import { useMemo } from 'react';
+import type { Node, Edge } from '@xyflow/react';
+import dagre from '@dagrejs/dagre';
+import type { GraphInfo } from '../types/api';
+
+const NODE_WIDTH = 200;
+const NODE_HEIGHT = 60;
+
+/**
+ * Convert Orchestra GraphInfo to layouted React Flow nodes + edges using Dagre.
+ */
+export function useLayout(graph: GraphInfo | null) {
+  return useMemo(() => {
+    if (!graph) return { nodes: [], edges: [] };
+    return layoutGraph(graph);
+  }, [graph]);
+}
+
+export function layoutGraph(graph: GraphInfo): { nodes: Node[]; edges: Edge[] } {
+  const g = new dagre.graphlib.Graph().setDefaultEdgeLabel(() => ({}));
+  g.setGraph({ rankdir: 'TB', ranksep: 80, nodesep: 60 });
+
+  // Add __start__ and __end__ virtual nodes
+  const allNodeIds = ['__start__', ...graph.nodes, '__end__'];
+  for (const id of allNodeIds) {
+    g.setNode(id, { width: id.startsWith('__') ? 80 : NODE_WIDTH, height: id.startsWith('__') ? 40 : NODE_HEIGHT });
+  }
+
+  // Edge from start to entry point
+  g.setEdge('__start__', graph.entry_point);
+
+  // Process edges
+  const rfEdges: Edge[] = [];
+  let edgeIdx = 0;
+
+  for (const edge of graph.edges) {
+    const targets = Array.isArray(edge.target) ? edge.target : [edge.target];
+    for (const t of targets) {
+      const target = t === '__end__' || t === 'END' ? '__end__' : t;
+      g.setEdge(edge.source, target);
+      rfEdges.push({
+        id: `e-${edgeIdx++}`,
+        source: edge.source,
+        target,
+        type: 'smoothstep',
+        animated: edge.type === 'ParallelEdge',
+        style: { stroke: edge.type === 'ConditionalEdge' ? '#f59e0b' : '#555' },
+        label: edge.type === 'ConditionalEdge' ? '?' : undefined,
+      });
+    }
+  }
+
+  // Add edge from start
+  rfEdges.unshift({
+    id: 'e-start',
+    source: '__start__',
+    target: graph.entry_point,
+    type: 'smoothstep',
+    style: { stroke: '#555' },
+  });
+
+  dagre.layout(g);
+
+  const rfNodes: Node[] = allNodeIds.map((id) => {
+    const pos = g.node(id);
+    const isVirtual = id.startsWith('__');
+    const w = isVirtual ? 80 : NODE_WIDTH;
+    const h = isVirtual ? 40 : NODE_HEIGHT;
+    return {
+      id,
+      type: isVirtual ? 'terminal' : 'agent',
+      position: { x: pos.x - w / 2, y: pos.y - h / 2 },
+      data: {
+        label: isVirtual ? (id === '__start__' ? 'Start' : 'End') : id,
+        nodeId: id,
+      },
+    };
+  });
+
+  return { nodes: rfNodes, edges: rfEdges };
+}

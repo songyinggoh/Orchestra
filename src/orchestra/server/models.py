@@ -33,6 +33,7 @@ class RunStatus(BaseModel):
     created_at: str
     completed_at: str | None = None
     event_count: int = 0
+    workflow_name: str = ""
 
 
 class StreamEvent(BaseModel):
@@ -64,3 +65,44 @@ class ResumeRequest(BaseModel):
     """Request body for resuming an interrupted run."""
 
     state_updates: dict[str, Any] = Field(default_factory=dict)
+
+
+class EventItem(BaseModel):
+    """A single workflow event returned by the events endpoint."""
+
+    event_id: str
+    run_id: str
+    event_type: str
+    sequence: int
+    timestamp: str
+    data: dict[str, Any]
+
+
+class RunState(BaseModel):
+    """Current or final state of a workflow run."""
+
+    run_id: str
+    state: dict[str, Any]
+    event_count: int = 0
+
+
+class CostBreakdown(BaseModel):
+    """Cost breakdown for a single dimension (model or agent)."""
+
+    cost_usd: float = 0.0
+    input_tokens: int = 0
+    output_tokens: int = 0
+    call_count: int = 0
+
+
+class RunCost(BaseModel):
+    """Cost summary for a workflow run."""
+
+    run_id: str
+    total_cost_usd: float = 0.0
+    total_input_tokens: int = 0
+    total_output_tokens: int = 0
+    total_tokens: int = 0
+    call_count: int = 0
+    by_model: dict[str, CostBreakdown] = Field(default_factory=dict)
+    by_agent: dict[str, CostBreakdown] = Field(default_factory=dict)

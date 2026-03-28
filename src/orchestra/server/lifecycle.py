@@ -194,6 +194,7 @@ class RunManager:
                     status=active.status,
                     created_at=active.created_at.isoformat(),
                     event_count=active.event_queue.qsize(),
+                    workflow_name=active.graph_name,
                 )
             )
         return result

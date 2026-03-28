@@ -1,0 +1,40 @@
+@import "tailwindcss";
+@import "@xyflow/react/dist/style.css";
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+  background: #0a0a0f;
+  color: #e5e5e5;
+}
+
+#root {
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* React Flow dark theme overrides */
+.react-flow__node {
+  font-size: 12px;
+}
+
+.react-flow__attribution {
+  display: none;
+}
+
+/* Custom scrollbar for panels */
+.scroll-thin::-webkit-scrollbar {
+  width: 6px;
+}
+.scroll-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scroll-thin::-webkit-scrollbar-thumb {
+  background: #333;
+  border-radius: 3px;
+}

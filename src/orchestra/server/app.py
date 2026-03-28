@@ -135,6 +135,24 @@ def create_app(config: ServerConfig | None = None) -> FastAPI:
     app.include_router(streams_router, prefix=config.api_prefix, dependencies=_auth)
     app.include_router(graphs_router, prefix=config.api_prefix, dependencies=_auth)
 
+    # --- UI static files ---
+    # Serve the built React UI at /ui/ if the dist directory exists.
+    # The UI is optional: install with `pip install orchestra[ui]` or
+    # build from src/orchestra/ui/ with `npm run build`.
+    import pathlib
+
+    ui_dist = pathlib.Path(__file__).parent.parent / "ui" / "dist"
+    if ui_dist.is_dir():
+        from fastapi.staticfiles import StaticFiles
+        from fastapi.responses import RedirectResponse
+
+        @app.get("/ui")
+        async def ui_redirect() -> RedirectResponse:
+            """Redirect /ui to /ui/ so the SPA loads correctly."""
+            return RedirectResponse("/ui/", status_code=301)
+
+        app.mount("/ui", StaticFiles(directory=str(ui_dist), html=True), name="ui")
+
     # --- Exception handlers ---
     @app.exception_handler(ValueError)
     async def value_error_handler(request: Request, exc: ValueError) -> JSONResponse:
