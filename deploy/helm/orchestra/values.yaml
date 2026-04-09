@@ -45,15 +45,15 @@ keda:
 
 probes:
   liveness:
-    path: /health
+    path: /healthz
     initialDelaySeconds: 10
     periodSeconds: 15
   readiness:
-    path: /ready
+    path: /readyz
     initialDelaySeconds: 5
     periodSeconds: 10
   startup:
-    path: /health
+    path: /healthz
     failureThreshold: 30
     periodSeconds: 5
 

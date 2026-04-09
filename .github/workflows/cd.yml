@@ -14,9 +14,25 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  unit-test:
+    name: Unit Tests (gate)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: 'pip'
+      - name: Install dependencies
+        run: pip install -e ".[dev,server,telemetry,cache,storage,postgres,nats,security,memory,routing]"
+      - name: Run unit tests
+        run: pytest tests/unit/ -x -q
+
   helm-lint:
     name: Helm Lint
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -43,8 +59,9 @@ jobs:
     name: Helm Install (KinD)
     # Only deploy on push to master — not on every PR
     if: github.event_name == 'push'
-    needs: [helm-lint]
+    needs: [helm-lint, unit-test]
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v5

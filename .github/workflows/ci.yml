@@ -16,6 +16,7 @@ concurrency:
 jobs:
   lint:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v5
@@ -27,6 +28,7 @@ jobs:
 
   type-check:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     # Non-blocking: 140 pre-existing errors across 46 files — tracked for cleanup
     continue-on-error: true
     steps:
@@ -40,6 +42,7 @@ jobs:
   security:
     name: Security Scanning
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
         with:
@@ -68,6 +71,7 @@ jobs:
 
   unit-test:
     name: Unit Test (${{ matrix.os }}, Py ${{ matrix.python-version }})
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -100,6 +104,7 @@ jobs:
   integration-test:
     name: Integration & Security Tests (Linux)
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     services:
       postgres:
         image: postgres:16-alpine
