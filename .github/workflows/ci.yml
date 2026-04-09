@@ -66,8 +66,8 @@ jobs:
       - name: pip-audit Scan (SCA)
         run: |
           pip install pip-audit
-          pip install -e .
-          pip-audit --ignore-vuln CVE-2026-4539  # pygments 2.19.2 — no fix available yet
+          pip install -e ".[dev,server,telemetry,cache,storage,postgres,nats,security,messaging,memory,routing,promptshield]"
+          pip-audit --ignore-vuln GHSA-w8v5-vhqr-4h9v  # diskcache unsafe pickle — no upstream patch available
 
   unit-test:
     name: Unit Test (${{ matrix.os }}, Py ${{ matrix.python-version }})
