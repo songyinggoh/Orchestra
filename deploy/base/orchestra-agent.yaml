@@ -38,6 +38,6 @@ spec:
   - type: nats-jetstream
     metadata:
       natsServerMonitoringEndpoint: "nats:8222"
-      stream: "agent-tasks"
+      stream: "ORCHESTRA_TASKS"
       consumer: "worker"
       lagThreshold: "10"
