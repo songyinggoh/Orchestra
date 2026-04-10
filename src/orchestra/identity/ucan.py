@@ -10,12 +10,12 @@ from __future__ import annotations
 import secrets
 import time
 from collections.abc import Sequence
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from joserfc.jwk import OKPKey
 
 import structlog
-from joserfc import jwt
-from joserfc.errors import JoseError
-from joserfc.jwk import OKPKey
 
 from orchestra.core.errors import UCANVerificationError
 from orchestra.identity.types import UCANCapability
@@ -41,6 +41,11 @@ class UCANManager:
         not_before: int | None = None,
     ) -> str:
         """Issue a signed UCAN token."""
+        from orchestra._compat import HAS_JOSERFC
+        if not HAS_JOSERFC:
+            raise ImportError("joserfc required: pip install orchestra-agents[crypto]")
+        from joserfc import jwt
+
         if not self._signing_key or not self._issuer_did:
             raise RuntimeError(
                 "UCANManager must be initialized with signing_key and issuer_did to issue tokens"
@@ -68,6 +73,12 @@ class UCANManager:
         expected_audience: str | None = None,
     ) -> dict[str, Any]:
         """Verify signature and basic claims (expiry, audience)."""
+        from orchestra._compat import HAS_JOSERFC
+        if not HAS_JOSERFC:
+            raise ImportError("joserfc required: pip install orchestra-agents[crypto]")
+        from joserfc import jwt
+        from joserfc.errors import JoseError
+
         try:
             decoded = jwt.decode(token_str, verification_key, algorithms=["EdDSA"])
             payload = decoded.claims
