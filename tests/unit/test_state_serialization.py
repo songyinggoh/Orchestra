@@ -39,5 +39,6 @@ def test_enum():
 
 
 def test_path():
-    result = json.loads(safe_serialize({"p": Path("/tmp")}))
-    assert result["p"] == "/tmp"
+    path_val = Path("/tmp")
+    result = json.loads(safe_serialize({"p": path_val}))
+    assert result["p"] == str(path_val)

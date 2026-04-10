@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 import json
 import uuid
-from asyncio import PIPE
+from asyncio.subprocess import PIPE
 from contextlib import asynccontextmanager
 from typing import Any
 
