@@ -12,6 +12,7 @@ or directly::
 from __future__ import annotations
 
 import asyncio
+import os
 import uuid
 from typing import Any
 
@@ -65,7 +66,7 @@ class QdrantColdBackend:
 
     def __init__(
         self,
-        url: str = "http://localhost:6333",
+        url: str | None = None,
         *,
         api_key: str | None = None,
         collection_name: str = "orchestra_memory",
@@ -93,6 +94,7 @@ class QdrantColdBackend:
                 "Install it with: pip install qdrant-client"
             )
 
+        url = url or os.environ.get("QDRANT_URL", "http://localhost:6333")
         self.url = url
         self.collection_name = collection_name
         self.agent_id = agent_id

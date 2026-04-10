@@ -10,15 +10,16 @@ from __future__ import annotations
 import secrets
 import time
 from collections.abc import Sequence
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import structlog
-from joserfc import jwt
-from joserfc.errors import JoseError
-from joserfc.jwk import OKPKey
 
+from orchestra._compat import HAS_JOSERFC
 from orchestra.core.errors import UCANVerificationError
 from orchestra.identity.types import UCANCapability
+
+if TYPE_CHECKING:
+    from joserfc.jwk import OKPKey
 
 logger = structlog.get_logger(__name__)
 
@@ -41,6 +42,10 @@ class UCANManager:
         not_before: int | None = None,
     ) -> str:
         """Issue a signed UCAN token."""
+        if not HAS_JOSERFC:
+            raise ImportError("joserfc required: pip install orchestra-agents[crypto]")
+        import joserfc.jwt as _jwt
+
         if not self._signing_key or not self._issuer_did:
             raise RuntimeError(
                 "UCANManager must be initialized with signing_key and issuer_did to issue tokens"
@@ -59,7 +64,7 @@ class UCANManager:
             "nnc": secrets.token_hex(8),
         }
         # RFC 9864 / joserfc requirement
-        return jwt.encode(header, payload, self._signing_key, algorithms=["EdDSA"])
+        return _jwt.encode(header, payload, self._signing_key, algorithms=["EdDSA"])
 
     @staticmethod
     def verify(
@@ -68,8 +73,13 @@ class UCANManager:
         expected_audience: str | None = None,
     ) -> dict[str, Any]:
         """Verify signature and basic claims (expiry, audience)."""
+        if not HAS_JOSERFC:
+            raise ImportError("joserfc required: pip install orchestra-agents[crypto]")
+        import joserfc.jwt as _jwt
+        from joserfc.errors import JoseError
+
         try:
-            decoded = jwt.decode(token_str, verification_key, algorithms=["EdDSA"])
+            decoded = _jwt.decode(token_str, verification_key, algorithms=["EdDSA"])
             payload = decoded.claims
         except JoseError as e:
             raise UCANVerificationError(f"JWT verification failed: {e!s}") from e
