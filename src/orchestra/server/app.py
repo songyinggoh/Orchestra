@@ -55,7 +55,7 @@ def create_app(config: ServerConfig | None = None) -> FastAPI:
         )
 
         log = structlog.get_logger(__name__)
-        api_key = os.environ.get("ORCHESTRA_API_KEY")
+        api_key = os.environ.get("ORCHESTRA_SERVER_KEY") or os.environ.get("ORCHESTRA_API_KEY")
         app.state.api_key = api_key
         if not api_key:
             log.warning(
