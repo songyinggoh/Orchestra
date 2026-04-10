@@ -20,7 +20,7 @@ import structlog
 from orchestra.core.context import ExecutionContext
 from orchestra.core.context_distill import distill_context, full_passthrough
 from orchestra.core.edges import ConditionalEdge, Edge, ParallelEdge
-from orchestra.core.errors import AgentError, GraphCompileError, MaxIterationsError
+from orchestra.core.errors import AgentError, GraphCompileError, MaxIterationsError, ProviderError
 from orchestra.core.handoff import HandoffPayload
 from orchestra.core.nodes import AgentNode, FunctionNode, GraphNode, SubgraphNode
 from orchestra.core.state import (
@@ -703,7 +703,7 @@ class CompiledGraph:
                 if callable(node):
                     return await node(state_dict)
                 raise AgentError(f"Node '{node_id}' is not callable: {type(node)}")
-        except (AgentError, GraphCompileError):
+        except (AgentError, GraphCompileError, ProviderError):
             raise
         except Exception as e:
             raise AgentError(

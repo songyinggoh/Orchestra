@@ -34,6 +34,7 @@ from orchestra.core.types import (
 )
 from orchestra.providers._cli_common import (
     inject_tools_into_system,
+    managed_proc,
     messages_to_prompt,
     parse_tool_calls,
     strip_tool_calls,
@@ -104,26 +105,22 @@ class CodexCliProvider:
         ]
 
         try:
-            proc = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdin=asyncio.subprocess.PIPE,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            stdout, stderr = await asyncio.wait_for(
-                proc.communicate(),
-                timeout=self._timeout,
-            )
+            async with managed_proc(*cmd) as proc:
+                try:
+                    stdout, stderr = await asyncio.wait_for(
+                        proc.communicate(),
+                        timeout=self._timeout,
+                    )
+                except TimeoutError:
+                    raise ProviderError(
+                        f"codex CLI timed out after {self._timeout}s. "
+                        "Increase timeout= or simplify the prompt."
+                    ) from None
         except FileNotFoundError:
             raise ProviderUnavailableError(
                 "The 'codex' CLI was not found on PATH.\n"
                 "  Fix: Install the OpenAI Codex CLI (https://github.com/openai/codex) "
                 "or pass codex_path= to CodexCliProvider."
-            ) from None
-        except TimeoutError:
-            raise ProviderError(
-                f"codex CLI timed out after {self._timeout}s. "
-                "Increase timeout= or simplify the prompt."
             ) from None
 
         if proc.returncode != 0:
@@ -179,41 +176,35 @@ class CodexCliProvider:
         ]
 
         try:
-            proc = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdin=asyncio.subprocess.PIPE,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
+            async with managed_proc(*cmd) as proc:
+                assert proc.stdout is not None
+
+                async for raw_line in proc.stdout:
+                    line = raw_line.decode(errors="replace").strip()
+                    if not line:
+                        continue
+
+                    # Try to parse as JSON event.
+                    try:
+                        event = json.loads(line)
+                        text = event.get("text", event.get("content", ""))
+                        if text:
+                            yield StreamChunk(content=text, model=use_model)
+                        if event.get("done") or event.get("type") == "result":
+                            yield StreamChunk(content="", finish_reason="stop", model=use_model)
+                        continue
+                    except json.JSONDecodeError:
+                        pass
+
+                    # Plain text line.
+                    yield StreamChunk(content=line, model=use_model)
+
+                yield StreamChunk(content="", finish_reason="stop", model=use_model)
+                await proc.wait()
         except FileNotFoundError:
             raise ProviderUnavailableError(
                 "The 'codex' CLI was not found on PATH.\n  Fix: Install the OpenAI Codex CLI."
             ) from None
-
-        assert proc.stdout is not None
-
-        async for raw_line in proc.stdout:
-            line = raw_line.decode(errors="replace").strip()
-            if not line:
-                continue
-
-            # Try to parse as JSON event.
-            try:
-                event = json.loads(line)
-                text = event.get("text", event.get("content", ""))
-                if text:
-                    yield StreamChunk(content=text, model=use_model)
-                if event.get("done") or event.get("type") == "result":
-                    yield StreamChunk(content="", finish_reason="stop", model=use_model)
-                continue
-            except json.JSONDecodeError:
-                pass
-
-            # Plain text line.
-            yield StreamChunk(content=line, model=use_model)
-
-        yield StreamChunk(content="", finish_reason="stop", model=use_model)
-        await proc.wait()
 
     def count_tokens(self, messages: list[Message], model: str | None = None) -> int:
         """Approximate token count (4 chars per token heuristic)."""
