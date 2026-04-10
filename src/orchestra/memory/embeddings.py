@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
-import numpy as np
+if TYPE_CHECKING:
+    import numpy as np
 
 
 @runtime_checkable
@@ -42,18 +43,19 @@ class EmbeddingProvider(Protocol):
         """
         ...
 
-    async def embed_texts(self, texts: Sequence[str]) -> np.ndarray:
+    async def embed_texts(self, texts: Sequence[str]) -> Any:
         """Embed a batch of documents for storage.
 
         Args:
             texts: Sequence of strings to embed.
 
         Returns:
-            Float32 array of shape ``(len(texts), dimensions)``.
+            Float32 array of shape ``(len(texts), dimensions)`` (numpy ndarray
+            when numpy is installed).
         """
         ...
 
-    async def embed_query(self, query: str) -> np.ndarray:
+    async def embed_query(self, query: str) -> Any:
         """Embed a single query string for retrieval.
 
         For symmetric models (e.g. model2vec) this is identical to
@@ -64,6 +66,7 @@ class EmbeddingProvider(Protocol):
             query: The search query to embed.
 
         Returns:
-            Float32 array of shape ``(dimensions,)``.
+            Float32 array of shape ``(dimensions,)`` (numpy ndarray when numpy
+            is installed).
         """
         ...
