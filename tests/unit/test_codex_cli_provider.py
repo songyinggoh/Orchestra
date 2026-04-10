@@ -161,11 +161,10 @@ class TestErrors:
     @pytest.mark.asyncio
     async def test_timeout_raises(self) -> None:
         provider = CodexCliProvider(timeout=0.1)
+        proc = _mock_process(b"")  # proc is created but communicate times out
         with (
-            patch(
-                "asyncio.create_subprocess_exec",
-                side_effect=asyncio.TimeoutError,
-            ),
+            patch("asyncio.create_subprocess_exec", return_value=proc),
+            patch("asyncio.wait_for", side_effect=TimeoutError),
             pytest.raises(ProviderError, match="timed out"),
         ):
             await provider.complete([_user("hi")])
