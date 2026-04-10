@@ -69,17 +69,11 @@ security = [
     "joserfc>=1.6",
     "base58>=2.1",
 ]
-crypto = [
-    "joserfc>=1.6",
-    "base58>=2.1",
-    "cryptography>=46.0.7",
-]
 redis = ["redis[hiredis]>=7.0", "msgpack>=1.0"]
 memory = [
     "numpy>=1.26",
     "redis[hiredis]>=7.0",
     "msgpack>=1.0",
-    "numpy>=1.26",
 ]
 vectordb = [
     "pgvector>=0.4",
