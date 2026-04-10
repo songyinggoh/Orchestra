@@ -1,10 +1,4 @@
-"""
-_compat.py — optional-dependency sentinels.
-
-Import this module instead of importing optional libs directly at module level.
-Each HAS_* flag is False when the package is absent; features that need the
-package raise ImportError with an install hint when actually called.
-"""
+"""_compat.py — optional-dependency sentinels."""
 try:
     import numpy as np  # noqa: F401
     HAS_NUMPY = True
