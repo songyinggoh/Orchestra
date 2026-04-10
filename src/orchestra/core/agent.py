@@ -46,7 +46,7 @@ class BaseAgent(BaseModel):
     """
 
     name: str = "agent"
-    model: str = "gpt-4o-mini"
+    model: str | None = None
     system_prompt: str = "You are a helpful assistant."
     tools: list[Any] = Field(default_factory=list)
     acl: Any = None  # Lazy-loaded ToolACL
@@ -149,7 +149,7 @@ class BaseAgent(BaseModel):
                         run_id=context.run_id,
                         node_id=context.node_id,
                         agent_name=self.name,
-                        model=self.model,
+                        model=response.model or self.model or "unknown",
                         content=response.content,
                         tool_calls=[tc.model_dump() for tc in response.tool_calls]
                         if response.tool_calls

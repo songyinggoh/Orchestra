@@ -91,7 +91,6 @@ class ClaudeCodeProvider:
             "--model",
             use_model,
             "--no-session-persistence",
-            "--bare",
             "--tools",
             "",
         ]
@@ -165,7 +164,6 @@ class ClaudeCodeProvider:
             "--model",
             use_model,
             "--no-session-persistence",
-            "--bare",
             "--tools",
             "",
         ]
