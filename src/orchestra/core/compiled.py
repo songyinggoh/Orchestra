@@ -625,7 +625,7 @@ class CompiledGraph:
                         effective_run_id, "failed", completed_at
                     )
                 except Exception:
-                    pass
+                    logger.warning("state_persistence_failed", exc_info=True)
             if _renderer is not None:
                 _renderer.stop()
             raise
@@ -660,7 +660,7 @@ class CompiledGraph:
                     effective_run_id, "completed", completed_at
                 )
             except Exception:
-                pass
+                logger.warning("state_persistence_failed", exc_info=True)
 
         if _renderer is not None:
             _renderer.stop()
