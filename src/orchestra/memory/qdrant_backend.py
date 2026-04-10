@@ -94,14 +94,14 @@ class QdrantColdBackend:
                 "Install it with: pip install qdrant-client"
             )
 
-        url = url or os.environ.get("QDRANT_URL", "http://localhost:6333")
-        self.url = url
+        resolved_url = url or os.environ.get("QDRANT_URL", "http://localhost:6333")
+        self.url = resolved_url
         self.collection_name = collection_name
         self.agent_id = agent_id
         self.dimensions = dimensions
         self.embedding_model = embedding_model
 
-        self._client_kwargs: dict[str, Any] = {"url": url}
+        self._client_kwargs: dict[str, Any] = {"url": resolved_url}
         if api_key:
             self._client_kwargs["api_key"] = api_key
 

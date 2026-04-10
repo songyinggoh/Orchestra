@@ -85,9 +85,10 @@ class RedisMemoryBackend:
         from redis.backoff import ExponentialBackoff
         from redis.retry import Retry
 
+        resolved_url = url or os.environ.get("REDIS_URL", "redis://localhost:6379/0")
         self.prefix = prefix
         self.pool = BlockingConnectionPool.from_url(
-            url,
+            resolved_url,
             max_connections=max_connections,
             timeout=5.0,
             retry=Retry(ExponentialBackoff(), 3),
