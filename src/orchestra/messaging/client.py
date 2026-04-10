@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -24,7 +25,9 @@ _STREAM_SUBJECTS = [
 
 @dataclass
 class NATSClientConfig:
-    servers: list[str] = field(default_factory=lambda: ["nats://localhost:4222"])
+    servers: list[str] = field(
+        default_factory=lambda: [os.environ.get("NATS_URL", "nats://localhost:4222")]
+    )
     max_reconnect_attempts: int = 5
     reconnect_time_wait: float = 2.0
     # Heartbeat: disconnect after max_outstanding_pings missed pings

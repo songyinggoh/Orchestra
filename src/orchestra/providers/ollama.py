@@ -16,6 +16,7 @@ Usage:
 from __future__ import annotations
 
 import json
+import os
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -80,11 +81,12 @@ class OllamaProvider:
 
     def __init__(
         self,
-        base_url: str = "http://localhost:11434",
+        base_url: str | None = None,
         default_model: str = "llama3.1",
         timeout: float = 120.0,
     ) -> None:
-        self._base_url = base_url.rstrip("/")
+        url = base_url or os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
+        self._base_url = url.rstrip("/")
         self._default_model = default_model
         # OpenAI-compatible client pointed at /v1
         self._client = httpx.AsyncClient(
