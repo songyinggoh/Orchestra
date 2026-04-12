@@ -99,7 +99,8 @@ class ThompsonModelSelector:
         if not options:
             raise ValueError("No model options provided to ThompsonModelSelector")
 
-        from orchestra._compat import HAS_NUMPY, np as _np
+        from orchestra._compat import HAS_NUMPY
+        from orchestra._compat import np as _np
 
         samples = []
         for opt in options:
@@ -109,10 +110,10 @@ class ThompsonModelSelector:
 
             alpha, beta = self._stats[key]
             # Sample from Beta distribution
-            if HAS_NUMPY:
+            # betavariate is a scalar drop-in for np.random.beta when numpy absent
+            if HAS_NUMPY:  # noqa: SIM108 — type-ignore comment prevents ternary form
                 sample = _np.random.beta(alpha, beta)  # type: ignore[union-attr]
             else:
-                # betavariate is a scalar drop-in for np.random.beta
                 sample = random.betavariate(alpha, beta)
             samples.append((sample, opt))
 

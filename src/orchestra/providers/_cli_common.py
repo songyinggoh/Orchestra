@@ -22,11 +22,14 @@ from orchestra.core.types import (
 
 
 @asynccontextmanager
-async def managed_proc(*cmd: str, stdin: int | None = PIPE, stdout: int | None = PIPE, stderr: int | None = PIPE):  # type: ignore[return]
+async def managed_proc(
+    *cmd: str,
+    stdin: int | None = PIPE,
+    stdout: int | None = PIPE,
+    stderr: int | None = PIPE,
+):  # type: ignore[return]
     """Spawn a subprocess and guarantee cleanup on exit — kills on exception."""
-    proc = await asyncio.create_subprocess_exec(
-        *cmd, stdin=stdin, stdout=stdout, stderr=stderr
-    )
+    proc = await asyncio.create_subprocess_exec(*cmd, stdin=stdin, stdout=stdout, stderr=stderr)
     try:
         yield proc
     finally:
@@ -37,7 +40,7 @@ async def managed_proc(*cmd: str, stdin: int | None = PIPE, stdout: int | None =
                 pass
             try:
                 await asyncio.wait_for(proc.wait(), timeout=5.0)
-            except (asyncio.TimeoutError, ProcessLookupError):
+            except (TimeoutError, ProcessLookupError):
                 pass
 
 

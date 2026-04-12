@@ -5,7 +5,6 @@ Mocks asyncio.create_subprocess_exec to avoid running the real CLI.
 
 from __future__ import annotations
 
-import asyncio
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 

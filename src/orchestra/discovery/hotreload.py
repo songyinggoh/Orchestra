@@ -96,10 +96,14 @@ class DiscoveryHotReloader:
     async def _run_loop(self) -> None:
         """Watch all three directories for changes."""
         from orchestra._compat import HAS_WATCHFILES
+
         if not HAS_WATCHFILES:
             logger.warning(
                 "watchfiles_not_installed",
-                message="Hot-reloading disabled: install watchfiles via pip install orchestra-agents[server]",
+                message=(
+                    "Hot-reloading disabled: install watchfiles via "
+                    "pip install orchestra-agents[server]"
+                ),
             )
             return
         from watchfiles import awatch

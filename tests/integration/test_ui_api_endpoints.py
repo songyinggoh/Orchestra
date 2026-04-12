@@ -204,9 +204,7 @@ class TestGetRunEvents:
     def test_event_type_filter(self, client: Any) -> None:
         run_id = _create_and_wait(client)
 
-        resp = client.get(
-            f"/api/v1/runs/{run_id}/events?event_types=execution.started"
-        )
+        resp = client.get(f"/api/v1/runs/{run_id}/events?event_types=execution.started")
         events = resp.json()
         assert len(events) >= 1
         for evt in events:

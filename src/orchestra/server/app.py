@@ -143,8 +143,8 @@ def create_app(config: ServerConfig | None = None) -> FastAPI:
 
     ui_dist = pathlib.Path(__file__).parent.parent / "ui" / "dist"
     if ui_dist.is_dir():
-        from fastapi.staticfiles import StaticFiles
         from fastapi.responses import RedirectResponse
+        from fastapi.staticfiles import StaticFiles
 
         @app.get("/ui")
         async def ui_redirect() -> RedirectResponse:

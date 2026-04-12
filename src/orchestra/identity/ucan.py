@@ -42,6 +42,7 @@ class UCANManager:
     ) -> str:
         """Issue a signed UCAN token."""
         from orchestra._compat import HAS_JOSERFC
+
         if not HAS_JOSERFC:
             raise ImportError("joserfc required: pip install orchestra-agents[crypto]")
         from joserfc import jwt
@@ -74,6 +75,7 @@ class UCANManager:
     ) -> dict[str, Any]:
         """Verify signature and basic claims (expiry, audience)."""
         from orchestra._compat import HAS_JOSERFC
+
         if not HAS_JOSERFC:
             raise ImportError("joserfc required: pip install orchestra-agents[crypto]")
         from joserfc import jwt

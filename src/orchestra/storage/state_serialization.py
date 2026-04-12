@@ -1,4 +1,5 @@
 """Safe JSON serialization for workflow state objects."""
+
 from __future__ import annotations
 
 import base64

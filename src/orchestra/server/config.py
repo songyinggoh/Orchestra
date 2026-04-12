@@ -30,7 +30,7 @@ class ServerConfig(BaseSettings):
     max_request_body_bytes: int = 1 * 1024 * 1024  # 1 MB
 
     @model_validator(mode="after")
-    def _default_cors_origins(self) -> "ServerConfig":
+    def _default_cors_origins(self) -> ServerConfig:
         """Default CORS origins to localhost dev ports when none are configured."""
         if not self.cors_origins:
             orchestra_env = os.environ.get("ORCHESTRA_ENV", "dev")
@@ -39,7 +39,7 @@ class ServerConfig(BaseSettings):
         return self
 
     @model_validator(mode="after")
-    def _reject_wildcard_credentials(self) -> "ServerConfig":
+    def _reject_wildcard_credentials(self) -> ServerConfig:
         if "*" in self.cors_origins and self.cors_credentials:
             raise ValueError(
                 "CORS misconfiguration: cors_credentials=True cannot be combined "

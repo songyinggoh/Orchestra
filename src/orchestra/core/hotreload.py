@@ -56,10 +56,14 @@ class GraphHotReloader:
     async def _run_loop(self) -> None:
         """Main watch loop."""
         from orchestra._compat import HAS_WATCHFILES
+
         if not HAS_WATCHFILES:
             logger.warning(
                 "watchfiles_not_installed",
-                message="Hot-reloading disabled: install watchfiles via pip install orchestra-agents[server]",
+                message=(
+                    "Hot-reloading disabled: install watchfiles via "
+                    "pip install orchestra-agents[server]"
+                ),
             )
             return
         from watchfiles import awatch

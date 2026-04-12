@@ -1,6 +1,6 @@
 """Tests that orchestra imports succeed even when optional deps are absent."""
+
 import sys
-import pytest
 
 
 def _block(monkeypatch, *names):

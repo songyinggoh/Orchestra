@@ -34,7 +34,7 @@ from orchestra.reliability import (
 # Security — prompt injection detection (Rebuff, optional)
 _REBUFF_NAMES: list[str] = []
 try:
-    from orchestra.security import (  # type: ignore[attr-defined]
+    from orchestra.security import (  # type: ignore[attr-defined]  # noqa: F401
         InjectionAuditorAgent,
         InjectionDetectionResult,
         InjectionReport,
@@ -43,6 +43,7 @@ try:
         make_injection_guard_node,
         rebuff_tool,
     )
+
     _REBUFF_NAMES = [
         "InjectionAuditorAgent",
         "InjectionDetectionResult",
@@ -55,7 +56,7 @@ try:
 except (ImportError, AttributeError):
     pass
 
-from orchestra.tools.base import tool
+from orchestra.tools.base import tool  # noqa: E402
 
 __all__ = [
     "END",

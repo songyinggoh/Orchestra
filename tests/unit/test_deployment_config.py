@@ -1,7 +1,7 @@
 """Tests that service URLs respect environment variable overrides."""
+
 from __future__ import annotations
 
-import os
 import sys
 
 import pytest
@@ -34,9 +34,7 @@ def test_ollama_base_url_env(monkeypatch: pytest.MonkeyPatch) -> None:
     from orchestra.providers.ollama import OllamaProvider
 
     p = OllamaProvider()
-    assert "myollama" in p._base_url, (
-        f"Expected 'myollama' in _base_url, got {p._base_url!r}"
-    )
+    assert "myollama" in p._base_url, f"Expected 'myollama' in _base_url, got {p._base_url!r}"
 
 
 def test_ollama_explicit_arg_overrides_env(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -71,9 +69,7 @@ def test_nats_url_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
     cfg = NATSClientConfig()
     assert len(cfg.servers) == 1
-    assert "mynats" in cfg.servers[0], (
-        f"Expected 'mynats' in servers[0], got {cfg.servers[0]!r}"
-    )
+    assert "mynats" in cfg.servers[0], f"Expected 'mynats' in servers[0], got {cfg.servers[0]!r}"
 
 
 # ---------------------------------------------------------------------------
@@ -125,11 +121,14 @@ def test_qdrant_url_env(monkeypatch: pytest.MonkeyPatch) -> None:
     qdrant_mod.AsyncQdrantClient = mock.MagicMock
     qdrant_mod.models = mock.MagicMock()
 
-    with mock.patch.dict(sys.modules, {"qdrant_client": qdrant_mod, "qdrant_client.models": qdrant_mod.models}):
-        from orchestra.memory.qdrant_backend import QdrantColdBackend
-
+    patched_modules = {
+        "qdrant_client": qdrant_mod,
+        "qdrant_client.models": qdrant_mod.models,
+    }
+    with mock.patch.dict(sys.modules, patched_modules):
         # Force HAS_QDRANT so the import guard is bypassed
         import orchestra.memory.qdrant_backend as qb
+        from orchestra.memory.qdrant_backend import QdrantColdBackend
 
         qb.HAS_QDRANT = True
         backend = QdrantColdBackend()
@@ -152,8 +151,7 @@ def test_keda_stream_name_matches_client_constant() -> None:
     from orchestra.messaging.client import _STREAM_NAME
 
     yaml_path = (
-        pathlib.Path(__file__).parent.parent.parent
-        / "deploy" / "base" / "orchestra-agent.yaml"
+        pathlib.Path(__file__).parent.parent.parent / "deploy" / "base" / "orchestra-agent.yaml"
     )
     assert yaml_path.exists(), f"KEDA YAML not found at {yaml_path}"
 
