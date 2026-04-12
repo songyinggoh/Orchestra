@@ -10,7 +10,6 @@ import random
 from dataclasses import dataclass, field
 from typing import Any, Protocol, runtime_checkable
 
-import numpy as np
 import structlog
 
 from orchestra.core.errors import ModelSelectionError
@@ -100,6 +99,9 @@ class ThompsonModelSelector:
         if not options:
             raise ValueError("No model options provided to ThompsonModelSelector")
 
+        from orchestra._compat import HAS_NUMPY
+        from orchestra._compat import np as _np
+
         samples = []
         for opt in options:
             key = (opt.model_name, opt.provider_name)
@@ -108,7 +110,11 @@ class ThompsonModelSelector:
 
             alpha, beta = self._stats[key]
             # Sample from Beta distribution
-            sample = np.random.beta(alpha, beta)
+            # betavariate is a scalar drop-in for np.random.beta when numpy absent
+            if HAS_NUMPY:  # noqa: SIM108 — type-ignore comment prevents ternary form
+                sample = _np.random.beta(alpha, beta)  # type: ignore[union-attr]
+            else:
+                sample = random.betavariate(alpha, beta)
             samples.append((sample, opt))
 
         # Pick the option with the highest sampled probability

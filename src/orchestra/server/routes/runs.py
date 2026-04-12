@@ -7,12 +7,11 @@ import uuid
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, Request
-from orchestra.storage.events import EventType
-from orchestra.storage.serialization import event_to_dict
-from orchestra.cost.registry import ModelCostRegistry
 
+from orchestra.cost.registry import ModelCostRegistry
 from orchestra.server.dependencies import get_event_store, get_graph_registry, get_run_manager
 from orchestra.server.models import (
+    CostBreakdown,
     EventItem,
     ResumeRequest,
     RunCost,
@@ -20,8 +19,9 @@ from orchestra.server.models import (
     RunResponse,
     RunState,
     RunStatus,
-    CostBreakdown,
 )
+from orchestra.storage.events import EventType
+from orchestra.storage.serialization import event_to_dict
 from orchestra.storage.store import project_state
 
 # BC-5: Create once at module level — avoids re-reading JSON from disk per request.
@@ -234,9 +234,7 @@ async def get_run_cost(run_id: str, request: Request) -> RunCost:
     from orchestra.storage.events import LLMCalled
 
     event_store = get_event_store(request)
-    events = await event_store.get_events(
-        run_id, event_types=[EventType.LLM_CALLED]
-    )
+    events = await event_store.get_events(run_id, event_types=[EventType.LLM_CALLED])
 
     registry = _cost_registry
     total_cost = 0.0
@@ -262,7 +260,12 @@ async def get_run_cost(run_id: str, request: Request) -> RunCost:
             if not key:
                 continue
             if key not in bucket:
-                bucket[key] = {"cost_usd": 0.0, "input_tokens": 0, "output_tokens": 0, "call_count": 0}
+                bucket[key] = {
+                    "cost_usd": 0.0,
+                    "input_tokens": 0,
+                    "output_tokens": 0,
+                    "call_count": 0,
+                }
             bucket[key]["cost_usd"] += cost
             bucket[key]["input_tokens"] += inp
             bucket[key]["output_tokens"] += out
@@ -299,7 +302,7 @@ async def cancel_run(run_id: str, request: Request) -> RunStatus:
     active_run.task.cancel()
     try:
         await asyncio.wait_for(asyncio.shield(active_run.task), timeout=2.0)
-    except (asyncio.CancelledError, asyncio.TimeoutError):
+    except (TimeoutError, asyncio.CancelledError):
         pass
     active_run.status = "cancelled"
 

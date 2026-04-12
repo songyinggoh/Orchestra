@@ -31,17 +31,32 @@ from orchestra.reliability import (
     selfcheck_tool,
 )
 
-# Security — prompt injection detection (Rebuff)
-from orchestra.security import (
-    InjectionAuditorAgent,
-    InjectionDetectionResult,
-    InjectionReport,
-    PromptInjectionAgent,
-    RebuffChecker,
-    make_injection_guard_node,
-    rebuff_tool,
-)
-from orchestra.tools.base import tool
+# Security — prompt injection detection (Rebuff, optional)
+_REBUFF_NAMES: list[str] = []
+try:
+    from orchestra.security import (  # type: ignore[attr-defined]  # noqa: F401
+        InjectionAuditorAgent,
+        InjectionDetectionResult,
+        InjectionReport,
+        PromptInjectionAgent,
+        RebuffChecker,
+        make_injection_guard_node,
+        rebuff_tool,
+    )
+
+    _REBUFF_NAMES = [
+        "InjectionAuditorAgent",
+        "InjectionDetectionResult",
+        "InjectionReport",
+        "PromptInjectionAgent",
+        "RebuffChecker",
+        "make_injection_guard_node",
+        "rebuff_tool",
+    ]
+except (ImportError, AttributeError):
+    pass
+
+from orchestra.tools.base import tool  # noqa: E402
 
 __all__ = [
     "END",
@@ -53,14 +68,9 @@ __all__ = [
     "FactScoreChecker",
     "FactScoreResult",
     "FactScorerAgent",
-    "InjectionAuditorAgent",
-    "InjectionDetectionResult",
-    "InjectionReport",
     "Message",
     "MessageRole",
     "OrchestraError",
-    "PromptInjectionAgent",
-    "RebuffChecker",
     "RunResult",
     "SelfCheckAgent",
     "SelfCheckMethod",
@@ -76,11 +86,10 @@ __all__ = [
     "agent",
     "factscore_tool",
     "make_factscore_node",
-    "make_injection_guard_node",
     "make_selfcheck_node",
-    "rebuff_tool",
     "run",
     "run_sync",
     "selfcheck_tool",
     "tool",
+    *_REBUFF_NAMES,
 ]

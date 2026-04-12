@@ -11,7 +11,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import structlog
-from watchfiles import awatch
 
 from orchestra.core.dynamic import SubgraphBuilder, load_graph_yaml
 
@@ -56,6 +55,19 @@ class GraphHotReloader:
 
     async def _run_loop(self) -> None:
         """Main watch loop."""
+        from orchestra._compat import HAS_WATCHFILES
+
+        if not HAS_WATCHFILES:
+            logger.warning(
+                "watchfiles_not_installed",
+                message=(
+                    "Hot-reloading disabled: install watchfiles via "
+                    "pip install orchestra-agents[server]"
+                ),
+            )
+            return
+        from watchfiles import awatch
+
         async for changes in awatch(self._watch_dir):
             for change_type, path_str in changes:
                 path = Path(path_str)

@@ -32,6 +32,7 @@ from orchestra.storage.events import (
     WorkflowEvent,
 )
 from orchestra.storage.serialization import dict_to_event, event_to_dict
+from orchestra.storage.state_serialization import safe_serialize
 from orchestra.storage.store import RunSummary
 
 _DDL = """
@@ -319,7 +320,7 @@ class SQLiteEventStore:
                 checkpoint.node_id,
                 checkpoint.interrupt_type,
                 checkpoint.sequence_number,
-                json.dumps(checkpoint.state),
+                safe_serialize(checkpoint.state),
                 ctx_json,
                 checkpoint.timestamp.isoformat(),
             ),

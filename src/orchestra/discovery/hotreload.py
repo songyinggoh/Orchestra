@@ -12,7 +12,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import structlog
-from watchfiles import awatch
 
 from orchestra.core.agent import BaseAgent
 from orchestra.core.compiled import CompiledGraph
@@ -96,6 +95,19 @@ class DiscoveryHotReloader:
 
     async def _run_loop(self) -> None:
         """Watch all three directories for changes."""
+        from orchestra._compat import HAS_WATCHFILES
+
+        if not HAS_WATCHFILES:
+            logger.warning(
+                "watchfiles_not_installed",
+                message=(
+                    "Hot-reloading disabled: install watchfiles via "
+                    "pip install orchestra-agents[server]"
+                ),
+            )
+            return
+        from watchfiles import awatch
+
         watch_dirs = [
             d for d in (self._agents_dir, self._tools_dir, self._workflows_dir) if d.exists()
         ]

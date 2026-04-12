@@ -58,3 +58,8 @@ pytest_results.txt
 research/
 AGENTS.md
 GEMINI.md
+
+# Local scratch artifacts
+VERIFICATION.md
+docs/competitive-analysis-v2.md
+*.code-workspace

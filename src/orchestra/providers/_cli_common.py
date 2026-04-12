@@ -7,8 +7,11 @@ tools are described in the system prompt, and the model replies with a
 
 from __future__ import annotations
 
+import asyncio
 import json
 import uuid
+from asyncio.subprocess import PIPE
+from contextlib import asynccontextmanager
 from typing import Any
 
 from orchestra.core.types import (
@@ -16,6 +19,30 @@ from orchestra.core.types import (
     MessageRole,
     ToolCall,
 )
+
+
+@asynccontextmanager
+async def managed_proc(
+    *cmd: str,
+    stdin: int | None = PIPE,
+    stdout: int | None = PIPE,
+    stderr: int | None = PIPE,
+):  # type: ignore[return]
+    """Spawn a subprocess and guarantee cleanup on exit — kills on exception."""
+    proc = await asyncio.create_subprocess_exec(*cmd, stdin=stdin, stdout=stdout, stderr=stderr)
+    try:
+        yield proc
+    finally:
+        if proc.returncode is None:
+            try:
+                proc.kill()
+            except ProcessLookupError:
+                pass
+            try:
+                await asyncio.wait_for(proc.wait(), timeout=5.0)
+            except (TimeoutError, ProcessLookupError):
+                pass
+
 
 # Marker the model must emit when it wants to call a tool.
 TOOL_CALL_TAG = "<tool_calls>"

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import fnmatch
+import os
 import time
 from typing import Any, Protocol, runtime_checkable
 
@@ -74,18 +75,20 @@ class RedisMemoryBackend:
 
     def __init__(
         self,
-        url: str = "redis://localhost:6379/0",
+        url: str | None = None,
         prefix: str = "orch:mem:",
         max_connections: int = 20,
     ) -> None:
+        url = url or os.environ.get("REDIS_URL", "redis://localhost:6379/0")
         import redis.asyncio as redis
         from redis.asyncio.connection import BlockingConnectionPool
         from redis.backoff import ExponentialBackoff
         from redis.retry import Retry
 
+        resolved_url = url or os.environ.get("REDIS_URL", "redis://localhost:6379/0")
         self.prefix = prefix
         self.pool = BlockingConnectionPool.from_url(
-            url,
+            resolved_url,
             max_connections=max_connections,
             timeout=5.0,
             retry=Retry(ExponentialBackoff(), 3),

@@ -59,6 +59,11 @@ server = [
     "watchfiles>=0.21",
 ]
 routing = ["numpy>=1.26"]
+crypto = [
+    "joserfc>=1.6",
+    "base58>=2.1",
+    "cryptography>=46.0.7",
+]
 security = [
     "wasmtime>=23.0",
     "joserfc>=1.6",
@@ -66,6 +71,7 @@ security = [
 ]
 redis = ["redis[hiredis]>=7.0", "msgpack>=1.0"]
 memory = [
+    "numpy>=1.26",
     "redis[hiredis]>=7.0",
     "msgpack>=1.0",
 ]
