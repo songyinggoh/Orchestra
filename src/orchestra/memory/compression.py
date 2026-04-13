@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import zlib
 from typing import Any, cast
 
 try:
@@ -9,8 +10,6 @@ try:
 
     HAS_PYZSTD = True
 except ImportError:
-    import zlib
-
     HAS_PYZSTD = False
 
 from orchestra.memory.serialization import _default, _object_hook

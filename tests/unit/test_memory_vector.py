@@ -261,21 +261,33 @@ class TestStateCompressorPayloads:
         """When pyzstd is unavailable the zlib path must produce a valid roundtrip."""
         import orchestra.memory.compression as comp_mod
 
-        # Temporarily patch HAS_PYZSTD to False so we exercise the zlib branch.
-        original = comp_mod.HAS_PYZSTD
-        comp_mod.HAS_PYZSTD = False
-        try:
-            # Also patch pyzstd out of scope for compress/decompress
-            with patch.object(comp_mod, "HAS_PYZSTD", False):
-                from orchestra.memory.compression import StateCompressor
+        with patch.object(comp_mod, "HAS_PYZSTD", False):
+            from orchestra.memory.compression import StateCompressor
 
-                c = StateCompressor(level=6)
-                data = {"hello": "world", "nums": [1, 2, 3]}
-                compressed = c.compress(data)
-                decompressed = c.decompress(compressed)
-                assert decompressed == data
-        finally:
-            comp_mod.HAS_PYZSTD = original
+            c = StateCompressor(level=6)
+            data = {"hello": "world", "nums": [1, 2, 3]}
+            compressed = c.compress(data)
+            decompressed = c.decompress(compressed)
+            assert decompressed == data
+
+    def test_decompress_zlib_data_when_pyzstd_present(self):
+        """decompress() must handle zlib-compressed legacy data even when pyzstd is present."""
+        import zlib
+
+        import msgpack
+        import orchestra.memory.compression as comp_mod
+
+        from orchestra.memory.serialization import _default, _object_hook
+
+        data = {"legacy": True, "value": 42}
+        packed = msgpack.packb(data, default=_default, use_bin_type=True)
+        zlib_bytes = zlib.compress(packed, 6)
+
+        # Simulate pyzstd present but data was written by the zlib path
+        with patch.object(comp_mod, "HAS_PYZSTD", True):
+            c = comp_mod.StateCompressor()
+            result = c.decompress(zlib_bytes)
+        assert result == data
 
 
 # ===========================================================================
