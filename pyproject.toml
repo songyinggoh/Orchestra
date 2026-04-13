@@ -87,7 +87,6 @@ qdrant = [
 promptshield = [
     "optimum[onnxruntime]>=1.24",
     "onnx>=1.21.0",
-    "transformers>=5.0.0rc3",
 ]
 nats = ["nats-py>=2.14"]
 messaging = [
