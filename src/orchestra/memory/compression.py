@@ -9,8 +9,10 @@ try:
     import pyzstd
 
     HAS_PYZSTD = True
+    _ZstdError: type[Exception] = pyzstd.ZstdError
 except ImportError:
     HAS_PYZSTD = False
+    _ZstdError = Exception  # never reached when HAS_PYZSTD is False
 
 from orchestra.memory.serialization import _default, _object_hook
 
@@ -45,8 +47,8 @@ class StateCompressor:
         if HAS_PYZSTD:
             try:
                 decompressed = pyzstd.decompress(data)
-            except Exception:
-                # Fallback to zlib if data was compressed with it
+            except (_ZstdError, ValueError):
+                # Fallback: data was written by the zlib path (legacy or pyzstd unavailable)
                 decompressed = zlib.decompress(data)
         else:
             decompressed = zlib.decompress(data)

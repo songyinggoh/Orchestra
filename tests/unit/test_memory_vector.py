@@ -258,12 +258,16 @@ class TestStateCompressorPayloads:
         assert len(result) > 0
 
     def test_zlib_fallback_path(self):
-        """When pyzstd is unavailable the zlib path must produce a valid roundtrip."""
+        """When pyzstd is unavailable the zlib path must produce a valid roundtrip.
+
+        Note: test_decompress_zlib_data_when_pyzstd_present is the primary regression
+        lock for the NameError fix (HAS_PYZSTD=True + zlib blob → must not NameError).
+        This test covers the pure-zlib roundtrip when pyzstd is absent.
+        """
         import orchestra.memory.compression as comp_mod
+        from orchestra.memory.compression import StateCompressor
 
         with patch.object(comp_mod, "HAS_PYZSTD", False):
-            from orchestra.memory.compression import StateCompressor
-
             c = StateCompressor(level=6)
             data = {"hello": "world", "nums": [1, 2, 3]}
             compressed = c.compress(data)
@@ -277,7 +281,7 @@ class TestStateCompressorPayloads:
         import msgpack
         import orchestra.memory.compression as comp_mod
 
-        from orchestra.memory.serialization import _default, _object_hook
+        from orchestra.memory.serialization import _default
 
         data = {"legacy": True, "value": 42}
         packed = msgpack.packb(data, default=_default, use_bin_type=True)
