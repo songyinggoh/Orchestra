@@ -1,24 +1,8 @@
 /** Thin wrapper around fetch for Orchestra API calls. */
 
+import { authHeaders } from './auth';
+
 const BASE = '/api/v1';
-
-function getApiKey(): string | null {
-  // Build-time key (set via VITE_ORCHESTRA_API_KEY) takes precedence; falls back
-  // to a runtime key stored in localStorage under `orchestra_api_key`.
-  const envKey = (import.meta as { env?: Record<string, string | undefined> }).env
-    ?.VITE_ORCHESTRA_API_KEY;
-  if (envKey) return envKey;
-  try {
-    return typeof localStorage !== 'undefined' ? localStorage.getItem('orchestra_api_key') : null;
-  } catch {
-    return null;
-  }
-}
-
-function authHeaders(): Record<string, string> {
-  const key = getApiKey();
-  return key ? { Authorization: `Bearer ${key}` } : {};
-}
 
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
