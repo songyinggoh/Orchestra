@@ -243,6 +243,35 @@ def test_get_graph_not_found(client: Any) -> None:
     assert response.status_code == 404
 
 
+def test_list_graphs_includes_handoff_edges(app: Any) -> None:
+    """Regression: /graphs must surface HandoffEdges, not just Edge/Conditional/Parallel."""
+    from orchestra.core.graph import WorkflowGraph
+
+    async def researcher(state: dict[str, Any]) -> dict[str, Any]:
+        return {"output": state.get("input", "")}
+
+    async def writer(state: dict[str, Any]) -> dict[str, Any]:
+        return {"output": state.get("input", "")}
+
+    graph = WorkflowGraph(name="handoff-graph")
+    graph.add_node("researcher", researcher)
+    graph.add_node("writer", writer)
+    graph.set_entry_point("researcher")
+    graph.add_handoff("researcher", "writer")
+    compiled = graph.compile()
+
+    with TestClient(app, raise_server_exceptions=False) as client:
+        app.state.graph_registry.register("handoff-graph", compiled)
+        response = client.get("/api/v1/graphs/handoff-graph")
+        assert response.status_code == 200
+        data = response.json()
+        handoff_edges = [e for e in data["edges"] if e["type"] == "HandoffEdge"]
+        assert len(handoff_edges) == 1
+        assert handoff_edges[0]["source"] == "researcher"
+        assert handoff_edges[0]["target"] == "writer"
+        assert handoff_edges[0]["conditional"] is False
+
+
 # ---------------------------------------------------------------------------
 # Resume
 # ---------------------------------------------------------------------------

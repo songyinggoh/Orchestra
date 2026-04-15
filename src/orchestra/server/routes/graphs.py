@@ -29,11 +29,25 @@ async def get_graph(name: str, request: Request) -> GraphInfo:
 
     edges_list: list[dict[str, Any]] = []
     for edge in graph._edges:
+        target = getattr(edge, "target", getattr(edge, "targets", ""))
+        if not isinstance(target, (str, list)):
+            target = str(target)
+        elif isinstance(target, list):
+            target = [str(t) if not isinstance(t, str) else t for t in target]
         edges_list.append(
             {
                 "type": type(edge).__name__,
                 "source": getattr(edge, "source", ""),
-                "target": getattr(edge, "target", getattr(edge, "targets", "")),
+                "target": target,
+            }
+        )
+    for h_edge in getattr(graph, "_handoff_edges", []):
+        edges_list.append(
+            {
+                "type": type(h_edge).__name__,
+                "source": h_edge.source,
+                "target": h_edge.target,
+                "conditional": h_edge.condition is not None,
             }
         )
 

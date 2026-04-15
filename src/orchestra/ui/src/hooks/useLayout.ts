@@ -38,14 +38,19 @@ export function layoutGraph(graph: GraphInfo): { nodes: Node[]; edges: Edge[] } 
     for (const t of targets) {
       const target = t === '__end__' || t === 'END' ? '__end__' : t;
       g.setEdge(edge.source, target);
+      const isHandoff = edge.type === 'HandoffEdge';
+      const isConditional = edge.type === 'ConditionalEdge';
       rfEdges.push({
         id: `e-${edgeIdx++}`,
         source: edge.source,
         target,
         type: 'smoothstep',
         animated: edge.type === 'ParallelEdge',
-        style: { stroke: edge.type === 'ConditionalEdge' ? '#f59e0b' : '#555' },
-        label: edge.type === 'ConditionalEdge' ? '?' : undefined,
+        style: {
+          stroke: isHandoff ? '#8b5cf6' : isConditional ? '#f59e0b' : '#555',
+          strokeDasharray: isHandoff ? '6 4' : undefined,
+        },
+        label: isHandoff ? 'handoff' : isConditional ? '?' : undefined,
       });
     }
   }

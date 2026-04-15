@@ -60,6 +60,15 @@ class GraphRegistry:
                             "target": target,
                         }
                     )
+                for h_edge in getattr(graph, "_handoff_edges", []):
+                    edges_list.append(
+                        {
+                            "type": type(h_edge).__name__,
+                            "source": h_edge.source,
+                            "target": h_edge.target,
+                            "conditional": h_edge.condition is not None,
+                        }
+                    )
                 result.append(
                     GraphInfo(
                         name=name,

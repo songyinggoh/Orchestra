@@ -11,6 +11,12 @@ interface UseSSEOptions {
 /**
  * Hook that connects to the SSE stream for a workflow run.
  * Automatically reconnects using Last-Event-ID.
+ *
+ * KNOWN LIMITATION: the browser's EventSource API cannot set request headers,
+ * so this connection does not carry an Authorization bearer token. Against a
+ * server started with ORCHESTRA_API_KEY / ORCHESTRA_SERVER_KEY set, the stream
+ * will 401. Fixing this requires replacing EventSource with a fetch+
+ * ReadableStream reader (or an EventSource polyfill that supports headers).
  */
 export function useSSE({ runId, onEvent, onDone, onError }: UseSSEOptions) {
   const sourceRef = useRef<EventSource | null>(null);

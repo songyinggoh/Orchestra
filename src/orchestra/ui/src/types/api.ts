@@ -17,9 +17,10 @@ export interface RunResponse {
 }
 
 export interface GraphEdge {
-  type: 'Edge' | 'ConditionalEdge' | 'ParallelEdge';
+  type: 'Edge' | 'ConditionalEdge' | 'ParallelEdge' | 'HandoffEdge';
   source: string;
   target: string | string[];
+  conditional?: boolean;
 }
 
 export interface GraphInfo {
