@@ -16,6 +16,12 @@
     "noEmit": true,
     "jsx": "react-jsx",
 
+    /* Path alias (T-6.1.1) */
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"]
+    },
+
     /* Linting */
     "strict": true,
     "noUnusedLocals": true,
