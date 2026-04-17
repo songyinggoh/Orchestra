@@ -82,6 +82,7 @@ export function layoutGraph(graph: GraphInfo): { nodes: Node[]; edges: Edge[] } 
       data: {
         label: isVirtual ? (id === '__start__' ? 'Start' : 'End') : id,
         nodeId: id,
+        variant: (isVirtual ? 'terminal' : 'agent') as 'terminal' | 'agent',
       },
     };
   });

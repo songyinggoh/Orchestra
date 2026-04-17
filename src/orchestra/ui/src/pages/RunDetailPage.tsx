@@ -1,10 +1,29 @@
-/**
- * RunDetailPage — stub wired up in T-6.1.3; fully implemented in T-6.1.9.
- * Reads route params and seeds UIStore so W2 scrubber can consume them.
- */
-import { useEffect } from 'react';
+import { useEffect, useMemo, useCallback } from 'react';
 import { useParams } from 'react-router';
+import { useQuery } from '@tanstack/react-query';
+import {
+  ReactFlow, Background, Controls, MiniMap, type Node,
+} from '@xyflow/react';
+import { toast } from 'sonner';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel,
+  AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
+  AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
+import { Button } from '@/components/ui/button';
 import { useUIStore } from '../stores/useUIStore';
+import { useRunStore, getRunStore } from '../stores/useRunStore';
+import { useSSE } from '../hooks/useSSE';
+import { api, UnauthorizedError } from '../hooks/useApi';
+import { layoutGraph } from '../hooks/useLayout';
+import { NodeCard } from '../components/graph/NodeCard';
+import { CostBar } from '../components/cost/CostBar';
+import { StateViewer } from '../components/state/StateViewer';
+import { RunDetailShell } from '../layout/RunDetailShell';
+import type { AnyEvent } from '../types/events';
+import type { GraphInfo, RunStatus } from '../types/api';
+
+const NODE_TYPES = { agent: NodeCard, terminal: NodeCard };
 
 interface RunDetailPageProps {
   securityFilter?: boolean;
@@ -17,32 +36,204 @@ export function RunDetailPage({ securityFilter, costTab }: RunDetailPageProps) {
   const setTimelineFilter = useUIStore((s) => s.setTimelineFilter);
   const setRightPaneTab = useUIStore((s) => s.setRightPaneTab);
 
+  // Seed UIStore from route params
   useEffect(() => {
-    if (sequence !== undefined) {
-      setSelectedSequence(parseInt(sequence, 10));
-    } else {
-      setSelectedSequence(null);
-    }
+    setSelectedSequence(sequence !== undefined ? parseInt(sequence, 10) : null);
   }, [sequence, setSelectedSequence]);
 
   useEffect(() => {
-    if (securityFilter) {
-      setTimelineFilter({ type: 'security' });
-      setRightPaneTab('security');
-    } else if (costTab) {
-      setRightPaneTab('cost');
-    } else {
-      setTimelineFilter({ type: 'all' });
-      setRightPaneTab('timeline');
-    }
+    if (securityFilter) { setTimelineFilter({ type: 'security' }); setRightPaneTab('security'); }
+    else if (costTab)   { setRightPaneTab('cost'); }
+    else                { setTimelineFilter({ type: 'all' }); setRightPaneTab('timeline'); }
   }, [securityFilter, costTab, setTimelineFilter, setRightPaneTab]);
+
+  const { data: runInfo } = useQuery<RunStatus>({
+    queryKey: ['runs', runId],
+    queryFn: () => api.getRun(runId!),
+    enabled: !!runId,
+  });
+
+  const { data: graph } = useQuery<GraphInfo>({
+    queryKey: ['graphs', runInfo?.workflow_name],
+    queryFn: () => api.getGraph(runInfo!.workflow_name),
+    enabled: !!runInfo?.workflow_name,
+    staleTime: 60_000,
+  });
+
+  // Load historical events + state into the run store
+  useEffect(() => {
+    if (!runId) return;
+    let active = true;
+    (async () => {
+      try {
+        const [items, st] = await Promise.all([
+          api.getEvents(runId),
+          api.getState(runId).catch(() => null),
+        ]);
+        if (!active) return;
+        const events = items.map((item) => ({
+          event_type: item.event_type,
+          event_id: item.event_id,
+          run_id: item.run_id,
+          sequence: item.sequence,
+          timestamp: item.timestamp,
+          schema_version: 1,
+          ...item.data,
+        } as AnyEvent));
+        getRunStore(runId).getState().setInitial(events, st?.state ?? {});
+      } catch (e) {
+        if (e instanceof UnauthorizedError) toast.error('Missing API key — check Settings');
+      }
+    })();
+    return () => { active = false; };
+  }, [runId]);
+
+  // Wire graph topology into store
+  useEffect(() => {
+    if (runId && graph) getRunStore(runId).getState().setGraph(graph);
+  }, [runId, graph]);
+
+  // SSE for live runs
+  const onEvent = useCallback((event: AnyEvent) => {
+    if (runId) getRunStore(runId).getState().ingestEvent(event);
+  }, [runId]);
+
+  const onDone = useCallback(() => {
+    if (runId) getRunStore(runId).getState().setSseConnected(false);
+  }, [runId]);
+
+  const onSseError = useCallback(() => {
+    if (runId) getRunStore(runId).getState().incrementReconnect();
+  }, [runId]);
+
+  useSSE({
+    runId: runInfo?.status === 'running' ? (runId ?? null) : null,
+    onEvent, onDone, onError: onSseError,
+  });
+
+  // Build enriched ReactFlow nodes from store
+  const nodeStatuses = useRunStore(runId ?? '', (s) => s.nodeStatuses);
+  const nodeData = useRunStore(runId ?? '', (s) => s.nodeData);
+  const metrics = useRunStore(runId ?? '', (s) => s.metrics);
+  const currentState = useRunStore(runId ?? '', (s) => s.currentState);
+
+  const { nodes: baseNodes, edges } = useMemo(
+    () => (graph ? layoutGraph(graph) : { nodes: [], edges: [] }),
+    [graph],
+  );
+
+  const nodes: Node[] = useMemo(
+    () => baseNodes.map((n) => ({
+      ...n,
+      data: {
+        ...n.data,
+        status: nodeStatuses[n.id],
+        model: nodeData[n.id]?.model ?? null,
+        costUsd: nodeData[n.id]?.cost,
+        securityCount: nodeData[n.id]?.securityCount ?? 0,
+      },
+    })),
+    [baseNodes, nodeStatuses, nodeData],
+  );
+
+  async function handleCancel() {
+    if (!runId) return;
+    try {
+      await api.cancelRun(runId);
+      toast.success('Run cancelled');
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  }
 
   if (!runId) return null;
 
-  // Full implementation in T-6.1.9 — renders RunDetailShell.
-  return (
-    <div className="flex h-full items-center justify-center">
-      <p className="text-sm text-zinc-500">Loading run {runId}…</p>
+  const graphCanvas = (
+    <div className="flex h-full flex-col">
+      {/* Header */}
+      <div className="flex items-center gap-3 border-b border-zinc-800 bg-zinc-900 px-4 py-2">
+        <span className="text-sm font-medium text-zinc-300">
+          {runInfo?.workflow_name ?? 'workflow'}
+        </span>
+        <span className="font-mono text-xs text-zinc-600">/ {runId.slice(0, 8)}</span>
+        <div className="ml-auto flex items-center gap-2">
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="outline" size="sm" className="h-7 text-xs" disabled={runInfo?.status !== 'running'}>
+                Cancel run
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Cancel this run?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  The run will be stopped. This cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Keep running</AlertDialogCancel>
+                <AlertDialogAction onClick={handleCancel}>Cancel run</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+          <Button variant="outline" size="sm" className="h-7 text-xs" disabled>
+            Fork from latest — W2
+          </Button>
+        </div>
+      </div>
+
+      <CostBar
+        status={metrics.status}
+        elapsed={metrics.duration}
+        tokens={metrics.totalTokens}
+        cost={metrics.totalCost}
+        calls={Object.values(nodeData).reduce((s, d) => s + d.toolCount, 0)}
+      />
+
+      <div className="flex-1 overflow-hidden">
+        {graph ? (
+          <ReactFlow
+            nodes={nodes}
+            edges={edges}
+            nodeTypes={NODE_TYPES}
+            colorMode="dark"
+            fitView
+            nodesDraggable={false}
+            nodesConnectable={false}
+            elementsSelectable={true}
+            minZoom={0.3}
+            maxZoom={2}
+            role="application"
+            aria-label="workflow graph"
+          >
+            <Background gap={20} color="#27272a" />
+            <Controls showInteractive={false} />
+            <MiniMap
+              nodeColor={(n) => {
+                const s = (n.data as { status?: string }).status;
+                if (s === 'running') return '#f59e0b';
+                if (s === 'completed') return '#10b981';
+                if (s === 'error') return '#ef4444';
+                if (s === 'waiting') return '#8b5cf6';
+                return '#3f3f46';
+              }}
+              maskColor="rgba(9,9,11,0.7)"
+            />
+          </ReactFlow>
+        ) : (
+          <div className="flex h-full items-center justify-center text-sm text-zinc-600">
+            {metrics.status !== 'pending' ? 'Graph topology not available' : 'Loading…'}
+          </div>
+        )}
+      </div>
     </div>
+  );
+
+  return (
+    <RunDetailShell
+      runId={runId}
+      graphCanvas={graphCanvas}
+      stateViewer={<StateViewer state={currentState} />}
+    />
   );
 }

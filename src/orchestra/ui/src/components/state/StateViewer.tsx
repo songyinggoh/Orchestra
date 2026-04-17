@@ -11,16 +11,14 @@ export function StateViewer({ state }: StateViewerProps) {
   return (
     <div className="border-t border-zinc-800 bg-zinc-900/50">
       <button
-        className="w-full px-3 py-1.5 text-left text-[11px] font-medium text-zinc-400 hover:text-zinc-300 flex items-center gap-1"
+        className="flex w-full items-center gap-1 px-3 py-1.5 text-left text-[11px] font-medium text-zinc-400 hover:text-zinc-300"
         onClick={() => setCollapsed(!collapsed)}
       >
-        <span className="transition-transform" style={{ transform: collapsed ? 'rotate(-90deg)' : 'rotate(0)' }}>
-          {'\u25BE'}
-        </span>
+        <span style={{ transform: collapsed ? 'rotate(-90deg)' : 'rotate(0)' }}>▾</span>
         State ({keys.length} key{keys.length !== 1 ? 's' : ''})
       </button>
       {!collapsed && (
-        <pre className="px-3 pb-2 text-[11px] font-mono text-zinc-400 overflow-auto max-h-48 scroll-thin">
+        <pre className="max-h-48 overflow-auto px-3 pb-2 font-mono text-[11px] text-zinc-400">
           {JSON.stringify(state, null, 2)}
         </pre>
       )}
