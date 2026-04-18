@@ -23,6 +23,7 @@ export const router = createBrowserRouter(
         { path: 'runs/:runId/cost', element: <RunDetailPage costTab /> },
         { path: 'graphs', element: <GraphsListPage /> },
         { path: 'graphs/:name', element: <GraphDetailPage /> },
+        { path: 'cost', element: <CostDashboardPage /> },
         { path: 'settings', element: <SettingsPage /> },
         { path: '*', element: <NotFoundPage /> },
       ],
