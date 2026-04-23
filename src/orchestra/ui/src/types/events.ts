@@ -144,6 +144,8 @@ export interface InterruptRequested extends WorkflowEvent {
   event_type: 'interrupt.requested';
   node_id: string;
   interrupt_type: string;
+  /** Free-form human-review payload — UI reads known keys like `question`. */
+  payload: Record<string, unknown>;
 }
 
 export interface InterruptResumed extends WorkflowEvent {

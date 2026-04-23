@@ -62,7 +62,15 @@ class ErrorResponse(BaseModel):
 
 
 class ResumeRequest(BaseModel):
-    """Request body for resuming an interrupted run."""
+    """Request body for resuming an interrupted run.
+
+    `state_updates` is the resume payload mechanism. Nodes read the user's
+    decision from state (e.g. `state_updates={"decision": "approve"}` → the
+    resumed node reads `state["decision"]` to branch). Unlike LangGraph's
+    `Command(resume=...)`, Orchestra has no separate interrupt-return channel:
+    decisions flow through state. UIs should encode choices as explicit state
+    keys rather than relying on a reserved `decision` field.
+    """
 
     state_updates: dict[str, Any] = Field(default_factory=dict)
 

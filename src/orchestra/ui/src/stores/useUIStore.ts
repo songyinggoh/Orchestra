@@ -23,6 +23,8 @@ interface UIState {
   /** Right-pane tab in RunDetailShell */
   rightPaneTab: 'timeline' | 'state' | 'cost' | 'security';
   cmdKOpen: boolean;
+  /** ScrubberBar playback rate (events/sec). Consumed by W2 ScrubberBar. */
+  playbackRate: number;
 
   // Actions
   setSelectedSequence: (seq: number | null) => void;
@@ -30,6 +32,7 @@ interface UIState {
   setTimelineFilter: (filter: TimelineFilter) => void;
   setRightPaneTab: (tab: UIState['rightPaneTab']) => void;
   setCmdKOpen: (open: boolean) => void;
+  setPlaybackRate: (rate: number) => void;
 }
 
 export const useUIStore = create<UIState>()((set) => ({
@@ -38,6 +41,7 @@ export const useUIStore = create<UIState>()((set) => ({
   timelineFilter: { type: 'all' },
   rightPaneTab: 'timeline',
   cmdKOpen: false,
+  playbackRate: 2,
 
   setSelectedSequence: (seq) => set({ selectedSequence: seq }),
   setPanelVisibility: (patch) =>
@@ -45,4 +49,5 @@ export const useUIStore = create<UIState>()((set) => ({
   setTimelineFilter: (filter) => set({ timelineFilter: filter }),
   setRightPaneTab: (tab) => set({ rightPaneTab: tab }),
   setCmdKOpen: (open) => set({ cmdKOpen: open }),
+  setPlaybackRate: (rate) => set({ playbackRate: rate }),
 }));
