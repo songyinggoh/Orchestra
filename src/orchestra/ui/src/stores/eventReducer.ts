@@ -122,8 +122,12 @@ export function eventReducer(state: ReducerState, event: AnyEvent): Partial<Redu
       };
 
     case 'state.updated':
+      // Mirror server's project_state: prefer resulting_state (full replace),
+      // fall back to field_updates (partial merge) when resulting_state is empty.
       return {
-        currentState: event.resulting_state,
+        currentState: Object.keys(event.resulting_state).length > 0
+          ? event.resulting_state
+          : { ...state.currentState, ...event.field_updates },
       };
 
     case 'llm.called': {
@@ -189,8 +193,8 @@ export function eventReducer(state: ReducerState, event: AnyEvent): Partial<Redu
       };
 
     case 'checkpoint.created':
-      // Scrubber diamond tick is handled in W2; no state mutation here.
-      return {};
+      // Match server's project_state: checkpoints fast-forward state.
+      return { currentState: event.state_snapshot };
 
     case 'security.violation':
       return markSecure(state, (event as SecurityViolation).node_id);
