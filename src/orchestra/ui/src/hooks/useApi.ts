@@ -15,6 +15,9 @@ import type {
   GraphInfo,
   ForkRequest,
   ForkResponse,
+  ResumeRequest,
+  CreateRunRequest,
+  CreateRunResponse,
 } from '../types/api';
 
 const BASE = '/api/v1';
@@ -67,6 +70,16 @@ export const api = {
     apiFetch<RunStatus>(`/runs/${encodeURIComponent(id)}/cancel`, { method: 'POST' }),
   forkRun: (id: string, body: ForkRequest) =>
     apiFetch<ForkResponse>(`/runs/${encodeURIComponent(id)}/fork`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  resumeRun: (id: string, body: ResumeRequest) =>
+    apiFetch<void>(`/runs/${encodeURIComponent(id)}/resume`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  createRun: (body: CreateRunRequest) =>
+    apiFetch<CreateRunResponse>('/runs', {
       method: 'POST',
       body: JSON.stringify(body),
     }),

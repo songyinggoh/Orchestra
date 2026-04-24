@@ -15,6 +15,8 @@ import {
   type RunMetrics,
 } from './eventReducer';
 
+export type SseState = 'idle' | 'connected' | 'reconnecting' | 'disconnected';
+
 export interface RunSlice {
   // Data
   graph: GraphInfo | null;
@@ -25,12 +27,14 @@ export interface RunSlice {
   metrics: RunMetrics;
   // SSE connection state
   sseConnected: boolean;
+  sseState: SseState;
   reconnectAttempts: number;
   // Actions
   setGraph: (graph: GraphInfo) => void;
   setInitial: (events: AnyEvent[], state: Record<string, unknown>) => void;
   ingestEvent: (event: AnyEvent) => void;
   setSseConnected: (connected: boolean) => void;
+  setSseState: (state: SseState) => void;
   incrementReconnect: () => void;
   reset: () => void;
 }
@@ -47,6 +51,7 @@ function createRunStore() {
       currentState: {},
       metrics: { ...initialReducerState.metrics },
       sseConnected: false,
+      sseState: 'idle' as SseState,
       reconnectAttempts: 0,
 
       setGraph(graph) {
@@ -85,11 +90,19 @@ function createRunStore() {
       },
 
       setSseConnected(connected) {
-        set({ sseConnected: connected, ...(connected ? { reconnectAttempts: 0 } : {}) });
+        set({
+          sseConnected: connected,
+          sseState: connected ? 'connected' : 'idle',
+          ...(connected ? { reconnectAttempts: 0 } : {}),
+        });
+      },
+
+      setSseState(state) {
+        set({ sseState: state, ...(state === 'connected' ? { sseConnected: true, reconnectAttempts: 0 } : {}) });
       },
 
       incrementReconnect() {
-        set((s) => ({ reconnectAttempts: s.reconnectAttempts + 1 }));
+        set((s) => ({ reconnectAttempts: s.reconnectAttempts + 1, sseState: 'reconnecting' }));
       },
 
       reset() {
@@ -101,6 +114,7 @@ function createRunStore() {
           currentState: {},
           metrics: { ...initialReducerState.metrics },
           sseConnected: false,
+          sseState: 'idle',
           reconnectAttempts: 0,
         });
       },

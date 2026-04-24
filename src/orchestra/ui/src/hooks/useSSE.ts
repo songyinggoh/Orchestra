@@ -7,6 +7,8 @@ interface UseSSEOptions {
   onEvent: (event: AnyEvent) => void;
   onDone?: () => void;
   onError?: (err: Error) => void;
+  onReconnecting?: (attempt: number) => void;
+  onDisconnected?: () => void;
 }
 
 const EVENT_TYPES = new Set([
@@ -31,9 +33,10 @@ const RETRY_BASE_MS = 500;
  * API so it can send an Authorization header (ORCHESTRA_API_KEY /
  * ORCHESTRA_SERVER_KEY). Reconnects on transient errors using Last-Event-ID.
  */
-export function useSSE({ runId, onEvent, onDone, onError }: UseSSEOptions) {
+export function useSSE({ runId, onEvent, onDone, onError, onReconnecting, onDisconnected }: UseSSEOptions) {
   const abortRef = useRef<AbortController | null>(null);
   const lastIdRef = useRef<string>('0');
+  const lastSeqRef = useRef<number>(-1);
   const closedRef = useRef<boolean>(false);
 
   const close = useCallback(() => {
@@ -49,6 +52,7 @@ export function useSSE({ runId, onEvent, onDone, onError }: UseSSEOptions) {
 
     closedRef.current = false;
     lastIdRef.current = '0';
+    lastSeqRef.current = -1;
 
     const dispatchRecord = (eventType: string, dataLines: string[], id: string) => {
       if (id) lastIdRef.current = id;
@@ -62,6 +66,7 @@ export function useSSE({ runId, onEvent, onDone, onError }: UseSSEOptions) {
       if (!raw) return;
       try {
         const data = JSON.parse(raw) as AnyEvent;
+        if (typeof data.sequence === 'number') lastSeqRef.current = data.sequence;
         onEvent(data);
       } catch {
         // ignore parse errors (pings, malformed payloads)
@@ -102,7 +107,8 @@ export function useSSE({ runId, onEvent, onDone, onError }: UseSSEOptions) {
       if (closedRef.current) return;
       const controller = new AbortController();
       abortRef.current = controller;
-      const url = `/api/v1/runs/${encodeURIComponent(runId)}/stream`;
+      const afterSeq = lastSeqRef.current >= 0 ? lastSeqRef.current : -1;
+      const url = `/api/v1/runs/${encodeURIComponent(runId)}/stream${afterSeq >= 0 ? `?after_sequence=${afterSeq}` : ''}`;
       const headers: Record<string, string> = {
         Accept: 'text/event-stream',
         ...authHeaders(),
@@ -140,9 +146,11 @@ export function useSSE({ runId, onEvent, onDone, onError }: UseSSEOptions) {
         const error = err instanceof Error ? err : new Error(String(err));
         onError?.(error);
         if (attempt >= MAX_RETRIES) {
+          onDisconnected?.();
           close();
           return;
         }
+        onReconnecting?.(attempt + 1);
         const delay = RETRY_BASE_MS * 2 ** attempt;
         await new Promise((r) => setTimeout(r, delay));
         if (!closedRef.current) {
@@ -156,7 +164,7 @@ export function useSSE({ runId, onEvent, onDone, onError }: UseSSEOptions) {
     return () => {
       close();
     };
-  }, [runId, onEvent, onDone, onError, close]);
+  }, [runId, onEvent, onDone, onError, onReconnecting, onDisconnected, close]);
 
   return { close };
 }

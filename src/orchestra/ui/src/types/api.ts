@@ -74,3 +74,17 @@ export interface ForkResponse {
   parent_run_id: string;
   from_sequence: number;
 }
+
+export interface ResumeRequest {
+  decision: string | Record<string, unknown>;
+}
+
+export interface CreateRunRequest {
+  workflow_name: string;
+  initial_input: Record<string, unknown>;
+  run_id?: string;
+}
+
+export interface CreateRunResponse {
+  run_id: string;
+}

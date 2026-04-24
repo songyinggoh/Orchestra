@@ -24,6 +24,8 @@ export interface NodeData {
   toolCount: number;
   /** Number of security events originating from this node */
   securityCount: number;
+  /** True when an interrupt.requested has been emitted but not yet resumed */
+  awaitingResume: boolean;
 }
 
 export interface RunMetrics {
@@ -59,7 +61,7 @@ export const initialReducerState: ReducerState = {
 };
 
 function nodeDataFor(state: ReducerState, nodeId: string): NodeData {
-  return state.nodeData[nodeId] ?? { cost: 0, model: null, toolCount: 0, securityCount: 0 };
+  return state.nodeData[nodeId] ?? { cost: 0, model: null, toolCount: 0, securityCount: 0, awaitingResume: false };
 }
 
 function markSecure(state: ReducerState, nodeId: string): Partial<ReducerState> {
@@ -184,12 +186,20 @@ export function eventReducer(state: ReducerState, event: AnyEvent): Partial<Redu
     case 'interrupt.requested':
       return {
         nodeStatuses: { ...state.nodeStatuses, [event.node_id]: 'waiting' },
+        nodeData: {
+          ...state.nodeData,
+          [event.node_id]: { ...nodeDataFor(state, event.node_id), awaitingResume: true },
+        },
       };
 
     case 'interrupt.resumed':
       return {
         nodeStatuses: { ...state.nodeStatuses, [event.node_id]: 'running' },
         currentState: { ...state.currentState, ...event.state_modifications },
+        nodeData: {
+          ...state.nodeData,
+          [event.node_id]: { ...nodeDataFor(state, event.node_id), awaitingResume: false },
+        },
       };
 
     case 'checkpoint.created':

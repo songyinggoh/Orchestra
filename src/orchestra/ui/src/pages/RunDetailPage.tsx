@@ -22,10 +22,11 @@ import { ScrubberBar } from '../components/scrubber/ScrubberBar';
 import { StateViewer } from '../components/state/StateViewer';
 import { StateDiff } from '../components/state/StateDiff';
 import { ForkComposer } from '../components/fork/ForkComposer';
+import { ResumeDialog } from '../components/resume/ResumeDialog';
 import { RunDetailShell } from '../layout/RunDetailShell';
 import { projectState, useProjection } from '../lib/projectState';
 import { useShortcuts } from '../lib/shortcuts';
-import type { AnyEvent } from '../types/events';
+import type { AnyEvent, InterruptRequested } from '../types/events';
 import type { GraphInfo, RunStatus } from '../types/api';
 
 const NODE_TYPES = { agent: NodeCard, terminal: NodeCard };
@@ -127,9 +128,22 @@ export function RunDetailPage({ securityFilter, costTab }: RunDetailPageProps) {
     if (runId) getRunStore(runId).getState().incrementReconnect();
   }, [runId]);
 
+  const onReconnecting = useCallback(() => {
+    if (runId) getRunStore(runId).getState().setSseState('reconnecting');
+    toast.warning('Live stream disconnected. Retrying…', { id: 'sse-reconnect' });
+  }, [runId]);
+
+  const onDisconnected = useCallback(() => {
+    if (runId) getRunStore(runId).getState().setSseState('disconnected');
+    toast.error('Lost connection to the server. Viewing historical events only. Refresh to retry.', {
+      id: 'sse-disconnected',
+      duration: Infinity,
+    });
+  }, [runId]);
+
   useSSE({
     runId: runInfo?.status === 'running' ? (runId ?? null) : null,
-    onEvent, onDone, onError: onSseError,
+    onEvent, onDone, onError: onSseError, onReconnecting, onDisconnected,
   });
 
   // Live (full-stream) projection from the run store.
@@ -187,6 +201,21 @@ export function RunDetailPage({ securityFilter, costTab }: RunDetailPageProps) {
       toast.error((e as Error).message);
     }
   }
+
+  // Detect pending interrupt: any node with awaitingResume=true whose event is in the stream.
+  const pendingInterrupt = useMemo((): InterruptRequested | null => {
+    const awaitingNode = Object.entries(nodeData).find(([, d]) => d.awaitingResume)?.[0];
+    if (!awaitingNode) return null;
+    for (let i = events.length - 1; i >= 0; i--) {
+      const ev = events[i];
+      if (ev.event_type === 'interrupt.requested' && ev.node_id === awaitingNode) {
+        return ev as InterruptRequested;
+      }
+    }
+    return null;
+  }, [nodeData, events]);
+
+  const [resumeOpen, setResumeOpen] = useState(false);
 
   // ForkComposer — open state + pinned fork point (sequence + seed).
   // Capture the point at open time so the composer stays stable even if the
@@ -252,6 +281,16 @@ export function RunDetailPage({ securityFilter, costTab }: RunDetailPageProps) {
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
+          {pendingInterrupt && (
+            <Button
+              size="sm"
+              className="h-7 bg-violet-500 text-xs text-white hover:bg-violet-400"
+              onClick={() => setResumeOpen(true)}
+              title="Resume run (R)"
+            >
+              Resume run
+            </Button>
+          )}
           <Button
             variant="outline"
             size="sm"
@@ -344,6 +383,14 @@ export function RunDetailPage({ securityFilter, costTab }: RunDetailPageProps) {
           seedState={forkPoint.state}
           open={forkOpen}
           onOpenChange={setForkOpen}
+        />
+      )}
+      {pendingInterrupt && (
+        <ResumeDialog
+          runId={runId}
+          interrupt={pendingInterrupt}
+          open={resumeOpen}
+          onOpenChange={setResumeOpen}
         />
       )}
     </>
