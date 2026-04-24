@@ -52,7 +52,7 @@ export function ResumeDialog({ runId, interrupt, open, onOpenChange }: ResumeDia
     if (!decision.trim()) return;
     setSubmitting(true);
     try {
-      await api.resumeRun(runId, { decision });
+      await api.resumeRun(runId, { state_updates: { decision } });
       toast.success('Run resumed');
       onOpenChange(false);
     } catch (e) {

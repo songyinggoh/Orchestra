@@ -1,24 +1,36 @@
 /**
- * Minimal keyboard-shortcut registry.
- *
- * W2 only uses this for the scrubber 5 keys (← → Space Home/End .).
- * W3 will extend it with Cmd-K palette integration and a user-visible
- * "press ? for help" cheatsheet. Keep the surface small until then.
- *
- * Callers use `useShortcuts` to bind handlers while a component is mounted;
- * the hook attaches a single window keydown listener and dispatches by key.
- * Shortcuts are ignored while focus is inside an editable element (input,
- * textarea, contenteditable) so users can type freely inside dialogs.
+ * Keyboard-shortcut registry with sequence support (e.g. "g r").
+ * W3 extends W2's minimal stub with a full registry and help dialog.
  */
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 
 export type ShortcutHandler = (ev: KeyboardEvent) => void;
 
 export interface ShortcutMap {
-  /** Map of key tokens → handler. Tokens match `KeyboardEvent.key`
-   * ('ArrowLeft', 'ArrowRight', ' ', 'Home', 'End', '.', 'F', 'R'). */
   [key: string]: ShortcutHandler;
+}
+
+export type ShortcutScope = 'global' | 'run-detail' | 'run-list';
+
+export interface Shortcut {
+  id: string;
+  keys: string[];
+  sequence?: boolean;
+  scope: ShortcutScope;
+  label: string;
+  handler: () => void;
+}
+
+const registry = new Map<string, Shortcut>();
+
+export function registerShortcut(s: Shortcut): () => void {
+  registry.set(s.id, s);
+  return () => registry.delete(s.id);
+}
+
+export function getRegistry(): Shortcut[] {
+  return Array.from(registry.values());
 }
 
 function isEditableTarget(target: EventTarget | null): boolean {
@@ -29,12 +41,12 @@ function isEditableTarget(target: EventTarget | null): boolean {
   return false;
 }
 
+/** Legacy simple map hook — used by ScrubberBar and RunDetailPage. */
 export function useShortcuts(map: ShortcutMap, enabled: boolean = true): void {
   useEffect(() => {
     if (!enabled) return;
     function onKey(ev: KeyboardEvent) {
       if (isEditableTarget(ev.target)) return;
-      // Normalize space — some browsers report 'Spacebar'.
       const key = ev.key === 'Spacebar' ? ' ' : ev.key;
       const handler = map[key];
       if (handler) handler(ev);
@@ -42,4 +54,52 @@ export function useShortcuts(map: ShortcutMap, enabled: boolean = true): void {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [map, enabled]);
+}
+
+/** Sequence-aware hook that supports "g r" style chords (1s window). */
+export function useGlobalShortcutListener(): void {
+  const pendingRef = useRef<string | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    function onKey(ev: KeyboardEvent) {
+      if (isEditableTarget(ev.target)) return;
+      const key = ev.key === 'Spacebar' ? ' ' : ev.key;
+
+      const shortcuts = getRegistry();
+
+      // Check two-key sequences first.
+      if (pendingRef.current !== null) {
+        const seq = `${pendingRef.current} ${key}`;
+        const match = shortcuts.find((s) => s.sequence && s.keys.join(' ') === seq);
+        if (match) {
+          ev.preventDefault();
+          match.handler();
+          pendingRef.current = null;
+          if (timerRef.current) clearTimeout(timerRef.current);
+          return;
+        }
+        pendingRef.current = null;
+        if (timerRef.current) clearTimeout(timerRef.current);
+      }
+
+      // Check if this key starts a sequence.
+      const startsSeq = shortcuts.some((s) => s.sequence && s.keys[0] === key);
+      if (startsSeq) {
+        pendingRef.current = key;
+        timerRef.current = setTimeout(() => { pendingRef.current = null; }, 1000);
+        return;
+      }
+
+      // Single key match.
+      const match = shortcuts.find((s) => !s.sequence && s.keys[0] === key);
+      if (match) {
+        ev.preventDefault();
+        match.handler();
+      }
+    }
+
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 }

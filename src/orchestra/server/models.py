@@ -129,3 +129,23 @@ class ForkResponse(BaseModel):
     new_run_id: str
     parent_run_id: str
     from_sequence: int
+
+
+class CostAggregateEntry(BaseModel):
+    """Single aggregated cost entry."""
+
+    key: str
+    cost_usd: float = 0.0
+    input_tokens: int = 0
+    output_tokens: int = 0
+    call_count: int = 0
+
+
+class CostAggregateResponse(BaseModel):
+    """Response for the cost aggregate endpoint."""
+
+    from_date: str
+    to_date: str
+    group_by: str
+    entries: list[CostAggregateEntry] = Field(default_factory=list)
+    total: CostAggregateEntry

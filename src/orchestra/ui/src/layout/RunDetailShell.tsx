@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useUIStore } from '../stores/useUIStore';
 import { EventTimeline } from '../components/events/EventTimeline';
 import { CostBreakdownPanel } from '../components/cost/CostBreakdownPanel';
+import { BranchCostBar } from '../components/cost/BranchCostBar';
 
 interface RunDetailShellProps {
   runId: string;
@@ -55,6 +56,7 @@ export function RunDetailShell({ runId, graphCanvas, stateViewer }: RunDetailShe
           </TabsContent>
 
           <TabsContent value="cost" className="mt-0 flex-1 overflow-hidden">
+            <BranchCostBar runId={runId} />
             <CostBreakdownPanel runId={runId} />
           </TabsContent>
 

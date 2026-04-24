@@ -7,6 +7,7 @@ import { GraphDetailPage } from './pages/GraphDetailPage';
 import { CostDashboardPage } from './pages/CostDashboardPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { NotFoundPage } from './pages/NotFoundPage';
+import { CompareRuns } from './components/runs/CompareRuns';
 
 export const router = createBrowserRouter(
   [
@@ -16,6 +17,7 @@ export const router = createBrowserRouter(
       children: [
         { index: true, element: <Navigate to="/runs" replace /> },
         { path: 'runs', element: <RunListPage /> },
+        { path: 'runs/compare', element: <CompareRuns /> },
         { path: 'runs/:runId', element: <RunDetailPage /> },
         // W2 will consume the sequence param; W1 stubs it via useUIStore.
         { path: 'runs/:runId/@:sequence', element: <RunDetailPage /> },

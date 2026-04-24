@@ -18,6 +18,7 @@ import type {
   ResumeRequest,
   CreateRunRequest,
   CreateRunResponse,
+  CostAggregateResponse,
 } from '../types/api';
 
 const BASE = '/api/v1';
@@ -81,8 +82,13 @@ export const api = {
   createRun: (body: CreateRunRequest) =>
     apiFetch<CreateRunResponse>('/runs', {
       method: 'POST',
-      body: JSON.stringify(body),
+      // Server expects graph_name + input (not workflow_name + initial_input).
+      body: JSON.stringify({ graph_name: body.workflow_name, input: body.initial_input }),
     }),
+  getCostAggregate: (params: { from: string; to: string; group_by: 'model' | 'agent' | 'graph' | 'week' }) =>
+    apiFetch<CostAggregateResponse>(
+      `/cost/aggregate?from=${encodeURIComponent(params.from)}&to=${encodeURIComponent(params.to)}&group_by=${params.group_by}`,
+    ),
   listGraphs: () => apiFetch<GraphInfo[]>('/graphs'),
   getGraph: (name: string) => apiFetch<GraphInfo>(`/graphs/${encodeURIComponent(name)}`),
 };

@@ -76,7 +76,8 @@ export interface ForkResponse {
 }
 
 export interface ResumeRequest {
-  decision: string | Record<string, unknown>;
+  /** Server maps this into state so resumed nodes can read `state["decision"]`. */
+  state_updates: Record<string, unknown>;
 }
 
 export interface CreateRunRequest {
@@ -87,4 +88,20 @@ export interface CreateRunRequest {
 
 export interface CreateRunResponse {
   run_id: string;
+}
+
+export interface CostAggregateEntry {
+  key: string;
+  cost_usd: number;
+  input_tokens: number;
+  output_tokens: number;
+  call_count: number;
+}
+
+export interface CostAggregateResponse {
+  from_date: string;
+  to_date: string;
+  group_by: string;
+  entries: CostAggregateEntry[];
+  total: CostAggregateEntry;
 }

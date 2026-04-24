@@ -34,10 +34,13 @@ const NODE_TYPES = { agent: NodeCard, terminal: NodeCard };
 interface RunDetailPageProps {
   securityFilter?: boolean;
   costTab?: boolean;
+  forceRunId?: string;
 }
 
-export function RunDetailPage({ securityFilter, costTab }: RunDetailPageProps) {
-  const { runId, sequence } = useParams<{ runId: string; sequence?: string }>();
+export function RunDetailPage({ securityFilter, costTab, forceRunId }: RunDetailPageProps) {
+  const params = useParams<{ runId: string; sequence?: string }>();
+  const { runId: paramRunId, sequence } = params;
+  const runId = forceRunId ?? paramRunId;
   const navigate = useNavigate();
   const setSelectedSequence = useUIStore((s) => s.setSelectedSequence);
   const selectedSequence = useUIStore((s) => s.selectedSequence);

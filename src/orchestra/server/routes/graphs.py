@@ -34,13 +34,17 @@ async def get_graph(name: str, request: Request) -> GraphInfo:
             target = str(target)
         elif isinstance(target, list):
             target = [str(t) if not isinstance(t, str) else t for t in target]
-        edges_list.append(
-            {
-                "type": type(edge).__name__,
-                "source": getattr(edge, "source", ""),
-                "target": target,
-            }
-        )
+        edge_dict: dict[str, Any] = {
+            "type": type(edge).__name__,
+            "source": getattr(edge, "source", ""),
+            "target": target,
+        }
+        # Include join_node for ParallelEdge so the UI can bound branch attribution.
+        join_node = getattr(edge, "join_node", None)
+        if join_node is not None:
+            from orchestra.core.types import END as _END
+            edge_dict["join_node"] = None if join_node is _END else str(join_node)
+        edges_list.append(edge_dict)
     for h_edge in getattr(graph, "_handoff_edges", []):
         edges_list.append(
             {
