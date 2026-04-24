@@ -114,3 +114,18 @@ class RunCost(BaseModel):
     call_count: int = 0
     by_model: dict[str, CostBreakdown] = Field(default_factory=dict)
     by_agent: dict[str, CostBreakdown] = Field(default_factory=dict)
+
+
+class ForkRequest(BaseModel):
+    """Request body for forking a run from a historical sequence."""
+
+    from_sequence: int = Field(ge=0)
+    state_overrides: dict[str, Any] = Field(default_factory=dict)
+
+
+class ForkResponse(BaseModel):
+    """Response returned when a new fork is created."""
+
+    new_run_id: str
+    parent_run_id: str
+    from_sequence: int
