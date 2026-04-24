@@ -60,6 +60,15 @@ class GraphRegistry:
                             "target": target,
                         }
                     )
+                for h_edge in getattr(graph, "_handoff_edges", []):
+                    edges_list.append(
+                        {
+                            "type": type(h_edge).__name__,
+                            "source": h_edge.source,
+                            "target": h_edge.target,
+                            "conditional": h_edge.condition is not None,
+                        }
+                    )
                 result.append(
                     GraphInfo(
                         name=name,
@@ -101,8 +110,15 @@ class RunManager:
         graph: CompiledGraph,
         input_data: dict[str, Any],
         event_store: EventStore,
+        *,
+        start_at: str | None = None,
     ) -> ActiveRun:
-        """Start a workflow run as a background asyncio.Task."""
+        """Start a workflow run as a background asyncio.Task.
+
+        `start_at` routes execution to a non-default entry node — used by
+        the fork endpoint, which resumes the child run at the node returned
+        by `CompiledGraph.fork()`.
+        """
 
         active_run = ActiveRun(
             run_id=run_id,
@@ -164,6 +180,7 @@ class RunManager:
                     run_id=run_id,
                     event_store=broadcast_store,
                     persist=False,  # we manage store ourselves
+                    start_at=start_at,
                 )
                 active_run.status = "completed"
                 return result

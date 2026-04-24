@@ -186,11 +186,18 @@ class ParallelCompleted(WorkflowEvent):
 
 
 class InterruptRequested(WorkflowEvent):
-    """Emitted when human-in-the-loop interrupt is triggered."""
+    """Emitted when human-in-the-loop interrupt is triggered.
+
+    `payload` carries free-form, JSON-serializable data surfaced to the
+    human reviewer (e.g. `{"question": "...", "details": {...}}`). Mirrors
+    LangGraph's `interrupt()` payload convention — Orchestra does not
+    prescribe a schema; UI consumers read known keys like `question`.
+    """
 
     event_type: Literal[EventType.INTERRUPT_REQUESTED] = EventType.INTERRUPT_REQUESTED
     node_id: str
     interrupt_type: str = "before"  # "before" or "after"
+    payload: dict[str, Any] = Field(default_factory=dict)
 
 
 class InterruptResumed(WorkflowEvent):

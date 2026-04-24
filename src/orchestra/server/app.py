@@ -120,6 +120,7 @@ def create_app(config: ServerConfig | None = None) -> FastAPI:
     from fastapi import Depends
 
     from orchestra.server.dependencies import require_api_key
+    from orchestra.server.routes.cost import router as cost_router
     from orchestra.server.routes.graphs import router as graphs_router
     from orchestra.server.routes.health import router as health_router
     from orchestra.server.routes.runs import router as runs_router
@@ -134,6 +135,7 @@ def create_app(config: ServerConfig | None = None) -> FastAPI:
     app.include_router(runs_router, prefix=config.api_prefix, dependencies=_auth)
     app.include_router(streams_router, prefix=config.api_prefix, dependencies=_auth)
     app.include_router(graphs_router, prefix=config.api_prefix, dependencies=_auth)
+    app.include_router(cost_router, prefix=config.api_prefix, dependencies=_auth)
 
     # --- UI static files ---
     # Serve the built React UI at /ui/ if the dist directory exists.

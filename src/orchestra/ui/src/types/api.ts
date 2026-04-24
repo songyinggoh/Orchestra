@@ -17,9 +17,10 @@ export interface RunResponse {
 }
 
 export interface GraphEdge {
-  type: 'Edge' | 'ConditionalEdge' | 'ParallelEdge';
+  type: 'Edge' | 'ConditionalEdge' | 'ParallelEdge' | 'HandoffEdge';
   source: string;
   target: string | string[];
+  conditional?: boolean;
 }
 
 export interface GraphInfo {
@@ -61,4 +62,46 @@ export interface RunCost {
   call_count: number;
   by_model: Record<string, CostBreakdown>;
   by_agent: Record<string, CostBreakdown>;
+}
+
+export interface ForkRequest {
+  from_sequence: number;
+  state_overrides: Record<string, unknown>;
+}
+
+export interface ForkResponse {
+  new_run_id: string;
+  parent_run_id: string;
+  from_sequence: number;
+}
+
+export interface ResumeRequest {
+  /** Server maps this into state so resumed nodes can read `state["decision"]`. */
+  state_updates: Record<string, unknown>;
+}
+
+export interface CreateRunRequest {
+  workflow_name: string;
+  initial_input: Record<string, unknown>;
+  run_id?: string;
+}
+
+export interface CreateRunResponse {
+  run_id: string;
+}
+
+export interface CostAggregateEntry {
+  key: string;
+  cost_usd: number;
+  input_tokens: number;
+  output_tokens: number;
+  call_count: number;
+}
+
+export interface CostAggregateResponse {
+  from_date: string;
+  to_date: string;
+  group_by: string;
+  entries: CostAggregateEntry[];
+  total: CostAggregateEntry;
 }

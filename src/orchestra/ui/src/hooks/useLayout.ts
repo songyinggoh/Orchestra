@@ -38,14 +38,23 @@ export function layoutGraph(graph: GraphInfo): { nodes: Node[]; edges: Edge[] } 
     for (const t of targets) {
       const target = t === '__end__' || t === 'END' ? '__end__' : t;
       g.setEdge(edge.source, target);
+      const isHandoff = edge.type === 'HandoffEdge';
+      const isConditional = edge.type === 'ConditionalEdge';
+      // Handoff edges use indigo-400 (--tag-handoff) rather than the
+      // accent color. UI-SPEC §4.1 reserves violet-500 exclusively for
+      // the 6 documented accent uses (primary CTA, active nav, selected
+      // row, focus ring, progress, keyboard badge) — never for edges.
       rfEdges.push({
         id: `e-${edgeIdx++}`,
         source: edge.source,
         target,
         type: 'smoothstep',
         animated: edge.type === 'ParallelEdge',
-        style: { stroke: edge.type === 'ConditionalEdge' ? '#f59e0b' : '#555' },
-        label: edge.type === 'ConditionalEdge' ? '?' : undefined,
+        style: {
+          stroke: isHandoff ? '#818cf8' : isConditional ? 'var(--status-warn)' : 'var(--text-3)',
+          strokeDasharray: isHandoff ? '6 4' : undefined,
+        },
+        label: isHandoff ? 'handoff' : isConditional ? '?' : undefined,
       });
     }
   }
@@ -56,7 +65,7 @@ export function layoutGraph(graph: GraphInfo): { nodes: Node[]; edges: Edge[] } 
     source: '__start__',
     target: graph.entry_point,
     type: 'smoothstep',
-    style: { stroke: '#555' },
+    style: { stroke: 'var(--text-3)' },
   });
 
   dagre.layout(g);
@@ -73,6 +82,7 @@ export function layoutGraph(graph: GraphInfo): { nodes: Node[]; edges: Edge[] } 
       data: {
         label: isVirtual ? (id === '__start__' ? 'Start' : 'End') : id,
         nodeId: id,
+        variant: (isVirtual ? 'terminal' : 'agent') as 'terminal' | 'agent',
       },
     };
   });

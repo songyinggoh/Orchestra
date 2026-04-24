@@ -1,0 +1,154 @@
+@import "tailwindcss";
+@import "@xyflow/react/dist/style.css";
+
+/*
+ * Phase 6 design tokens — see .planning/phases/06-ui-redesign/06-UI-SPEC.md §4.
+ * Dark-only palette. Semantic tokens flow into Tailwind via tailwind.config.js
+ * (`theme.extend.colors.*` maps to CSS variables defined here).
+ */
+
+@theme {
+  --radius: 0.5rem;
+
+  /* Fonts (UI-SPEC §5.1) */
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, -apple-system,
+    BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco,
+    Consolas, monospace;
+}
+
+:root {
+  color-scheme: dark;
+
+  /* ---------- Surface (UI-SPEC §4.1, 60/30/10) ---------- */
+  --surface-0: #0a0a0f;          /* app background, ReactFlow canvas */
+  --surface-1: #18181b;          /* zinc-900 — sidebar/panels/cards/nav */
+  --surface-2: #27272a;          /* zinc-800 — popovers, hovered rows */
+
+  /* ---------- Accent (UI-SPEC §4.1 reserved list) ---------- */
+  --accent: #8b5cf6;             /* violet-500 */
+  --accent-hover: #7c3aed;       /* violet-600 */
+  --accent-foreground: #f5f3ff;  /* violet-50 — text on accent */
+
+  /* ---------- Status (UI-SPEC §4.2) ---------- */
+  --status-ok: #10b981;          /* emerald-500 */
+  --status-run: #f59e0b;         /* amber-500 */
+  --status-err: #ef4444;         /* red-500 */
+  --status-warn: #f97316;        /* orange-500 */
+  --status-info: #3b82f6;        /* blue-500 */
+  --status-sec: #ec4899;         /* pink-500 — security events */
+
+  /* ---------- Tag hues (UI-SPEC §4.2) ---------- */
+  --tag-llm: #a78bfa;            /* violet-400 */
+  --tag-tool: #06b6d4;           /* cyan-500 */
+  --tag-handoff: #14b8a6;        /* teal-500 */
+
+  /* ---------- Text (UI-SPEC §4.3) ---------- */
+  --text-1: #e4e4e7;             /* zinc-200 — primary body */
+  --text-2: #a1a1aa;             /* zinc-400 — muted */
+  --text-3: #52525b;             /* zinc-600 — subtle/disabled */
+  --text-inv: #09090b;           /* zinc-950 — on light/accent bg */
+
+  /* ---------- Cost-intensity 9-step OkLab gradient (UI-SPEC §4.4) ---------- */
+  --cost-0: #1e3a8a;             /* blue-900 — coldest */
+  --cost-1: #1e40af;
+  --cost-2: #2563eb;
+  --cost-3: #3b82f6;             /* blue-500 — median */
+  --cost-4: #8b5cf6;             /* violet-500 */
+  --cost-5: #a855f7;
+  --cost-6: #ec4899;             /* pink-500 */
+  --cost-7: #f43f5e;
+  --cost-8: #dc2626;             /* red-600 — hottest (>80th pct) */
+
+  /* ---------- shadcn/ui semantic tokens (dark theme) ---------- */
+  --background: var(--surface-0);
+  --foreground: var(--text-1);
+
+  --card: var(--surface-1);
+  --card-foreground: var(--text-1);
+
+  --popover: var(--surface-2);
+  --popover-foreground: var(--text-1);
+
+  --primary: var(--accent);
+  --primary-foreground: var(--accent-foreground);
+
+  --secondary: var(--surface-2);
+  --secondary-foreground: var(--text-1);
+
+  --muted: var(--surface-2);
+  --muted-foreground: var(--text-2);
+
+  --accent-background: var(--surface-2);
+  /* shadcn uses --accent for hover bg; we keep brand accent above. These
+     serve shadcn's hover-row semantics. */
+
+  --destructive: #dc2626;        /* red-600 — UI-SPEC §4.6 */
+  --destructive-foreground: #fef2f2;
+
+  --border: #27272a;             /* zinc-800 */
+  --input: #27272a;
+  --ring: var(--accent);         /* violet-500 focus ring */
+}
+
+/* ---------- Base ---------- */
+* {
+  border-color: var(--border);
+}
+
+html {
+  font-family: var(--font-sans);
+  font-feature-settings: 'cv11', 'ss01';
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+#root {
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.font-mono,
+code,
+kbd,
+pre,
+samp {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Tabular numerals for numeric cells (UI-SPEC §5.1) */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- ReactFlow dark-theme overrides ---------- */
+.react-flow__node {
+  font-size: 12px;
+}
+
+.react-flow__attribution {
+  display: none;
+}
+
+/* ---------- Scrollbar (legacy utility — superseded by shadcn ScrollArea) ---------- */
+.scroll-thin::-webkit-scrollbar {
+  width: 6px;
+}
+.scroll-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scroll-thin::-webkit-scrollbar-thumb {
+  background: var(--surface-2);
+  border-radius: 3px;
+}

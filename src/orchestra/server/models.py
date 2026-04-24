@@ -62,7 +62,15 @@ class ErrorResponse(BaseModel):
 
 
 class ResumeRequest(BaseModel):
-    """Request body for resuming an interrupted run."""
+    """Request body for resuming an interrupted run.
+
+    `state_updates` is the resume payload mechanism. Nodes read the user's
+    decision from state (e.g. `state_updates={"decision": "approve"}` → the
+    resumed node reads `state["decision"]` to branch). Unlike LangGraph's
+    `Command(resume=...)`, Orchestra has no separate interrupt-return channel:
+    decisions flow through state. UIs should encode choices as explicit state
+    keys rather than relying on a reserved `decision` field.
+    """
 
     state_updates: dict[str, Any] = Field(default_factory=dict)
 
@@ -106,3 +114,38 @@ class RunCost(BaseModel):
     call_count: int = 0
     by_model: dict[str, CostBreakdown] = Field(default_factory=dict)
     by_agent: dict[str, CostBreakdown] = Field(default_factory=dict)
+
+
+class ForkRequest(BaseModel):
+    """Request body for forking a run from a historical sequence."""
+
+    from_sequence: int = Field(ge=0)
+    state_overrides: dict[str, Any] = Field(default_factory=dict)
+
+
+class ForkResponse(BaseModel):
+    """Response returned when a new fork is created."""
+
+    new_run_id: str
+    parent_run_id: str
+    from_sequence: int
+
+
+class CostAggregateEntry(BaseModel):
+    """Single aggregated cost entry."""
+
+    key: str
+    cost_usd: float = 0.0
+    input_tokens: int = 0
+    output_tokens: int = 0
+    call_count: int = 0
+
+
+class CostAggregateResponse(BaseModel):
+    """Response for the cost aggregate endpoint."""
+
+    from_date: str
+    to_date: str
+    group_by: str
+    entries: list[CostAggregateEntry] = Field(default_factory=list)
+    total: CostAggregateEntry

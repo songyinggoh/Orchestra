@@ -32,6 +32,8 @@ export interface WorkflowEvent {
   schema_version: number;
 }
 
+// ── Execution lifecycle ────────────────────────────────────────────────────
+
 export interface ExecutionStarted extends WorkflowEvent {
   event_type: 'execution.started';
   workflow_name: string;
@@ -48,6 +50,16 @@ export interface ExecutionCompleted extends WorkflowEvent {
   status: string;
 }
 
+/** Python: ForkCreated — event_type value is 'execution.forked' */
+export interface ExecutionForked extends WorkflowEvent {
+  event_type: 'execution.forked';
+  parent_run_id: string;
+  fork_point_sequence: number;
+  new_run_id: string;
+}
+
+// ── Node lifecycle ─────────────────────────────────────────────────────────
+
 export interface NodeStarted extends WorkflowEvent {
   event_type: 'node.started';
   node_id: string;
@@ -61,6 +73,22 @@ export interface NodeCompleted extends WorkflowEvent {
   duration_ms: number;
   state_update: Record<string, unknown> | null;
 }
+
+export interface ErrorOccurred extends WorkflowEvent {
+  event_type: 'error.occurred';
+  node_id: string;
+  error_type: string;
+  error_message: string;
+}
+
+export interface StateUpdated extends WorkflowEvent {
+  event_type: 'state.updated';
+  node_id: string;
+  field_updates: Record<string, unknown>;
+  resulting_state: Record<string, unknown>;
+}
+
+// ── LLM / Tool ────────────────────────────────────────────────────────────
 
 export interface LLMCalled extends WorkflowEvent {
   event_type: 'llm.called';
@@ -87,6 +115,8 @@ export interface ToolCalled extends WorkflowEvent {
   duration_ms: number;
 }
 
+// ── Graph traversal ────────────────────────────────────────────────────────
+
 export interface EdgeTraversed extends WorkflowEvent {
   event_type: 'edge.traversed';
   from_node: string;
@@ -108,25 +138,64 @@ export interface ParallelCompleted extends WorkflowEvent {
   duration_ms: number;
 }
 
-export interface ErrorOccurred extends WorkflowEvent {
-  event_type: 'error.occurred';
-  node_id: string;
-  error_type: string;
-  error_message: string;
-}
-
-export interface StateUpdated extends WorkflowEvent {
-  event_type: 'state.updated';
-  node_id: string;
-  field_updates: Record<string, unknown>;
-  resulting_state: Record<string, unknown>;
-}
+// ── Interrupts / Checkpoints ───────────────────────────────────────────────
 
 export interface InterruptRequested extends WorkflowEvent {
   event_type: 'interrupt.requested';
   node_id: string;
   interrupt_type: string;
+  /** Free-form human-review payload — UI reads known keys like `question`. */
+  payload: Record<string, unknown>;
 }
+
+export interface InterruptResumed extends WorkflowEvent {
+  event_type: 'interrupt.resumed';
+  node_id: string;
+  state_modifications: Record<string, unknown>;
+}
+
+export interface CheckpointCreated extends WorkflowEvent {
+  event_type: 'checkpoint.created';
+  checkpoint_id: string;
+  node_id: string;
+  state_snapshot: Record<string, unknown>;
+}
+
+// ── Security ───────────────────────────────────────────────────────────────
+
+export interface SecurityViolation extends WorkflowEvent {
+  event_type: 'security.violation';
+  node_id: string;
+  agent_name: string;
+  violation_type: string;
+  details: string;
+}
+
+export interface RestrictedModeEntered extends WorkflowEvent {
+  event_type: 'security.restricted_mode_entered';
+  node_id: string;
+  risk_score: number;
+  injection_detected: boolean;
+  trigger: string;
+}
+
+export interface InputRejected extends WorkflowEvent {
+  event_type: 'input.rejected';
+  node_id: string;
+  agent_name: string;
+  guardrail: string;
+  violation_messages: string[];
+}
+
+export interface OutputRejected extends WorkflowEvent {
+  event_type: 'output.rejected';
+  node_id: string;
+  agent_name: string;
+  contract_name: string;
+  validation_errors: string[];
+}
+
+// ── Handoffs ───────────────────────────────────────────────────────────────
 
 export interface HandoffInitiated extends WorkflowEvent {
   event_type: 'handoff.initiated';
@@ -135,19 +204,33 @@ export interface HandoffInitiated extends WorkflowEvent {
   reason: string;
 }
 
-/** Union of all concrete event types. */
+export interface HandoffCompleted extends WorkflowEvent {
+  event_type: 'handoff.completed';
+  from_agent: string;
+  to_agent: string;
+}
+
+// ── Discriminated union — exhaustive, no WorkflowEvent fallback ────────────
+
 export type AnyEvent =
   | ExecutionStarted
   | ExecutionCompleted
+  | ExecutionForked
   | NodeStarted
   | NodeCompleted
+  | ErrorOccurred
+  | StateUpdated
   | LLMCalled
   | ToolCalled
   | EdgeTraversed
   | ParallelStarted
   | ParallelCompleted
-  | ErrorOccurred
-  | StateUpdated
   | InterruptRequested
+  | InterruptResumed
+  | CheckpointCreated
+  | SecurityViolation
+  | RestrictedModeEntered
+  | InputRejected
+  | OutputRejected
   | HandoffInitiated
-  | WorkflowEvent; // fallback for less common types
+  | HandoffCompleted;
