@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useCallback } from 'react';
+import { useEffect, useMemo, useCallback, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -21,8 +21,10 @@ import { CostBar } from '../components/cost/CostBar';
 import { ScrubberBar } from '../components/scrubber/ScrubberBar';
 import { StateViewer } from '../components/state/StateViewer';
 import { StateDiff } from '../components/state/StateDiff';
+import { ForkComposer } from '../components/fork/ForkComposer';
 import { RunDetailShell } from '../layout/RunDetailShell';
 import { projectState, useProjection } from '../lib/projectState';
+import { useShortcuts } from '../lib/shortcuts';
 import type { AnyEvent } from '../types/events';
 import type { GraphInfo, RunStatus } from '../types/api';
 
@@ -186,6 +188,40 @@ export function RunDetailPage({ securityFilter, costTab }: RunDetailPageProps) {
     }
   }
 
+  // ForkComposer — open state + pinned fork point (sequence + seed).
+  // Capture the point at open time so the composer stays stable even if the
+  // user scrubs while the dialog is up.
+  const [forkOpen, setForkOpen] = useState(false);
+  const [forkPoint, setForkPoint] = useState<
+    { sequence: number; state: Record<string, unknown> } | null
+  >(null);
+  const liveHeadSeq = events.length === 0 ? null : events[events.length - 1].sequence;
+  const openFork = useCallback(() => {
+    if (events.length === 0) return;
+    const seq =
+      selectedSequence !== null ? selectedSequence : (liveHeadSeq ?? 0);
+    setForkPoint({ sequence: seq, state: currentState });
+    setForkOpen(true);
+  }, [events.length, selectedSequence, liveHeadSeq, currentState]);
+
+  // Keyboard shortcut: 'F' opens the ForkComposer. useShortcuts already
+  // skips editable targets, so typing 'f' inside the composer itself or any
+  // other input won't re-trigger.
+  const forkShortcut = useMemo(
+    () => ({
+      F: (e: KeyboardEvent) => {
+        e.preventDefault();
+        openFork();
+      },
+      f: (e: KeyboardEvent) => {
+        e.preventDefault();
+        openFork();
+      },
+    }),
+    [openFork],
+  );
+  useShortcuts(forkShortcut, !forkOpen && events.length > 0);
+
   if (!runId) return null;
 
   const graphCanvas = (
@@ -216,8 +252,15 @@ export function RunDetailPage({ securityFilter, costTab }: RunDetailPageProps) {
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
-          <Button variant="outline" size="sm" className="h-7 text-xs" disabled>
-            Fork from latest — W2
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs"
+            disabled={events.length === 0}
+            onClick={openFork}
+            title="Fork from here (F)"
+          >
+            Fork from here
           </Button>
         </div>
       </div>
@@ -288,10 +331,21 @@ export function RunDetailPage({ securityFilter, costTab }: RunDetailPageProps) {
   );
 
   return (
-    <RunDetailShell
-      runId={runId}
-      graphCanvas={graphCanvas}
-      stateViewer={stateViewer}
-    />
+    <>
+      <RunDetailShell
+        runId={runId}
+        graphCanvas={graphCanvas}
+        stateViewer={stateViewer}
+      />
+      {forkPoint && (
+        <ForkComposer
+          runId={runId}
+          fromSequence={forkPoint.sequence}
+          seedState={forkPoint.state}
+          open={forkOpen}
+          onOpenChange={setForkOpen}
+        />
+      )}
+    </>
   );
 }

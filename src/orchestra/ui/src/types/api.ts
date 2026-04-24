@@ -63,3 +63,14 @@ export interface RunCost {
   by_model: Record<string, CostBreakdown>;
   by_agent: Record<string, CostBreakdown>;
 }
+
+export interface ForkRequest {
+  from_sequence: number;
+  state_overrides: Record<string, unknown>;
+}
+
+export interface ForkResponse {
+  new_run_id: string;
+  parent_run_id: string;
+  from_sequence: number;
+}

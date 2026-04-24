@@ -13,6 +13,8 @@ import type {
   RunState,
   RunCost,
   GraphInfo,
+  ForkRequest,
+  ForkResponse,
 } from '../types/api';
 
 const BASE = '/api/v1';
@@ -63,6 +65,11 @@ export const api = {
   getCost: (id: string) => apiFetch<RunCost>(`/runs/${encodeURIComponent(id)}/cost`),
   cancelRun: (id: string) =>
     apiFetch<RunStatus>(`/runs/${encodeURIComponent(id)}/cancel`, { method: 'POST' }),
+  forkRun: (id: string, body: ForkRequest) =>
+    apiFetch<ForkResponse>(`/runs/${encodeURIComponent(id)}/fork`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
   listGraphs: () => apiFetch<GraphInfo[]>('/graphs'),
   getGraph: (name: string) => apiFetch<GraphInfo>(`/graphs/${encodeURIComponent(name)}`),
 };
