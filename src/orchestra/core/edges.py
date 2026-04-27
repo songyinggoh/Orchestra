@@ -8,6 +8,7 @@ Edges define transitions between nodes:
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -15,6 +16,24 @@ from typing import Any
 from orchestra.core.errors import GraphCompileError
 
 EdgeCondition = Callable[[dict[str, Any]], Any]
+
+
+def _coerce_path_key(value: Any) -> str | None:
+    """Coerce a routing-function return value to a path_map lookup key.
+
+    JSON-canonical scalars (str, bool, None, int, float) coerce to their
+    JSON representation so that path_map can be authored cross-language.
+    Returns None for any other type — the caller passes such values
+    through unchanged (preserves "return END directly" patterns).
+    """
+    if isinstance(value, str):
+        return value
+    # bool must be checked before int because isinstance(True, int) is True.
+    if isinstance(value, bool) or value is None:
+        return json.dumps(value)
+    if isinstance(value, (int, float)):
+        return json.dumps(value)
+    return None
 
 
 @dataclass(frozen=True)
@@ -40,15 +59,18 @@ class ConditionalEdge:
 
     def resolve(self, state: dict[str, Any]) -> Any:
         result = self.condition(state)
-        if self.path_map and isinstance(result, str):
-            if result not in self.path_map:
+        if self.path_map is not None:
+            key = _coerce_path_key(result)
+            if key is None:
+                return result
+            if key not in self.path_map:
                 raise GraphCompileError(
-                    f"Conditional edge returned '{result}' which is not in path_map.\n"
+                    f"Conditional edge returned {result!r} which is not in path_map.\n"
                     f"  Available keys: {list(self.path_map.keys())}\n"
                     f"  Fix: Return one of the available keys from your condition function, "
-                    f"or add '{result}' to the path_map."
+                    f"or add {key!r} to the path_map."
                 )
-            return self.path_map[result]
+            return self.path_map[key]
         return result
 
 
